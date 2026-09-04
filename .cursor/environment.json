@@ -1,0 +1,24 @@
+{
+  "name": "Book-A-Shoot",
+  "install": "npm install --no-audit --no-fund && npm run seed",
+  "terminals": [
+    {
+      "name": "api",
+      "command": "npm run dev:server"
+    },
+    {
+      "name": "web",
+      "command": "npm run dev:client"
+    }
+  ],
+  "ports": [
+    {
+      "name": "web",
+      "port": 5173
+    },
+    {
+      "name": "api",
+      "port": 3001
+    }
+  ]
+}
