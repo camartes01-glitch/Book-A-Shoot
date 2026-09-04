@@ -1,0 +1,26 @@
+{
+  "name": "Book-A-Shoot",
+  "install": "npm ci || npm install",
+  "terminals": [
+    {
+      "name": "api",
+      "command": "npm run dev:server",
+      "description": "Book-A-Shoot Express API on port 4000 (SQLite-backed, auto-seeds demo slots)."
+    },
+    {
+      "name": "web",
+      "command": "npm run dev:client",
+      "description": "Vite dev server for the React client on port 5173 (proxies /api to the API)."
+    }
+  ],
+  "ports": [
+    {
+      "name": "API",
+      "port": 4000
+    },
+    {
+      "name": "Web",
+      "port": 5173
+    }
+  ]
+}
