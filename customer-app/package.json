@@ -36,6 +36,9 @@
     "ts-jest": "^29.2.5",
     "typescript": "~6.0.3"
   },
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
@@ -43,6 +46,8 @@
     "web": "expo start --web --port 43158 --host lan",
     "preview": "node scripts/serve-web.js",
     "test": "jest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "apk:debug": "node scripts/build-debug-apk.js",
+    "apk:clean": "node scripts/build-debug-apk.js --clean"
   }
 }
