@@ -50,5 +50,31 @@ export function getEnabledCategories(categories: EventCategory[] = DEFAULT_EVENT
   return [...categories].filter((c) => c.enabled).sort((a, b) => a.order - b.order);
 }
 
-/** Quick-pick chips shown on Home ("What are you planning?"). */
-export const HOME_QUICK_PICKS = ["wedding", "birthday", "pre_wedding", "baby_shoot", "corporate_event"];
+/** Popular marketplace categories on Home. */
+export const HOME_QUICK_PICKS = [
+  "wedding",
+  "pre_wedding",
+  "birthday",
+  "baby_shoot",
+  "maternity_shoot",
+  "corporate_event",
+  "product_shoot",
+];
+
+/** Visual event cards shown first in the day editor. Remaining types sit behind More. */
+export const FEATURED_EVENT_TYPE_IDS = [
+  "wedding",
+  "engagement",
+  "pre_wedding",
+  "reception",
+  "haldi",
+  "mehendi",
+  "birthday",
+  "baby_shoot",
+  "maternity_shoot",
+  "anniversary",
+  "naming_ceremony",
+  "housewarming",
+  "corporate_event",
+  "product_shoot",
+];

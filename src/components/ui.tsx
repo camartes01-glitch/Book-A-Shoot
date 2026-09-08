@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View, ActivityIndicator, type TextInputProps } from "react-native";
-import { colors, radius, spacing } from "@/src/constants/theme";
+import { colors, elevation, radius, radiusSm, spacing, touchTarget } from "@/src/constants/theme";
 
 export function Card({ children, accent = false, style }: { children: React.ReactNode; accent?: boolean; style?: object }) {
   return <View style={[styles.card, accent && styles.cardAccent, style]}>{children}</View>;
@@ -10,16 +10,28 @@ export function ScreenTitle({ children }: { children: React.ReactNode }) {
   return <Text style={styles.screenTitle}>{children}</Text>;
 }
 
-export function Title({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.title}>{children}</Text>;
+export function Title({ children, style }: { children: React.ReactNode; style?: object }) {
+  return <Text style={[styles.title, style]}>{children}</Text>;
 }
 
-export function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.sectionTitle}>{children}</Text>;
+export function SectionTitle({ children, style }: { children: React.ReactNode; style?: object }) {
+  return <Text style={[styles.sectionTitle, style]}>{children}</Text>;
 }
 
-export function Muted({ children, style }: { children: React.ReactNode; style?: object }) {
-  return <Text style={[styles.muted, style]}>{children}</Text>;
+export function Muted({
+  children,
+  style,
+  numberOfLines,
+}: {
+  children: React.ReactNode;
+  style?: object;
+  numberOfLines?: number;
+}) {
+  return (
+    <Text style={[styles.muted, style]} numberOfLines={numberOfLines}>
+      {children}
+    </Text>
+  );
 }
 
 export function Button({
@@ -41,12 +53,13 @@ export function Button({
   compact?: boolean;
   icon?: React.ReactNode;
 }) {
+  const inactive = !!disabled || !!loading;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ disabled: !!disabled || !!loading }}
+      accessibilityState={{ disabled: inactive }}
       onPress={onPress}
-      disabled={disabled || loading}
+      disabled={inactive}
       style={({ pressed }) => [
         styles.btn,
         compact && styles.btnCompact,
@@ -55,12 +68,13 @@ export function Button({
         variant === "outline" && styles.btnOutline,
         variant === "ghost" && styles.btnGhost,
         variant === "danger" && styles.btnDanger,
-        (disabled || loading) && { opacity: 0.5 },
-        pressed && !disabled && { opacity: 0.85 },
+        variant === "primary" && inactive && styles.btnPrimaryDisabled,
+        variant !== "primary" && inactive && styles.btnMutedDisabled,
+        pressed && !inactive && styles.btnPressed,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === "primary" ? colors.white : colors.primary} />
+        <ActivityIndicator color={variant === "primary" && !disabled ? colors.white : colors.primary} />
       ) : (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           {icon}
@@ -70,6 +84,7 @@ export function Button({
               variant === "primary" && { color: colors.white },
               variant === "danger" && { color: colors.danger },
               (variant === "outline" || variant === "ghost") && { color: colors.primaryDark },
+              variant === "primary" && inactive && { color: colors.disabledText },
             ]}
           >
             {label}
@@ -80,14 +95,20 @@ export function Button({
   );
 }
 
-export function Field({ label, hint, error, nativeID, ...props }: TextInputProps & { label: string; hint?: string; error?: string }) {
+export function Field({
+  label,
+  hint,
+  error,
+  nativeID,
+  ...props
+}: TextInputProps & { label: string; hint?: string; error?: string }) {
   const generatedId = useId();
   const inputId = nativeID ?? generatedId;
   const labelId = `${inputId}-label`;
 
   return (
     <View style={{ gap: 6 }}>
-      <Text nativeID={labelId} style={styles.label}>
+      <Text nativeID={labelId} style={styles.label} maxFontSizeMultiplier={1.35}>
         {label}
       </Text>
       <TextInput
@@ -95,6 +116,7 @@ export function Field({ label, hint, error, nativeID, ...props }: TextInputProps
         accessibilityLabel={label}
         accessibilityLabelledBy={labelId}
         placeholderTextColor={colors.muted}
+        maxFontSizeMultiplier={1.35}
         style={[styles.input, error && { borderColor: colors.danger }]}
         {...props}
       />
@@ -151,47 +173,47 @@ export function BrandMark({ size = 52 }: { size?: number }) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.card,
-    borderColor: colors.peachBorder,
+    borderColor: colors.border,
     borderWidth: 1,
     borderRadius: radius,
     padding: spacing.lg,
     gap: spacing.sm,
-    shadowColor: colors.primaryDark,
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    ...elevation.card,
   },
-  cardAccent: { borderLeftWidth: 4, borderLeftColor: colors.primary },
-  screenTitle: { fontSize: 26, fontWeight: "800", color: colors.ink, letterSpacing: -0.4 },
-  title: { fontSize: 20, fontWeight: "800", color: colors.ink, letterSpacing: -0.2 },
+  cardAccent: { borderColor: colors.primary, borderWidth: 1.5 },
+  screenTitle: { fontSize: 24, fontWeight: "800", color: colors.ink, letterSpacing: -0.4 },
+  title: { fontSize: 18, fontWeight: "800", color: colors.ink, letterSpacing: -0.2 },
   sectionTitle: { fontSize: 15, fontWeight: "800", color: colors.ink },
   muted: { fontSize: 13, color: colors.muted, lineHeight: 19 },
   label: { fontSize: 13, fontWeight: "700", color: colors.ink },
   errorText: { fontSize: 12, color: colors.danger, fontWeight: "600" },
   input: {
     borderWidth: 1,
-    borderColor: colors.peachBorder,
-    backgroundColor: colors.cream,
-    borderRadius: 12,
-    paddingHorizontal: 12,
+    borderColor: colors.border,
+    backgroundColor: colors.white,
+    borderRadius: radiusSm,
+    paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
     color: colors.text,
+    minHeight: touchTarget,
   },
   btn: {
     borderRadius: 14,
-    paddingVertical: 14,
+    paddingVertical: 13,
     paddingHorizontal: 16,
     alignItems: "center",
     justifyContent: "center",
     minHeight: 48,
   },
-  btnCompact: { paddingVertical: 9, paddingHorizontal: 12, minHeight: 38 },
+  btnCompact: { paddingVertical: 10, paddingHorizontal: 12, minHeight: 44 },
   btnPrimary: { backgroundColor: colors.primary },
   btnOutline: { backgroundColor: colors.white, borderWidth: 1.5, borderColor: colors.primary },
   btnGhost: { backgroundColor: colors.peach },
   btnDanger: { backgroundColor: colors.dangerBg },
+  btnPrimaryDisabled: { backgroundColor: colors.disabled },
+  btnMutedDisabled: { opacity: 0.45 },
+  btnPressed: { opacity: 0.88, transform: [{ scale: 0.99 }] },
   btnText: { fontSize: 15, fontWeight: "700" },
   badge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, alignSelf: "flex-start" },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.sm },

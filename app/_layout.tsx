@@ -1,8 +1,11 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import * as SplashScreen from "expo-splash-screen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProvider } from "@/src/state/AppProvider";
 import { colors } from "@/src/constants/theme";
+
+SplashScreen.setOptions({ duration: 400, fade: true });
 
 export default function RootLayout() {
   return (

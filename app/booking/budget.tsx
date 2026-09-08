@@ -11,11 +11,12 @@ import type { BudgetFeasibilityResult } from "@/src/engine/pricing";
 
 export default function BudgetScreen() {
   const { submitBudget } = useAppStore();
-  const [amount, setAmount] = useState("");
+  const [digits, setDigits] = useState("");
   const [loading, setLoading] = useState(false);
   const [feasibility, setFeasibility] = useState<BudgetFeasibilityResult | null>(null);
 
-  const numeric = parseInt(amount.replace(/[^0-9]/g, ""), 10) || 0;
+  const numeric = parseInt(digits, 10) || 0;
+  const display = digits ? formatInr(numeric).replace("₹", "₹ ") : "";
 
   const onCheck = async () => {
     if (numeric <= 0) {
@@ -35,31 +36,28 @@ export default function BudgetScreen() {
   };
 
   return (
-    <WizardScreen title="Your budget" step="budget" footer={feasibility ? undefined : <Button label="Continue" onPress={onCheck} loading={loading} flex={1} />}>
-      <Card>
-        <SectionTitle>What's your budget?</SectionTitle>
-        <Muted>Tell us your approximate budget for the requirements you've selected. No need to pick from fixed slabs — enter any amount.</Muted>
-        <Field
-          label="Budget (INR)"
-          placeholder="1,50,000"
-          keyboardType="number-pad"
-          value={amount}
-          onChangeText={setAmount}
-        />
-        {numeric > 0 ? <Muted style={{ fontWeight: "700", color: colors.primaryDark }}>{formatInr(numeric)}</Muted> : null}
-      </Card>
-
+    <WizardScreen
+      title="Your budget"
+      step="budget"
+      footer={<Button label={feasibility?.isBelowEstimate ? "Show closest options" : "Continue"} onPress={onCheck} loading={loading} flex={1} />}
+    >
+      <SectionTitle>What's your budget?</SectionTitle>
+      <Muted>Approximate amount in INR. You can change this later.</Muted>
+      <Field
+        label="Budget"
+        placeholder="₹ 1,00,000"
+        keyboardType="number-pad"
+        inputMode="numeric"
+        value={display}
+        onChangeText={(text) => setDigits(text.replace(/[^0-9]/g, "").slice(0, 9))}
+      />
       {feasibility?.isBelowEstimate ? (
         <Card style={{ borderColor: colors.warning }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <AlertTriangle size={18} color={colors.warning} />
-            <Badge label="Budget check" tone="amber" />
+            <Badge label="A bit tight" tone="amber" />
           </View>
-          <Muted style={{ fontWeight: "700", color: colors.ink }}>Your selected requirements may be above your budget.</Muted>
-          <Muted>
-            Based on your selections, similar bookings typically cost around {formatInr(feasibility.estimatedCost)}. You're about{" "}
-            {formatInr(feasibility.shortfall)} short of our lightest package.
-          </Muted>
+          <Muted style={{ fontWeight: "700", color: colors.ink }}>Similar coverage often starts around {formatInr(feasibility.estimatedCost)}.</Muted>
           <View style={{ gap: spacing.sm }}>
             <Button label="Adjust requirements" variant="outline" onPress={() => router.push("/booking/summary")} />
             <Button label="Show closest available options" onPress={() => router.push("/booking/packages")} />

@@ -24,6 +24,7 @@ type AppContextValue = {
   clearActiveDraft: () => void;
   addDay: () => Promise<void>;
   duplicateLastDay: () => Promise<void>;
+  duplicateEventDay: (dayId: string) => Promise<void>;
   updateDay: (dayId: string, patch: Partial<EventDay>) => Promise<void>;
   deleteDay: (dayId: string) => Promise<void>;
   reorderDays: (orderedDayIds: string[]) => Promise<void>;
@@ -33,7 +34,7 @@ type AppContextValue = {
   selectPackage: (tier: PackageTierId) => Promise<void>;
   loadVendorMatches: () => Promise<void>;
   selectVendor: (vendorId: string) => Promise<void>;
-  submitVendorRequest: () => Promise<void>;
+  submitVendorRequest: () => Promise<Booking>;
   respondToCounterOffer: (action: "accept" | "decline") => Promise<void>;
   confirmBooking: () => Promise<void>;
   markPaymentComplete: () => Promise<void>;
@@ -145,6 +146,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await withDraft((id) => bookingApi.duplicateLastDay(id));
   }, [withDraft]);
 
+  const duplicateEventDay = useCallback(
+    async (dayId: string) => {
+      await withDraft((id) => bookingApi.duplicateExistingDay(id, dayId));
+    },
+    [withDraft],
+  );
+
   const updateDay = useCallback(
     async (dayId: string, patch: Partial<EventDay>) => {
       await withDraft((id) => bookingApi.updateDay(id, dayId, patch));
@@ -210,7 +218,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const submitVendorRequest = useCallback(async () => {
-    await withDraft((id) => bookingApi.submitVendorRequest(id));
+    return withDraft((id) => bookingApi.submitVendorRequest(id));
   }, [withDraft]);
 
   const respondToCounterOffer = useCallback(
@@ -267,6 +275,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearActiveDraft,
       addDay,
       duplicateLastDay,
+      duplicateEventDay,
       updateDay,
       deleteDay,
       reorderDays,
@@ -302,6 +311,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearActiveDraft,
       addDay,
       duplicateLastDay,
+      duplicateEventDay,
       updateDay,
       deleteDay,
       reorderDays,

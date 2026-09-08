@@ -13,13 +13,18 @@ import { isBeforeDate, isEndAfterStart, isPastDate, latestDate } from "@/src/uti
 export const CORE_SERVICE_REQUIRED_MESSAGE =
   "Photography or videography service is required. LED Wall, Web Live and Aerial services are available only as add-on services.";
 
+export const START_TIME_REQUIRED_MESSAGE = "Please select a start time.";
+export const END_TIME_REQUIRED_MESSAGE = "Please select an end time.";
+export const END_BEFORE_START_MESSAGE = "End time must be after start time.";
+export const OVERNIGHT_EVENT_MESSAGE = "This event continues into the next day.";
+
 export type ValidationIssue = {
   code: string;
   message: string;
   dayId?: string;
 };
 
-function hasCoreService(day: Pick<EventDay, "photography" | "videography">): boolean {
+export function hasCoreService(day: Pick<EventDay, "photography" | "videography">): boolean {
   return day.photography.traditional || day.photography.candid || day.videography.traditional || day.videography.candid;
 }
 
@@ -62,11 +67,15 @@ export function validateDay(day: EventDay): ValidationIssue[] {
     issues.push({ code: "LOCATION_REQUIRED", message: "Select the event location.", dayId: day.dayId });
   }
 
-  if (!day.startTime || !day.endTime) {
-    issues.push({ code: "TIME_REQUIRED", message: "Select a start and end time.", dayId: day.dayId });
-  } else if (!isEndAfterStart(day.startTime, day.endTime, day.overnight)) {
-    // Rule 2
-    issues.push({ code: "END_BEFORE_START", message: "End time must be after start time.", dayId: day.dayId });
+  if (!day.startTime) {
+    issues.push({ code: "START_TIME_REQUIRED", message: START_TIME_REQUIRED_MESSAGE, dayId: day.dayId });
+  }
+  if (!day.endTime) {
+    issues.push({ code: "END_TIME_REQUIRED", message: END_TIME_REQUIRED_MESSAGE, dayId: day.dayId });
+  }
+  if (day.startTime && day.endTime && !isEndAfterStart(day.startTime, day.endTime, day.overnight)) {
+    // Rule 2 — only after both times are actually selected
+    issues.push({ code: "END_BEFORE_START", message: END_BEFORE_START_MESSAGE, dayId: day.dayId });
   }
 
   // Rule 5: photography count must be > 0 when photography type is selected.
@@ -101,7 +110,11 @@ export function validateDay(day: EventDay): ValidationIssue[] {
     });
   }
 
-  issues.push(...validateCoreServiceRule(day));
+  // A day is incomplete until photography or videography is chosen.
+  // Add-on-only days reuse the same required copy (rules 1 / 7 / 8 / 9).
+  if (!hasCoreService(day)) {
+    issues.push({ code: "CORE_SERVICE_REQUIRED", message: CORE_SERVICE_REQUIRED_MESSAGE, dayId: day.dayId });
+  }
 
   return issues;
 }
@@ -157,4 +170,32 @@ export function validateBooking(booking: Booking): ValidationIssue[] {
 
 export function isDayComplete(day: EventDay): boolean {
   return validateDay(day).length === 0;
+}
+
+/** Customer-facing labels for incomplete day cards. Maps existing
+ * validateDay codes — does not add or weaken any booking rules. */
+const DAY_MISSING_LABELS: Record<string, string> = {
+  EVENT_DATE_REQUIRED: "Date",
+  EVENT_DATE_PAST: "Valid date",
+  EVENT_TYPE_REQUIRED: "Event type",
+  LOCATION_REQUIRED: "Location",
+  START_TIME_REQUIRED: "Start time",
+  END_TIME_REQUIRED: "End time",
+  END_BEFORE_START: "End after start",
+  CORE_SERVICE_REQUIRED: "Photography or Videography",
+  PHOTOGRAPHY_COUNT_REQUIRED: "Photographers",
+  VIDEOGRAPHY_COUNT_REQUIRED: "Videographers",
+};
+
+export function dayMissingLabels(day: EventDay): string[] {
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  for (const issue of validateDay(day)) {
+    const label = DAY_MISSING_LABELS[issue.code];
+    if (label && !seen.has(label)) {
+      seen.add(label);
+      labels.push(label);
+    }
+  }
+  return labels;
 }

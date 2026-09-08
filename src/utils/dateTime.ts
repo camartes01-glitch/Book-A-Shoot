@@ -30,6 +30,13 @@ export function isEndAfterStart(startTime: string, endTime: string, overnight: b
   return toMinutes(endTime) > toMinutes(startTime);
 }
 
+/** Clock times that wrap past midnight (8:00 PM → 2:00 AM) are overnight.
+ * Same-day ranges (10:00 AM → 6:00 PM) are not. */
+export function inferOvernight(startTime: string | null, endTime: string | null): boolean {
+  if (!startTime || !endTime) return false;
+  return toMinutes(endTime) <= toMinutes(startTime);
+}
+
 export function todayIso(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

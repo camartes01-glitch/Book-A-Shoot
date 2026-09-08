@@ -59,7 +59,7 @@ export default function DeliverablesScreen() {
   };
 
   return (
-    <WizardScreen title="Deliverables" step="deliverables" footer={<Button label="Continue" onPress={onContinue} flex={1} />}>
+    <WizardScreen title="What you'll receive" step="services" footer={<Button label="Continue" onPress={onContinue} flex={1} />}>
       <Card>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Camera size={18} color={colors.primaryDark} />

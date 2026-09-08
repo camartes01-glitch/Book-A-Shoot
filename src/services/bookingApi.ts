@@ -17,7 +17,7 @@
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Booking, BookingStatus, CounterOffer, EventDay, PackageTierId } from "@/src/types/booking";
-import { createEmptyBooking, createEmptyDay, duplicateDay } from "@/src/domain/defaults";
+import { createEmptyBooking, createEmptyDay, duplicateDay, sanitizeEventDay } from "@/src/domain/defaults";
 import { checkBudgetFeasibility, generatePackageOptions } from "@/src/engine/pricing";
 import { matchVendors } from "@/src/engine/matching";
 import { validateBooking, validateBudget } from "@/src/engine/validation";
@@ -112,7 +112,16 @@ export async function duplicateLastDay(bookingId: string): Promise<Booking> {
   if (!booking) throw new Error("Booking not found");
   const last = booking.days[booking.days.length - 1];
   if (!last) return addDay(bookingId);
-  const day = duplicateDay(last, booking.days.length + 1);
+  return duplicateExistingDay(bookingId, last.dayId);
+}
+
+/** POST /api/customer/bookings/{id}/days/{dayId}/duplicate */
+export async function duplicateExistingDay(bookingId: string, dayId: string): Promise<Booking> {
+  const booking = await getBooking(bookingId);
+  if (!booking) throw new Error("Booking not found");
+  const source = booking.days.find((d) => d.dayId === dayId);
+  if (!source) throw new Error("Day not found");
+  const day = duplicateDay(source, booking.days.length + 1);
   return saveBooking({ ...booking, days: [...booking.days, day] });
 }
 
@@ -120,7 +129,7 @@ export async function duplicateLastDay(bookingId: string): Promise<Booking> {
 export async function updateDay(bookingId: string, dayId: string, patch: Partial<EventDay>): Promise<Booking> {
   const booking = await getBooking(bookingId);
   if (!booking) throw new Error("Booking not found");
-  const days = booking.days.map((d) => (d.dayId === dayId ? { ...d, ...patch } : d));
+  const days = booking.days.map((d) => (d.dayId === dayId ? sanitizeEventDay({ ...d, ...patch }) : d));
   return saveBooking({ ...booking, days });
 }
 
@@ -221,15 +230,21 @@ export async function submitVendorRequest(bookingId: string): Promise<Booking> {
   if (!booking) throw new Error("Booking not found");
   if (!booking.selectedVendorId) throw new Error("Select a service provider first.");
 
-  const bookingId2 = booking.bookingId.startsWith("draft")
+  const previousId = booking.bookingId;
+  const bookingId2 = previousId.startsWith("draft")
     ? makeBookingId(new Date().getFullYear(), await nextSequence())
-    : booking.bookingId;
+    : previousId;
 
   const submitted = await saveBooking({
     ...booking,
     bookingId: bookingId2,
     status: "REQUEST_SENT",
   });
+
+  if (previousId !== bookingId2) {
+    const remaining = (await readAllBookings()).filter((b) => b.bookingId !== previousId);
+    await writeAllBookings(remaining);
+  }
 
   await addNotification({
     id: makeId("ntf"),

@@ -1,9 +1,10 @@
 import { useEffect } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { useAppStore } from "@/src/state/AppProvider";
-import { BrandMark, Muted, Title } from "@/src/components/ui";
-import { colors, spacing } from "@/src/constants/theme";
+import { BookAShootLogo } from "@/src/components/BookAShootLogo";
+import { colors } from "@/src/constants/theme";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Splash() {
   const { ready, profile } = useAppStore();
@@ -17,14 +18,18 @@ export default function Splash() {
   }, [ready, profile]);
 
   return (
-    <View style={styles.wrap}>
-      <BrandMark size={72} />
-      <Title>Camartes</Title>
-      <Muted>Photography & videography, booked simply.</Muted>
-    </View>
+    <SafeAreaView style={styles.wrap} edges={["top", "left", "right", "bottom"]}>
+      <BookAShootLogo maxWidth={360} widthFraction={0.88} />
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: spacing.sm, backgroundColor: colors.bg },
+  wrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.bg,
+    paddingHorizontal: 24,
+  },
 });

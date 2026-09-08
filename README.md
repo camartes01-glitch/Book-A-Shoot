@@ -73,6 +73,26 @@ npm run typecheck
 
 `src/engine/__tests__/validation.test.ts` includes the exact allow/deny truth table from spec section 2 (Photography+Drone ✅, Drone-only ❌, LED+WebLive ❌, etc.), plus rules 2–10. `matching.test.ts` covers the 6-provider cap, the zero/partial-match cases, and capability filtering. `pricing.test.ts` covers package ordering/labels and the budget-feasibility warning.
 
+## Windows: one-command phone install
+
+On your Windows PC, with the phone connected and USB debugging authorized:
+
+```powershell
+cd path\to\field-executive\customer-app
+Set-ExecutionPolicy -Scope Process Bypass
+.\run-local-android.ps1
+```
+
+The script stops unless `adb devices` shows status `device`. See `LOCAL_RUN.md`.
+
+Debug APK only:
+
+```powershell
+.\build-local-apk.ps1
+```
+
+Output: `build-output\camartes-customer-debug.apk`
+
 ## Android APK (local)
 
 ```bash

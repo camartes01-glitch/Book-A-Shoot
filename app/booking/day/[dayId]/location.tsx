@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { LocateFixed, MapPin, Search } from "lucide-react-native";
+import { LocateFixed, MapPin } from "lucide-react-native";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { Button, Card, Field, Muted, SectionTitle } from "@/src/components/ui";
 import { useAppStore } from "@/src/state/AppProvider";
@@ -77,9 +77,9 @@ export default function LocationPickerScreen() {
   return (
     <WizardScreen title="Event location" step="event" footer={<Button label="Confirm location" onPress={onConfirm} disabled={!selected?.formattedAddress} flex={1} />}>
       <Card>
-        <SectionTitle>Search for the venue</SectionTitle>
+        <SectionTitle>Where is your event?</SectionTitle>
         <Field
-          label="Search"
+          label="Search location"
           placeholder="Search area, city or venue"
           value={query}
           onChangeText={setQuery}

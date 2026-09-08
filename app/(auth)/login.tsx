@@ -3,7 +3,8 @@ import { Alert, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { Mail } from "lucide-react-native";
 import { ScreenContainer } from "@/src/components/ScreenContainer";
-import { BrandMark, Button, Divider, Field, Muted, ScreenTitle } from "@/src/components/ui";
+import { BookAShootLogo } from "@/src/components/BookAShootLogo";
+import { Button, Divider, Field, Muted } from "@/src/components/ui";
 import { useAppStore } from "@/src/state/AppProvider";
 import { colors, spacing } from "@/src/constants/theme";
 
@@ -14,13 +15,17 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
+
+  const digits = mobile.replace(/\D/g, "");
+  const phoneValid = digits.length === 10;
 
   const onSendOtp = async () => {
-    const digits = mobile.replace(/\D/g, "");
-    if (digits.length !== 10) {
-      Alert.alert("Enter a valid mobile number", "Mobile number must be 10 digits.");
+    if (!phoneValid) {
+      setPhoneError("Enter a valid 10-digit Indian mobile number.");
       return;
     }
+    setPhoneError("");
     setLoading(true);
     try {
       const { demoOtp } = await requestOtp(digits);
@@ -52,11 +57,10 @@ export default function LoginScreen() {
   };
 
   return (
-    <ScreenContainer>
+    <ScreenContainer keyboardAvoiding includeBottomSafeArea>
       <View style={styles.brandRow}>
-        <BrandMark size={56} />
-        <ScreenTitle>Welcome to Camartes</ScreenTitle>
-        <Muted>Book photographers & videographers for your event in minutes.</Muted>
+        <BookAShootLogo maxWidth={320} widthFraction={0.84} />
+        <Muted style={styles.tagline}>Find photographers and videographers for your event.</Muted>
       </View>
 
       {!emailMode ? (
@@ -66,10 +70,15 @@ export default function LoginScreen() {
             placeholder="98765 43210"
             keyboardType="phone-pad"
             maxLength={10}
-            value={mobile}
-            onChangeText={setMobile}
+            value={digits}
+            onChangeText={(text) => {
+              setMobile(text.replace(/\D/g, "").slice(0, 10));
+              if (phoneError) setPhoneError("");
+            }}
+            error={phoneError}
+            hint={digits.length && !phoneValid ? `${digits.length}/10 digits` : "+91 · 10 digits"}
           />
-          <Button label="Send OTP" onPress={onSendOtp} loading={loading} />
+          <Button label="Send OTP" onPress={onSendOtp} loading={loading} disabled={!phoneValid} />
         </View>
       ) : (
         <View style={{ gap: spacing.md }}>
@@ -98,5 +107,6 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  brandRow: { alignItems: "center", gap: spacing.xs, marginBottom: spacing.lg, marginTop: spacing.xl },
+  brandRow: { alignItems: "center", gap: spacing.sm, marginBottom: spacing.md, marginTop: spacing.sm },
+  tagline: { textAlign: "center", paddingHorizontal: spacing.md },
 });

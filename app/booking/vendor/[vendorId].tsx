@@ -35,14 +35,15 @@ export default function VendorProfileScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top", "left", "right", "bottom"]}>
-      <ProgressHeader title="Provider profile" step="matches" />
+      <ProgressHeader title="Provider profile" step="providers" />
       {loading || !vendor ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           <ActivityIndicator color={colors.primary} size="large" />
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}>
-          <Card>
+        <>
+          <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xl }}>
+            <Card>
             <ScreenTitle>{vendor.studioName}</ScreenTitle>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
               <MapPin size={14} color={colors.muted} />
@@ -91,7 +92,7 @@ export default function VendorProfileScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 <View style={{ flexDirection: "row", gap: spacing.sm }}>
                   {vendor.portfolioImages.map((uri) => (
-                    <Image key={uri} source={{ uri }} style={{ width: 140, height: 100, borderRadius: 12 }} />
+                    <Image key={uri} source={{ uri }} style={{ width: 140, height: 100, borderRadius: 12, backgroundColor: colors.peach }} resizeMode="cover" />
                   ))}
                 </View>
               </ScrollView>
@@ -116,9 +117,11 @@ export default function VendorProfileScreen() {
             <Muted style={{ fontSize: 20, fontWeight: "800", color: colors.primaryDark }}>{formatInr(match?.estimatedPrice ?? vendor.basePricePerDay)}</Muted>
             <Badge label={match?.available ? "Available for your dates" : "Availability pending"} tone={match?.available ? "green" : "amber"} />
           </Card>
-
-          <Button label="Select this provider" onPress={onSelect} />
-        </ScrollView>
+          </ScrollView>
+          <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.md, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg }}>
+            <Button label="Select this provider" onPress={onSelect} />
+          </View>
+        </>
       )}
     </SafeAreaView>
   );

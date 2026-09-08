@@ -58,7 +58,7 @@ export default function BookingDetailScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top", "left", "right", "bottom"]}>
-      <ProgressHeader title="Booking details" step="confirm" onBack={() => router.replace("/(tabs)/bookings")} />
+      <ProgressHeader title="Booking details" step="providers" onBack={() => router.replace("/(tabs)/bookings")} />
       <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}>
         <Card>
           <ScreenTitle>{booking.bookingId}</ScreenTitle>

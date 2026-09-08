@@ -27,14 +27,12 @@ export default function DeliveryDateScreen() {
   };
 
   return (
-    <WizardScreen title="Expected delivery" step="deliverables" footer={<Button label="Continue" onPress={onContinue} flex={1} />}>
+    <WizardScreen title="When do you need them?" step="services" footer={<Button label="Continue" onPress={onContinue} flex={1} />}>
       <Card>
-        <SectionTitle>When do you need your photos & videos?</SectionTitle>
-        <Muted>
-          {finalEventDate
-            ? `Your final event day is ${formatDateLong(finalEventDate)}. Pick a delivery date on or after that.`
-            : "Set your event dates first."}
-        </Muted>
+          <SectionTitle>When do you need your photos & videos?</SectionTitle>
+          <Muted>
+            {finalEventDate ? `Your last event day is ${formatDateLong(finalEventDate)}.` : "Set your event dates first."}
+          </Muted>
         <DateField
           label="Expected delivery date"
           value={date}

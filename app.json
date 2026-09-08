@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Camartes",
+    "name": "BOOK A SHOOT",
     "slug": "camartes-customer",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -14,8 +14,13 @@
         "NSLocationWhenInUseUsageDescription": "Camartes uses your location to find your event address and match nearby photographers and videographers."
       }
     },
+    "androidStatusBar": {
+      "barStyle": "dark-content",
+      "backgroundColor": "#FFF7ED"
+    },
     "android": {
       "package": "com.camartes.customer",
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#FF6B35",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -37,10 +42,22 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
+          "image": "./assets/images/book-a-shoot-splash-ios.png",
+          "backgroundColor": "#FFF7ED",
           "resizeMode": "contain",
-          "backgroundColor": "#FFF7ED"
+          "imageWidth": 200,
+          "android": {
+            "image": "./assets/images/book-a-shoot-splash-android.png",
+            "backgroundColor": "#FFF7ED",
+            "resizeMode": "contain",
+            "imageWidth": 288
+          },
+          "ios": {
+            "image": "./assets/images/book-a-shoot-splash-ios.png",
+            "backgroundColor": "#FFF7ED",
+            "resizeMode": "contain",
+            "imageWidth": 280
+          }
         }
       ],
       [

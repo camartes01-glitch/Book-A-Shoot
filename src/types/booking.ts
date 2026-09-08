@@ -154,6 +154,12 @@ export type VendorMatchResult = {
   unavailableReason?: string;
   estimatedPrice: number;
   matchScore: number;
+  /** First live portfolio image from the vendor catalog, when one exists. */
+  imageUrl?: string;
+  /** Studio neighbourhood / area from the vendor catalog, when present. */
+  area?: string;
+  /** Photography / Videography labels derived from the vendor's real capabilities. */
+  serviceCategory?: string;
 };
 
 export type Booking = {

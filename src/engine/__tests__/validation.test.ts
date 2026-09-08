@@ -1,12 +1,18 @@
-import { createEmptyDay } from "@/src/domain/defaults";
+import { createEmptyDay, duplicateDay, sanitizeDayAddOns, sanitizeEventDay } from "@/src/domain/defaults";
+import { durationMinutes, formatDuration, inferOvernight } from "@/src/utils/dateTime";
 import {
   CORE_SERVICE_REQUIRED_MESSAGE,
+  END_BEFORE_START_MESSAGE,
+  END_TIME_REQUIRED_MESSAGE,
+  START_TIME_REQUIRED_MESSAGE,
+  isDayComplete,
   validateBooking,
   validateBudget,
   validateCoreServiceRule,
   validateDay,
   validateDays,
   validateExpectedDelivery,
+  dayMissingLabels,
 } from "@/src/engine/validation";
 import type { EventDay } from "@/src/types/booking";
 
@@ -18,6 +24,7 @@ function baseValidDay(): EventDay {
   day.location.city = "Tirupati";
   day.startTime = "17:00";
   day.endTime = "21:00";
+  day.photography = { traditional: true, traditionalCount: 1, candid: false, candidCount: 1 };
   return day;
 }
 
@@ -131,6 +138,79 @@ describe("validateDay", () => {
     expect(issues.some((i) => i.code === "END_BEFORE_START")).toBe(false);
   });
 
+  test("treats 8:00 PM to 2:00 AM as an overnight 6-hour event without blocking the customer", () => {
+    const day = sanitizeEventDay({
+      ...baseValidDay(),
+      startTime: "20:00",
+      endTime: "02:00",
+      overnight: false,
+    });
+    expect(inferOvernight("20:00", "02:00")).toBe(true);
+    expect(day.overnight).toBe(true);
+    expect(validateDay(day).some((i) => i.code === "END_BEFORE_START")).toBe(false);
+    expect(durationMinutes(day.startTime!, day.endTime!, day.overnight)).toBe(6 * 60);
+    expect(formatDuration(6 * 60)).toBe("6 hours");
+  });
+
+  test("keeps a same-day range valid and not overnight", () => {
+    const day = sanitizeEventDay({
+      ...baseValidDay(),
+      startTime: "10:00",
+      endTime: "18:00",
+      overnight: false,
+    });
+    expect(day.overnight).toBe(false);
+    expect(validateDay(day).some((i) => i.code === "END_BEFORE_START")).toBe(false);
+  });
+
+  test("asks for start and end times separately instead of a premature order error", () => {
+    const day = baseValidDay();
+    day.startTime = null;
+    day.endTime = null;
+    const issues = validateDay(day);
+    expect(issues.some((i) => i.code === "START_TIME_REQUIRED" && i.message === START_TIME_REQUIRED_MESSAGE)).toBe(true);
+    expect(issues.some((i) => i.code === "END_TIME_REQUIRED" && i.message === END_TIME_REQUIRED_MESSAGE)).toBe(true);
+    expect(issues.some((i) => i.code === "END_BEFORE_START")).toBe(false);
+  });
+
+  test("only reports end-before-start after both times are selected", () => {
+    const day = baseValidDay();
+    day.startTime = "21:00";
+    day.endTime = null;
+    day.overnight = false;
+    const issues = validateDay(day);
+    expect(issues.some((i) => i.code === "END_TIME_REQUIRED")).toBe(true);
+    expect(issues.some((i) => i.code === "END_BEFORE_START")).toBe(false);
+  });
+
+  test("uses the exact end-before-start copy when both times are selected and overnight is off", () => {
+    const day = baseValidDay();
+    day.startTime = "21:00";
+    day.endTime = "18:00";
+    day.overnight = false;
+    const issues = validateDay(day);
+    const order = issues.find((i) => i.code === "END_BEFORE_START");
+    expect(order?.message).toBe(END_BEFORE_START_MESSAGE);
+  });
+
+  test("a new EventDay is incomplete until required fields and a core service are set", () => {
+    const day = createEmptyDay(1);
+    expect(isDayComplete(day)).toBe(false);
+    expect(day.ledWall.enabled).toBe(false);
+    expect(day.webLive.enabled).toBe(false);
+    expect(day.aerial.photographyDrones).toBe(0);
+    expect(day.aerial.videographyDrones).toBe(0);
+    expect(validateDay(day).some((i) => i.code === "CORE_SERVICE_REQUIRED")).toBe(true);
+    expect(dayMissingLabels(day)).toEqual([
+      "Date",
+      "Event type",
+      "Location",
+      "Start time",
+      "End time",
+      "Photography or Videography",
+    ]);
+  });
+
   test("requires photographer count > 0 when photography style selected (rule 5)", () => {
     const day = baseValidDay();
     day.photography = { traditional: true, traditionalCount: 0, candid: false, candidCount: 1 };
@@ -205,5 +285,62 @@ describe("validateDays vs validateBooking (regression: days screen must not dema
       draftCompletionPct: 0,
     });
     expect(issues.some((i) => i.code === "DELIVERY_DATE_REQUIRED")).toBe(true);
+  });
+});
+
+describe("sanitizeDayAddOns", () => {
+  test("clears LED and Web Live dependent values when those add-ons are disabled", () => {
+    const day = createEmptyDay(1);
+    day.ledWall = { enabled: false, size: "12 x 16", screenCount: 4 };
+    day.webLive = { enabled: false, quality: "4K", cameraCount: 3, streamingPlatform: "x", accessType: "public" };
+    const sanitized = sanitizeDayAddOns(day);
+    expect(sanitized.ledWall).toEqual({ enabled: false, size: "8 x 12", screenCount: 1 });
+    expect(sanitized.webLive.enabled).toBe(false);
+    expect(sanitized.webLive.quality).toBe("HD");
+    expect(sanitized.webLive.cameraCount).toBe(1);
+  });
+
+  test("preserves LED and Web Live configuration when the customer enabled them", () => {
+    const day = createEmptyDay(1);
+    day.ledWall = { enabled: true, size: "12 x 16", screenCount: 2 };
+    day.webLive = { enabled: true, quality: "4K", cameraCount: 2, streamingPlatform: "", accessType: "public" };
+    const sanitized = sanitizeDayAddOns(day);
+    expect(sanitized.ledWall).toEqual({ enabled: true, size: "12 x 16", screenCount: 2 });
+    expect(sanitized.webLive.enabled).toBe(true);
+    expect(sanitized.webLive.quality).toBe("4K");
+  });
+});
+
+describe("duplicateDay", () => {
+  test("copies the source day independently and does not inherit a later day's values", () => {
+    const day1 = sanitizeEventDay({
+      ...baseValidDay(),
+      eventTypeIds: ["wedding"],
+      startTime: "10:00",
+      endTime: "16:00",
+      photography: { traditional: true, traditionalCount: 2, candid: false, candidCount: 1 },
+    });
+    const day2 = sanitizeEventDay({
+      ...baseValidDay(),
+      eventTypeIds: ["reception"],
+      startTime: "18:00",
+      endTime: "22:00",
+      videography: { traditional: true, traditionalCount: 1, candid: false, candidCount: 1 },
+      photography: { traditional: false, traditionalCount: 1, candid: false, candidCount: 1 },
+    });
+
+    const copyOfDay1 = duplicateDay(day1, 3);
+    expect(copyOfDay1.dayId).not.toBe(day1.dayId);
+    expect(copyOfDay1.order).toBe(3);
+    expect(copyOfDay1.eventDate).toBeNull();
+    expect(copyOfDay1.eventTypeIds).toEqual(["wedding"]);
+    expect(copyOfDay1.startTime).toBe("10:00");
+    expect(copyOfDay1.endTime).toBe("16:00");
+    expect(copyOfDay1.photography.traditionalCount).toBe(2);
+    expect(copyOfDay1.videography.traditional).toBe(false);
+
+    expect(day2.eventTypeIds).toEqual(["reception"]);
+    expect(day1.eventTypeIds).toEqual(["wedding"]);
+    expect(day1.photography.traditionalCount).toBe(2);
   });
 });

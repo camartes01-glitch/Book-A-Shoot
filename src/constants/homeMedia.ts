@@ -1,21 +1,41 @@
 import type { ImageSourcePropType } from "react-native";
 
-/** Local media for the Home screen (spec section 53 "What are you planning?").
- * Bundled + compressed JPEGs so the app works fully offline with no CDN
- * dependency; swap for real Camartes/vendor portfolio photos once a media
- * CDN is wired up. */
+/** Local media for marketplace discovery. Bundled JPEGs — no random stock CDN. */
 export const HOME_HERO_IMAGE: ImageSourcePropType = require("@/assets/images/home/home_hero_wedding.jpg");
 
 export const CATEGORY_IMAGES: Record<string, ImageSourcePropType> = {
   wedding: require("@/assets/images/home/category_wedding.jpg"),
+  engagement: require("@/assets/images/home/category_wedding.jpg"),
   pre_wedding: require("@/assets/images/home/category_pre_wedding.jpg"),
+  post_wedding: require("@/assets/images/home/category_pre_wedding.jpg"),
+  reception: require("@/assets/images/home/category_wedding.jpg"),
+  haldi: require("@/assets/images/home/portfolio_mehndi.jpg"),
+  mehendi: require("@/assets/images/home/portfolio_mehndi.jpg"),
   birthday: require("@/assets/images/home/category_birthday.jpg"),
   baby_shoot: require("@/assets/images/home/category_baby_shoot.jpg"),
+  maternity_shoot: require("@/assets/images/home/category_baby_shoot.jpg"),
+  anniversary: require("@/assets/images/home/category_birthday.jpg"),
+  naming_ceremony: require("@/assets/images/home/category_baby_shoot.jpg"),
+  housewarming: require("@/assets/images/home/category_corporate.jpg"),
   corporate_event: require("@/assets/images/home/category_corporate.jpg"),
+  product_shoot: require("@/assets/images/home/category_corporate.jpg"),
+  brand_event: require("@/assets/images/home/category_corporate.jpg"),
 };
 
+export function categoryImageFor(id: string): ImageSourcePropType {
+  return CATEGORY_IMAGES[id] ?? CATEGORY_IMAGES.wedding;
+}
+
 export const PORTFOLIO_STRIP: Array<{ id: string; label: string; image: ImageSourcePropType }> = [
-  { id: "mehndi", label: "Mehndi & Traditions", image: require("@/assets/images/home/portfolio_mehndi.jpg") },
-  { id: "drone", label: "Aerial Coverage", image: require("@/assets/images/home/portfolio_drone.jpg") },
-  { id: "led_wall", label: "Live Stage Events", image: require("@/assets/images/home/portfolio_led_wall.jpg") },
+  { id: "mehndi", label: "Mehndi & traditions", image: require("@/assets/images/home/portfolio_mehndi.jpg") },
+  { id: "drone", label: "Aerial coverage", image: require("@/assets/images/home/portfolio_drone.jpg") },
+  { id: "led_wall", label: "Live stage events", image: require("@/assets/images/home/portfolio_led_wall.jpg") },
+];
+
+export const SEARCH_EXAMPLES = [
+  "Wedding photographer",
+  "Birthday photography",
+  "Pre-wedding shoot",
+  "Corporate event",
+  "Baby shoot",
 ];

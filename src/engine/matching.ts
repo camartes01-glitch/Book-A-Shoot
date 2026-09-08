@@ -237,6 +237,9 @@ export function matchVendors(
     const availability = checkVendorAvailability(vendor, booking.days as EventDay[], req);
     const estimatedPrice = estimateVendorPrice(vendor, booking, tier);
     const matchScore = scoreVendor(vendor, booking, req, availability, tier, budget);
+    const services: string[] = [];
+    if (vendor.photography.traditional || vendor.photography.candid) services.push("Photography");
+    if (vendor.videography.traditional || vendor.videography.candid) services.push("Videography");
     return {
       vendorId: vendor.vendorId,
       studioName: vendor.studioName,
@@ -248,6 +251,9 @@ export function matchVendors(
       unavailableReason: availability.reason,
       estimatedPrice,
       matchScore,
+      imageUrl: vendor.portfolioImages[0] || undefined,
+      area: vendor.area || undefined,
+      serviceCategory: services.join(" · ") || undefined,
     };
   });
 

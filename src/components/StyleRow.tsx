@@ -28,7 +28,15 @@ export function StyleRow({
 }) {
   return (
     <View style={styles.wrap}>
-      <ToggleRow label={label} description={description} value={enabled} onValueChange={onToggle} />
+      <ToggleRow
+        label={label}
+        description={description}
+        value={enabled}
+        onValueChange={(next) => {
+          onToggle(next);
+          if (next && count < min) onCountChange(min);
+        }}
+      />
       {enabled ? (
         <View style={styles.stepperWrap}>
           <Stepper label={countLabel} value={count} min={min} max={max} onChange={onCountChange} />

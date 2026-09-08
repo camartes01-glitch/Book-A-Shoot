@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { router } from "expo-router";
-import { SearchX } from "lucide-react-native";
+import { SearchX, SlidersHorizontal } from "lucide-react-native";
 import { WizardScreen } from "@/src/components/WizardScreen";
-import { Button, Muted, SectionTitle } from "@/src/components/ui";
+import { Button, Card, Muted, SectionTitle } from "@/src/components/ui";
 import { ProviderCard } from "@/src/components/ProviderCard";
 import { EmptyState } from "@/src/components/EmptyState";
 import { useAppStore } from "@/src/state/AppProvider";
@@ -44,46 +44,56 @@ export default function VendorMatchesScreen() {
   };
 
   const matches = activeDraft?.matches ?? [];
+  const pkgLabel = activeDraft?.packageOptions?.find((p) => p.id === activeDraft.selectedPackage)?.label;
 
   return (
-    <WizardScreen title="Available service providers" step="matches">
+    <WizardScreen title="Find your provider" step="providers">
       {loading ? (
-        <View style={{ paddingVertical: spacing.xxl, alignItems: "center", gap: spacing.sm }}>
+        <View style={{ paddingVertical: spacing.xl, alignItems: "center", gap: spacing.sm }}>
           <ActivityIndicator color={colors.primary} size="large" />
-          <Muted>Checking availability across the Camartes Vendor Platform…</Muted>
+          <Muted>Looking for professionals who can cover your event…</Muted>
         </View>
       ) : error ? (
         <EmptyState icon={<SearchX size={40} color={colors.danger} />} title="Couldn't load service providers" body={error} actionLabel="Try again" onAction={runMatching} />
       ) : matches.length === 0 ? (
-        <EmptyState
-          icon={<SearchX size={40} color={colors.muted} />}
-          title="We couldn't find a provider that matches all your requirements for this date and location."
-        />
+        <Card>
+          <EmptyState
+            icon={<SlidersHorizontal size={36} color={colors.primaryDark} />}
+            title="We couldn't find the right match yet."
+            body="Changing the date, time, location, services or budget can produce more matches from the live Camartes catalog."
+          />
+          <View style={{ gap: spacing.sm }}>
+            <Button label="Change date or time" onPress={() => router.push("/booking/new")} />
+            <Button label="Adjust requirements" variant="outline" onPress={() => router.push("/booking/summary")} />
+            <Button label="Increase budget" variant="outline" onPress={() => router.push("/booking/budget")} />
+          </View>
+        </Card>
       ) : (
         <>
           <SectionTitle>
-            {matches.length === MAX_MATCHES ? `${MAX_MATCHES} matching providers` : `We found ${matches.length} provider${matches.length === 1 ? "" : "s"} matching your requirements`}
+            {matches.length === 1 ? "1 professional matches your event" : `${matches.length} professionals match your event`}
           </SectionTitle>
+          {pkgLabel ? <Muted>Showing availability for {pkgLabel}</Muted> : null}
           {matches.map((m) => (
             <ProviderCard
               key={m.vendorId}
               match={m}
+              packageLabel={pkgLabel}
               onViewProfile={() => router.push(`/booking/vendor/${m.vendorId}`)}
               onSelect={() => onSelect(m.vendorId)}
               selected={selecting === m.vendorId || activeDraft?.selectedVendorId === m.vendorId}
             />
           ))}
+          {matches.length < MAX_MATCHES ? (
+            <View style={{ gap: spacing.sm }}>
+              <Muted>Want more options?</Muted>
+              <Button label="Change date or time" variant="outline" onPress={() => router.push("/booking/new")} />
+              <Button label="Adjust requirements" variant="outline" onPress={() => router.push("/booking/summary")} />
+              <Button label="Increase budget" variant="outline" onPress={() => router.push("/booking/budget")} />
+            </View>
+          ) : null}
         </>
       )}
-
-      {!loading && matches.length < MAX_MATCHES ? (
-        <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
-          <Muted style={{ fontWeight: "700", color: colors.ink }}>Want more options?</Muted>
-          <Button label="Change date or time" variant="outline" onPress={() => router.push("/booking/new")} />
-          <Button label="Adjust requirements" variant="outline" onPress={() => router.push("/booking/summary")} />
-          <Button label="Increase budget" variant="outline" onPress={() => router.push("/booking/budget")} />
-        </View>
-      ) : null}
     </WizardScreen>
   );
 }

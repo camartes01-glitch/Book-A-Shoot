@@ -1,12 +1,11 @@
 import { Pressable, View } from "react-native";
 import { router } from "expo-router";
-import { Pencil } from "lucide-react-native";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { Button, Card, Divider, Muted, SectionTitle, Title } from "@/src/components/ui";
 import { useAppStore } from "@/src/state/AppProvider";
 import { DEFAULT_EVENT_CATEGORIES } from "@/src/constants/eventCategories";
 import { formatDateLong, formatTime12h } from "@/src/utils/format";
-import { colors, spacing } from "@/src/constants/theme";
+import { colors } from "@/src/constants/theme";
 import type { EventDay } from "@/src/types/booking";
 
 function categoryLabel(id: string) {
@@ -18,9 +17,9 @@ function DaySummary({ day }: { day: EventDay }) {
     <View style={{ gap: 4 }}>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <Title>Day {day.order}</Title>
-        <Pressable onPress={() => router.push(`/booking/day/${day.dayId}`)} hitSlop={8}>
-          <Pencil size={16} color={colors.primaryDark} />
-        </Pressable>
+          <Pressable onPress={() => router.push(`/booking/day/${day.dayId}`)} hitSlop={8} accessibilityLabel="Edit day">
+            <Muted style={{ color: colors.primaryDark, fontWeight: "800" }}>Edit</Muted>
+          </Pressable>
       </View>
       <Muted>{day.eventTypeIds.map(categoryLabel).join(" + ") || "—"}</Muted>
       <Muted>
@@ -69,7 +68,7 @@ export default function BookingSummaryScreen() {
   const albumPages = photo.albumPagesOption === "custom" ? photo.albumPagesCustomCount ?? 0 : photo.albumPagesOption ?? "20";
 
   return (
-    <WizardScreen title="Your requirements" step="deliverables" footer={<Button label="Continue to budget" onPress={() => router.push("/booking/budget")} flex={1} />}>
+    <WizardScreen title="Your requirements" step="services" footer={<Button label="Continue to budget" onPress={() => router.push("/booking/budget")} flex={1} />}>
       <SectionTitle>
         {days.length} event day{days.length === 1 ? "" : "s"}
       </SectionTitle>
@@ -83,8 +82,8 @@ export default function BookingSummaryScreen() {
       <Card>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
           <SectionTitle>Deliverables</SectionTitle>
-          <Pressable onPress={() => router.push("/booking/deliverables")} hitSlop={8}>
-            <Pencil size={16} color={colors.primaryDark} />
+          <Pressable onPress={() => router.push("/booking/deliverables")} hitSlop={8} accessibilityLabel="Edit deliverables">
+            <Muted style={{ color: colors.primaryDark, fontWeight: "800" }}>Edit</Muted>
           </Pressable>
         </View>
         <Muted>Raw photos: {photo.rawPhotos ? "Yes" : "No"}</Muted>
@@ -98,8 +97,8 @@ export default function BookingSummaryScreen() {
       <Card>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
           <SectionTitle>Expected delivery</SectionTitle>
-          <Pressable onPress={() => router.push("/booking/delivery-date")} hitSlop={8}>
-            <Pencil size={16} color={colors.primaryDark} />
+          <Pressable onPress={() => router.push("/booking/delivery-date")} hitSlop={8} accessibilityLabel="Edit delivery date">
+            <Muted style={{ color: colors.primaryDark, fontWeight: "800" }}>Edit</Muted>
           </Pressable>
         </View>
         <Muted>{formatDateLong(activeDraft.expectedDeliveryDate)}</Muted>

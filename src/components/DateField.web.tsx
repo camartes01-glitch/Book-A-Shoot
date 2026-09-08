@@ -1,6 +1,5 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { CalendarDays, Clock } from "lucide-react-native";
 import { colors } from "@/src/constants/theme";
 
 /**
@@ -19,10 +18,11 @@ const fieldStyle: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 8,
-  border: `1px solid ${colors.peachBorder}`,
-  backgroundColor: colors.cream,
-  borderRadius: 12,
+  border: `1px solid ${colors.border}`,
+  backgroundColor: colors.white,
+  borderRadius: 16,
   padding: "12px",
+  minHeight: 48,
 };
 
 const inputStyle: React.CSSProperties = {
@@ -35,6 +35,7 @@ const inputStyle: React.CSSProperties = {
   outline: "none",
   flex: 1,
   minWidth: 0,
+  width: "100%",
 };
 
 function toIso(d: Date): string {
@@ -56,7 +57,6 @@ export function DateField({
     <View style={{ gap: 6 }}>
       <Text style={styles.label}>{label}</Text>
       <View style={fieldStyle as object}>
-        <CalendarDays size={16} color={colors.primaryDark} />
         {React.createElement("input", {
           type: "date",
           value: value ?? "",
@@ -65,25 +65,37 @@ export function DateField({
             if (e.target.value) onChange(e.target.value);
           },
           style: inputStyle,
+          "aria-label": label,
         })}
       </View>
     </View>
   );
 }
 
-export function TimeField({ label, value, onChange }: { label: string; value: string | null; onChange: (hhmm: string) => void }) {
+export function TimeField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (hhmm: string) => void;
+  placeholder?: string;
+}) {
   return (
     <View style={{ gap: 6, flex: 1 }}>
       <Text style={styles.label}>{label}</Text>
       <View style={fieldStyle as object}>
-        <Clock size={16} color={colors.primaryDark} />
         {React.createElement("input", {
           type: "time",
           value: value ?? "",
+          placeholder: placeholder ?? "Select start time",
           onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
             if (e.target.value) onChange(e.target.value);
           },
           style: inputStyle,
+          "aria-label": label,
         })}
       </View>
     </View>

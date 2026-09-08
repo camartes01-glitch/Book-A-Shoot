@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Check } from "lucide-react-native";
-import { colors } from "@/src/constants/theme";
+import { colors, touchTarget } from "@/src/constants/theme";
+import { selectionFeedback } from "@/src/utils/haptics";
 
 export function Chip({
   label,
@@ -17,7 +18,10 @@ export function Chip({
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      onPress={onPress}
+      onPress={() => {
+        void selectionFeedback();
+        onPress();
+      }}
       style={[styles.chip, selected && styles.chipSelected]}
     >
       {icon}
@@ -39,10 +43,11 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 999,
     paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingVertical: 10,
+    minHeight: touchTarget - 4,
     backgroundColor: colors.white,
-    borderWidth: 1.5,
-    borderColor: colors.peachBorder,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   chipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
   label: { fontSize: 13, fontWeight: "700", color: colors.ink },

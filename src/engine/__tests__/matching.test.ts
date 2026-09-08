@@ -78,6 +78,23 @@ describe("matchVendors", () => {
       expect(results[i - 1].matchScore).toBeGreaterThanOrEqual(results[i].matchScore);
     }
   });
+
+  test("passes through a real catalog image and does not invent one", () => {
+    const vendors = Array.from({ length: 12 }, (_, i) =>
+      vendor({
+        vendorId: `img${i}`,
+        studioName: `Studio ${i}`,
+        portfolioImages: i % 2 === 0 ? [`https://example.com/${i}.jpg`] : [],
+      }),
+    );
+    const results = matchVendors({ days: [eventDay()], deliverables: emptyDeliverables() }, vendors, "signature", 150000);
+    expect(results.length).toBeGreaterThan(0);
+    for (const result of results) {
+      const source = vendors.find((v) => v.vendorId === result.vendorId);
+      expect(result.imageUrl).toBe(source?.portfolioImages[0] || undefined);
+      expect(result.serviceCategory).toBe("Photography · Videography");
+    }
+  });
 });
 
 describe("checkVendorAvailability (rule 11 / multi-day)", () => {

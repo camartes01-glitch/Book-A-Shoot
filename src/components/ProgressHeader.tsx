@@ -3,16 +3,30 @@ import { ChevronLeft } from "lucide-react-native";
 import { router } from "expo-router";
 import { colors, spacing } from "@/src/constants/theme";
 
+/** Customer-facing marketplace steps. Engine screens map onto these five. */
 export const WIZARD_STEPS = [
   { id: "event", label: "Event" },
   { id: "services", label: "Services" },
-  { id: "deliverables", label: "Deliverables" },
   { id: "budget", label: "Budget" },
-  { id: "matches", label: "Matches" },
-  { id: "confirm", label: "Confirm" },
+  { id: "packages", label: "Packages" },
+  { id: "providers", label: "Providers" },
 ] as const;
 
-export type WizardStepId = (typeof WIZARD_STEPS)[number]["id"];
+export type VisualStepId = (typeof WIZARD_STEPS)[number]["id"];
+
+/** Includes legacy screen ids so existing routes keep compiling. */
+export type WizardStepId = VisualStepId | "deliverables" | "matches" | "confirm";
+
+const VISUAL_INDEX: Record<WizardStepId, number> = {
+  event: 0,
+  services: 1,
+  deliverables: 1,
+  budget: 2,
+  packages: 3,
+  providers: 4,
+  matches: 4,
+  confirm: 4,
+};
 
 export function ProgressHeader({
   title,
@@ -23,7 +37,7 @@ export function ProgressHeader({
   step: WizardStepId;
   onBack?: () => void;
 }) {
-  const activeIndex = WIZARD_STEPS.findIndex((s) => s.id === step);
+  const activeIndex = VISUAL_INDEX[step] ?? 0;
 
   return (
     <View style={styles.safe}>
@@ -37,18 +51,28 @@ export function ProgressHeader({
         >
           <ChevronLeft size={22} color={colors.ink} />
         </Pressable>
-        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.title} numberOfLines={1}>
+          {title}
+        </Text>
         <View style={{ width: 34 }} />
       </View>
-      <View style={styles.stepsRow}>
-        {WIZARD_STEPS.map((s, i) => (
-          <View key={s.id} style={styles.stepItem}>
-            <View style={[styles.dot, i <= activeIndex && styles.dotActive]}>
-              <Text style={[styles.dotText, i <= activeIndex && styles.dotTextActive]}>{String(i + 1).padStart(2, "0")}</Text>
+      <View style={styles.stepsRow} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 4, now: activeIndex }}>
+        {WIZARD_STEPS.map((s, i) => {
+          const done = i <= activeIndex;
+          return (
+            <View key={s.id} style={styles.stepItem}>
+              <View style={[styles.bar, done && styles.barActive]} />
+              <Text
+                style={[styles.stepLabel, done && styles.stepLabelActive]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
+                {s.label}
+              </Text>
             </View>
-            {i < WIZARD_STEPS.length - 1 ? <View style={[styles.line, i < activeIndex && styles.lineActive]} /> : null}
-          </View>
-        ))}
+          );
+        })}
       </View>
     </View>
   );
@@ -71,28 +95,18 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-  title: { fontSize: 16, fontWeight: "800", color: colors.ink },
+  title: { flex: 1, textAlign: "center", fontSize: 16, fontWeight: "800", color: colors.ink, paddingHorizontal: 8 },
   stepsRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.sm,
+    gap: 6,
   },
-  stepItem: { flexDirection: "row", alignItems: "center", flex: 1 },
-  dot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: colors.peach,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dotActive: { backgroundColor: colors.primary },
-  dotText: { fontSize: 9, fontWeight: "800", color: colors.primaryDark },
-  dotTextActive: { color: colors.white },
-  line: { flex: 1, height: 2, backgroundColor: colors.peach, marginHorizontal: 2 },
-  lineActive: { backgroundColor: colors.primary },
+  stepItem: { flex: 1, gap: 4 },
+  bar: { height: 3, borderRadius: 99, backgroundColor: colors.peach },
+  barActive: { backgroundColor: colors.primary },
+  stepLabel: { fontSize: 9, fontWeight: "700", color: colors.muted, textAlign: "center" },
+  stepLabelActive: { color: colors.primaryDark },
 });

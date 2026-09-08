@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Minus, Plus } from "lucide-react-native";
-import { colors } from "@/src/constants/theme";
+import { colors, touchTarget } from "@/src/constants/theme";
+import { selectionFeedback } from "@/src/utils/haptics";
 
 export function Stepper({
   value,
@@ -21,22 +22,28 @@ export function Stepper({
       <View style={styles.control}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Decrease"
+          accessibilityLabel={label ? `Decrease ${label}` : "Decrease"}
           disabled={value <= min}
-          onPress={() => onChange(Math.max(min, value - 1))}
+          onPress={() => {
+            void selectionFeedback();
+            onChange(Math.max(min, value - 1));
+          }}
           style={[styles.btn, value <= min && styles.btnDisabled]}
-          hitSlop={8}
+          hitSlop={6}
         >
           <Minus size={16} color={value <= min ? colors.muted : colors.primaryDark} />
         </Pressable>
         <Text style={styles.value}>{value}</Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Increase"
+          accessibilityLabel={label ? `Increase ${label}` : "Increase"}
           disabled={value >= max}
-          onPress={() => onChange(Math.min(max, value + 1))}
+          onPress={() => {
+            void selectionFeedback();
+            onChange(Math.min(max, value + 1));
+          }}
           style={[styles.btn, value >= max && styles.btnDisabled]}
-          hitSlop={8}
+          hitSlop={6}
         >
           <Plus size={16} color={value >= max ? colors.muted : colors.primaryDark} />
         </Pressable>
@@ -46,25 +53,25 @@ export function Stepper({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
   label: { fontSize: 14, fontWeight: "600", color: colors.ink, flex: 1 },
   control: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    backgroundColor: colors.peach,
+    gap: 8,
+    backgroundColor: colors.cream,
     borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
   },
   btn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: touchTarget - 4,
+    height: touchTarget - 4,
+    borderRadius: 12,
     backgroundColor: colors.white,
     alignItems: "center",
     justifyContent: "center",
   },
-  btnDisabled: { opacity: 0.5 },
-  value: { fontSize: 16, fontWeight: "800", color: colors.ink, minWidth: 20, textAlign: "center" },
+  btnDisabled: { opacity: 0.45 },
+  value: { fontSize: 16, fontWeight: "800", color: colors.ink, minWidth: 22, textAlign: "center" },
 });

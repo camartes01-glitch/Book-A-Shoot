@@ -30,7 +30,7 @@ export function EmptyState({
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: "center", gap: spacing.sm, padding: spacing.xl },
+  wrap: { alignItems: "center", gap: spacing.sm, paddingVertical: spacing.md, paddingHorizontal: spacing.sm },
   title: { fontSize: 16, fontWeight: "800", color: colors.ink, textAlign: "center" },
   body: { fontSize: 13, color: colors.muted, textAlign: "center", lineHeight: 19 },
 });
