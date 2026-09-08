@@ -7,6 +7,7 @@ import { Badge, Card, Muted, ScreenTitle, Title } from "@/src/components/ui";
 import { EmptyState } from "@/src/components/EmptyState";
 import { useAppStore } from "@/src/state/AppProvider";
 import { STATUS_LABEL, STATUS_TONE } from "@/src/domain/statusLabels";
+import { isLocalWizardBooking } from "@/src/domain/bookingRequest";
 import { formatDateLong, formatInr } from "@/src/utils/format";
 import { colors, spacing } from "@/src/constants/theme";
 
@@ -19,8 +20,8 @@ export default function BookingsScreen() {
     }, [refreshBookings]),
   );
 
-  const openBooking = async (bookingId: string, status: string) => {
-    if (status === "DRAFT") {
+  const openBooking = async (bookingId: string, booking: (typeof bookings)[number]) => {
+    if (isLocalWizardBooking(booking)) {
       await loadDraft(bookingId);
       router.push("/booking/new");
     } else {
@@ -43,10 +44,10 @@ export default function BookingsScreen() {
         bookings.map((b) => {
           const finalEventDate = b.days.map((d) => d.eventDate).filter(Boolean).sort().pop();
           return (
-            <Pressable key={b.bookingId} onPress={() => openBooking(b.bookingId, b.status)}>
+            <Pressable key={b.bookingId} onPress={() => openBooking(b.bookingId, b)}>
               <Card>
                 <View style={styles.row}>
-                  <Title>{b.bookingId.startsWith("draft") ? "Untitled booking" : b.bookingId}</Title>
+                  <Title>{b.remoteBookingId || (b.bookingId.startsWith("draft") ? "Untitled booking" : b.bookingId)}</Title>
                   <Badge label={STATUS_LABEL[b.status]} tone={STATUS_TONE[b.status]} />
                 </View>
                 <View style={styles.metaRow}>

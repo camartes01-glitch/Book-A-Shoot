@@ -20,6 +20,19 @@ export const CATEGORY_IMAGES: Record<string, ImageSourcePropType> = {
   corporate_event: require("@/assets/images/home/category_corporate.jpg"),
   product_shoot: require("@/assets/images/home/category_corporate.jpg"),
   brand_event: require("@/assets/images/home/category_corporate.jpg"),
+  pooja: require("@/assets/images/home/portfolio_mehndi.jpg"),
+  ganesh_pooja: require("@/assets/images/home/portfolio_mehndi.jpg"),
+  satyanarayan_pooja: require("@/assets/images/home/portfolio_mehndi.jpg"),
+  gruha_pravesh_pooja: require("@/assets/images/home/portfolio_mehndi.jpg"),
+  lakshmi_pooja: require("@/assets/images/home/portfolio_mehndi.jpg"),
+  saraswati_pooja: require("@/assets/images/home/portfolio_mehndi.jpg"),
+  navratri_pooja: require("@/assets/images/home/portfolio_mehndi.jpg"),
+  diwali_pooja: require("@/assets/images/home/portfolio_mehndi.jpg"),
+  durga_pooja: require("@/assets/images/home/portfolio_mehndi.jpg"),
+  varalakshmi_vratham: require("@/assets/images/home/portfolio_mehndi.jpg"),
+  naming_ceremony_pooja: require("@/assets/images/home/portfolio_mehndi.jpg"),
+  wedding_pooja: require("@/assets/images/home/portfolio_mehndi.jpg"),
+  other_pooja: require("@/assets/images/home/portfolio_mehndi.jpg"),
 };
 
 export function categoryImageFor(id: string): ImageSourcePropType {
@@ -38,4 +51,5 @@ export const SEARCH_EXAMPLES = [
   "Pre-wedding shoot",
   "Corporate event",
   "Baby shoot",
+  "Pooja",
 ];

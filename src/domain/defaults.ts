@@ -4,6 +4,7 @@ import type {
   EventDay,
   EventLocation,
 } from "@/src/types/booking";
+import { applyAerialGate } from "@/src/domain/dayServices";
 import { inferOvernight } from "@/src/utils/dateTime";
 import { makeId } from "@/src/utils/id";
 
@@ -35,7 +36,7 @@ const DISABLED_WEB_LIVE = {
 export function sanitizeDayAddOns(day: EventDay): EventDay {
   const ledEnabled = day.ledWall?.enabled === true;
   const webEnabled = day.webLive?.enabled === true;
-  return {
+  return applyAerialGate({
     ...day,
     aerial: {
       photographyDrones: Math.max(0, day.aerial?.photographyDrones ?? 0),
@@ -43,7 +44,7 @@ export function sanitizeDayAddOns(day: EventDay): EventDay {
     },
     ledWall: ledEnabled ? { ...day.ledWall, enabled: true } : { ...DISABLED_LED_WALL },
     webLive: webEnabled ? { ...day.webLive, enabled: true } : { ...DISABLED_WEB_LIVE },
-  };
+  });
 }
 
 /** Persist-time day cleanup: disabled add-ons stay inactive, and wrapping
@@ -53,14 +54,53 @@ export function sanitizeEventDay(day: EventDay): EventDay {
   const sanitized = sanitizeDayAddOns(day);
   return {
     ...sanitized,
+    dayId: day.dayId,
+    order: day.order,
+    dayRevision: day.dayRevision ?? 0,
     overnight: inferOvernight(sanitized.startTime, sanitized.endTime) || sanitized.overnight === true,
   };
+}
+
+/** Merge a day persist without letting a stale empty snapshot wipe date, time,
+ * location, or event types that were saved more recently.
+ * dayId and order are immutable: they always come from the stored day. */
+export function mergeEventDayPatch(current: EventDay, patch: Partial<EventDay>): EventDay {
+  const currentRev = current.dayRevision ?? 0;
+  const patchRev = patch.dayRevision;
+  if (typeof patchRev === "number" && patchRev < currentRev) {
+    const location =
+      patch.location?.formattedAddress && !current.location.formattedAddress ? patch.location : current.location;
+    return sanitizeEventDay({ ...current, location, dayId: current.dayId, order: current.order, dayRevision: currentRev });
+  }
+  const { dayId: _ignoredId, order: _ignoredOrder, ...rest } = patch;
+  const merged = sanitizeEventDay({ ...current, ...rest, dayId: current.dayId, order: current.order });
+  if (current.location.formattedAddress && !patch.location?.formattedAddress) {
+    merged.location = current.location;
+  }
+  if (current.eventDate && !patch.eventDate) merged.eventDate = current.eventDate;
+  if (current.startTime && !patch.startTime) merged.startTime = current.startTime;
+  if (current.endTime && !patch.endTime) merged.endTime = current.endTime;
+  if (current.eventTypeIds.length > 0 && (!patch.eventTypeIds || patch.eventTypeIds.length === 0)) {
+    merged.eventTypeIds = current.eventTypeIds;
+  }
+  merged.dayRevision = Math.max(currentRev, typeof patchRev === "number" ? patchRev : currentRev);
+  merged.dayId = current.dayId;
+  merged.order = current.order;
+  return merged;
+}
+
+/** Rehydrate the day editor from storage without discarding in-progress fields
+ * that have not finished persisting yet. */
+export function hydrateEditorDay(stored: EventDay, local: EventDay | null | undefined): EventDay {
+  if (!local || local.dayId !== stored.dayId) return stored;
+  return mergeEventDayPatch(stored, local);
 }
 
 export function createEmptyDay(order: number): EventDay {
   return sanitizeDayAddOns({
     dayId: makeId("day"),
     order,
+    dayRevision: 0,
     eventDate: null,
     eventTypeIds: [],
     location: emptyLocation(),
@@ -80,6 +120,7 @@ export function duplicateDay(source: EventDay, order: number): EventDay {
     ...source,
     dayId: makeId("day"),
     order,
+    dayRevision: 0,
     eventDate: null,
   });
 }
@@ -121,5 +162,7 @@ export function createEmptyBooking(customerId: string): Booking {
     estimatedAmount: null,
     counterOffer: null,
     draftCompletionPct: 0,
+    remoteBookingId: null,
+    remoteStatus: null,
   };
 }

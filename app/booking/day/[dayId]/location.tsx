@@ -5,6 +5,7 @@ import { LocateFixed, MapPin } from "lucide-react-native";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { Button, Card, Field, Muted, SectionTitle } from "@/src/components/ui";
 import { useAppStore } from "@/src/state/AppProvider";
+import { normalizeRouteParam } from "@/src/utils/routeParam";
 import {
   getCurrentLocationDetails,
   getPlaceDetails,
@@ -16,9 +17,11 @@ import type { EventLocation } from "@/src/types/booking";
 import { colors, radius, spacing } from "@/src/constants/theme";
 
 export default function LocationPickerScreen() {
-  const { dayId } = useLocalSearchParams<{ dayId: string }>();
+  const params = useLocalSearchParams<{ dayId: string | string[] }>();
+  const dayId = normalizeRouteParam(params.dayId);
   const { activeDraft, updateDay } = useAppStore();
-  const day = activeDraft?.days.find((d) => d.dayId === dayId);
+  const day =
+    activeDraft?.days.find((d) => d.dayId === dayId) ?? (activeDraft?.days.length === 1 ? activeDraft.days[0] : undefined);
 
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
@@ -69,9 +72,14 @@ export default function LocationPickerScreen() {
   };
 
   const onConfirm = async () => {
-    if (!selected?.formattedAddress || !dayId) return;
-    await updateDay(dayId, { location: selected });
-    router.back();
+    const persistId = day?.dayId || dayId;
+    if (!selected?.formattedAddress || !persistId) return;
+    try {
+      await updateDay(persistId, { location: selected });
+      router.back();
+    } catch {
+      setLocationError("Could not save the event location. Return to the event day and try again.");
+    }
   };
 
   return (

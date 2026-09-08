@@ -26,6 +26,7 @@ function vendor(overrides: Partial<CustomerVendor> = {}): CustomerVendor {
     kycVerified: true,
     liveSource: true,
     basePricePerDay: 18000,
+    listedAvailable: true,
     contactMaskedUntilAccepted: true,
     ...overrides,
   };
@@ -114,6 +115,22 @@ describe("checkVendorAvailability (rule 11 / multi-day)", () => {
     const req = aggregateRequirement([day1, day2]);
     // Same vendor id + varying date will deterministically differ; just assert the function runs across days without throwing
     const result = checkVendorAvailability(vendor(), [day1, day2], req);
-    expect(typeof result.available).toBe("boolean");
+    expect(result.available).toBe(true);
+  });
+
+  test("catalog listedAvailable=false excludes a vendor even if capabilities match", () => {
+    const day = eventDay();
+    const req = aggregateRequirement([day]);
+    const result = checkVendorAvailability(vendor({ listedAvailable: false }), [day], req);
+    expect(result.available).toBe(false);
+    const matches = matchVendors({ days: [day], deliverables: emptyDeliverables() }, [vendor({ listedAvailable: false })], "signature", 150000);
+    expect(matches).toHaveLength(0);
+  });
+
+  test("does not invent calendar unavailability when the catalog lists the vendor as available", () => {
+    const day = eventDay();
+    const vendors = [vendor({ vendorId: "live-1" }), vendor({ vendorId: "live-2", studioName: "Studio Two" })];
+    const results = matchVendors({ days: [day], deliverables: emptyDeliverables() }, vendors, "signature", 150000);
+    expect(results).toHaveLength(2);
   });
 });

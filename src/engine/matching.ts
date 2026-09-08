@@ -3,18 +3,12 @@
  * Engine" / "Vendor Ranking").
  *
  * Vendor *capability, rating, experience and pricing* data comes from the
- * real Camartes Vendor Platform (`src/services/vendorApi.ts`). The one piece
- * the public catalog API does not expose today is a per-date booking
- * calendar, so `simulateVendorCalendarAvailability` deterministically derives
- * a stand-in from the vendor id + date (same vendor + date always returns the
- * same result — nothing is re-randomized per render). It is isolated in one
- * function specifically so it can be replaced with a real
- * `GET /api/vendors/{id}/availability?date=...` call the moment that
- * endpoint exists, without touching any ranking logic below.
+ * real Camartes Vendor Platform (`src/services/vendorApi.ts`). Calendar
+ * availability uses the catalog `is_available` flag when present. Do not
+ * invent per-date booking calendars here.
  */
 import type { Booking, EventDay, PackageTierId, VendorMatchResult } from "@/src/types/booking";
 import type { CustomerVendor } from "@/src/types/vendor";
-import { estimateBookingCost, PRICING_CONFIG } from "@/src/engine/pricing";
 
 export const MAX_MATCHES = 6;
 
@@ -28,15 +22,10 @@ export const MATCH_WEIGHTS = {
   location: 0.05,
 };
 
-function hashToUnit(seed: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
-  return (h >>> 0) / 4294967295;
-}
-
-export function simulateVendorCalendarAvailability(vendorId: string, dateIso: string): number {
-  // Returns a remaining-capacity factor in [0.45, 1] for the given date.
-  return 0.45 + hashToUnit(`${vendorId}:${dateIso}`) * 0.55;
+export function simulateVendorCalendarAvailability(_vendorId: string, _dateIso: string): number {
+  // Kept for existing tests that call this helper directly. Matching no longer
+  // uses a hashed stand-in calendar — live catalog `listedAvailable` is the gate.
+  return 1;
 }
 
 type AggregatedRequirement = {
@@ -127,37 +116,28 @@ export function checkVendorAvailability(
   days: EventDay[],
   req: AggregatedRequirement,
 ): { available: boolean; reason?: string } {
+  if (vendor.listedAvailable === false) {
+    return { available: false, reason: "This provider is marked unavailable in the Camartes catalog." };
+  }
   if (!vendorHasCapabilities(vendor, req)) {
     return { available: false, reason: "Doesn't offer all requested services." };
   }
 
-  for (const day of days) {
-    if (!day.eventDate) continue;
-    const factor = simulateVendorCalendarAvailability(vendor.vendorId, day.eventDate);
-    const availPhotographers = Math.floor(vendor.photography.maxPhotographers * factor);
-    const availVideographers = Math.floor(vendor.videography.maxVideographers * factor);
-    const availDrones = Math.floor(vendor.aerial.maxDrones * factor);
-    const availScreens = Math.floor(vendor.ledWall.maxScreens * factor);
+  const requiredPhotographers = req.maxTraditionalPhotographers + req.maxCandidPhotographers;
+  const requiredVideographers = req.maxTraditionalVideographers + req.maxCandidVideographers;
+  const requiredDrones = req.maxPhotoDrones + req.maxVideoDrones;
 
-    const requiredPhotographers = req.maxTraditionalPhotographers + req.maxCandidPhotographers;
-    const requiredVideographers = req.maxTraditionalVideographers + req.maxCandidVideographers;
-    const requiredDrones = req.maxPhotoDrones + req.maxVideoDrones;
-
-    if (requiredPhotographers > 0 && availPhotographers < requiredPhotographers) {
-      return { available: false, reason: `Only ${availPhotographers} photographer(s) free on ${day.eventDate}.` };
-    }
-    if (requiredVideographers > 0 && availVideographers < requiredVideographers) {
-      return { available: false, reason: `Only ${availVideographers} videographer(s) free on ${day.eventDate}.` };
-    }
-    if (requiredDrones > 0 && availDrones < requiredDrones) {
-      return { available: false, reason: `Not enough drones free on ${day.eventDate}.` };
-    }
-    if (req.maxLedScreens > 0 && availScreens < req.maxLedScreens) {
-      return { available: false, reason: `Not enough LED screens free on ${day.eventDate}.` };
-    }
-    if (factor < 0.5 && (requiredPhotographers > 0 || requiredVideographers > 0)) {
-      return { available: false, reason: `Fully booked on ${day.eventDate}.` };
-    }
+  if (requiredPhotographers > 0 && vendor.photography.maxPhotographers < requiredPhotographers) {
+    return { available: false, reason: `Only ${vendor.photography.maxPhotographers} photographer(s) listed.` };
+  }
+  if (requiredVideographers > 0 && vendor.videography.maxVideographers < requiredVideographers) {
+    return { available: false, reason: `Only ${vendor.videography.maxVideographers} videographer(s) listed.` };
+  }
+  if (requiredDrones > 0 && vendor.aerial.maxDrones < requiredDrones) {
+    return { available: false, reason: "Not enough drones listed for this request." };
+  }
+  if (req.maxLedScreens > 0 && vendor.ledWall.maxScreens < req.maxLedScreens) {
+    return { available: false, reason: "Not enough LED screens listed for this request." };
   }
 
   return { available: true };
@@ -183,14 +163,13 @@ function requirementMatchScore(vendor: CustomerVendor, req: AggregatedRequiremen
   return has.filter(Boolean).length / wants.length;
 }
 
-const AVERAGE_BASE_PRICE_PER_DAY = 18000;
-
-export function estimateVendorPrice(vendor: CustomerVendor, booking: Pick<Booking, "days" | "deliverables">, tier: PackageTierId): number {
-  const baseline = estimateBookingCost(booking);
-  const band = PRICING_CONFIG.tierBands[tier];
-  const mid = baseline * ((band.min + band.max) / 2);
-  const vendorFactor = Math.min(1.25, Math.max(0.85, vendor.basePricePerDay / AVERAGE_BASE_PRICE_PER_DAY));
-  return Math.round(mid * vendorFactor);
+/** Catalog full-day price only. Never derived from package ranges. */
+export function estimateVendorPrice(
+  vendor: CustomerVendor,
+  _booking?: Pick<Booking, "days" | "deliverables">,
+  _tier?: PackageTierId,
+): number {
+  return vendor.basePricePerDay > 0 ? Math.round(vendor.basePricePerDay) : 0;
 }
 
 export function scoreVendor(

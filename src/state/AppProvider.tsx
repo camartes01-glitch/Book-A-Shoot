@@ -1,17 +1,18 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { AppNotification, Booking, EventDay, PackageTierId } from "@/src/types/booking";
 import type { CustomerProfile } from "@/src/types/booking";
 import * as authApi from "@/src/services/authApi";
 import * as bookingApi from "@/src/services/bookingApi";
 import { getNotifications, markAllRead, subscribeNotifications } from "@/src/services/notificationsStore";
+import { isLocalWizardBooking, selectActiveWizardDraft } from "@/src/domain/bookingRequest";
 import type { BudgetFeasibilityResult } from "@/src/engine/pricing";
+import { normalizeRouteParam } from "@/src/utils/routeParam";
 
 type AppContextValue = {
   ready: boolean;
   profile: CustomerProfile | null;
-  requestOtp: (mobile: string) => Promise<{ demoOtp: string }>;
-  verifyOtp: (mobile: string, code: string) => Promise<boolean>;
-  loginWithEmail: (email: string, name: string) => Promise<void>;
+  login: (emailOrPhone: string, password: string) => Promise<void>;
+  signup: (input: { name: string; email: string; phone: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (patch: Partial<CustomerProfile>) => Promise<void>;
 
@@ -25,7 +26,7 @@ type AppContextValue = {
   addDay: () => Promise<void>;
   duplicateLastDay: () => Promise<void>;
   duplicateEventDay: (dayId: string) => Promise<void>;
-  updateDay: (dayId: string, patch: Partial<EventDay>) => Promise<void>;
+  updateDay: (dayId: string | string[], patch: Partial<EventDay>) => Promise<void>;
   deleteDay: (dayId: string) => Promise<void>;
   reorderDays: (orderedDayIds: string[]) => Promise<void>;
   updateDeliverables: (patch: Partial<Booking["deliverables"]>) => Promise<void>;
@@ -54,12 +55,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [activeDraft, setActiveDraft] = useState<Booking | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const activeDraftRef = useRef<Booking | null>(null);
+  useEffect(() => {
+    activeDraftRef.current = activeDraft;
+  }, [activeDraft]);
+
+  const upsertLocalBooking = useCallback((updated: Booking) => {
+    setActiveDraft(updated);
+    setBookings((list) => {
+      const idx = list.findIndex((b) => b.bookingId === updated.bookingId);
+      if (idx === -1) return [updated, ...list];
+      const next = [...list];
+      next[idx] = updated;
+      return next;
+    });
+  }, []);
 
   const refreshBookings = useCallback(async () => {
     const current = await authApi.getStoredProfile();
     if (!current) return;
     const list = await bookingApi.listBookings(current.customerId);
     setBookings(list);
+    setActiveDraft((prev) => {
+      if (prev) {
+        const updated = list.find(
+          (b) => b.bookingId === prev.bookingId || (prev.remoteBookingId != null && b.remoteBookingId === prev.remoteBookingId),
+        );
+        if (updated) {
+          if (prev.updatedAt > updated.updatedAt) return prev;
+          return updated;
+        }
+        if (isLocalWizardBooking(prev) && !prev.remoteBookingId) return prev;
+      }
+      return selectActiveWizardDraft(list);
+    });
   }, []);
 
   const refreshNotifications = useCallback(async () => {
@@ -68,13 +97,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     (async () => {
-      const stored = await authApi.getStoredProfile();
+      const stored = await authApi.restoreSession();
       setProfile(stored);
       if (stored) {
         const list = await bookingApi.listBookings(stored.customerId);
         setBookings(list);
-        const draft = list.find((b) => b.status === "DRAFT") ?? null;
-        setActiveDraft(draft);
+        setActiveDraft(selectActiveWizardDraft(list));
       }
       setNotifications(await getNotifications());
       setReady(true);
@@ -83,21 +111,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => subscribeNotifications(() => void refreshNotifications()), [refreshNotifications]);
 
-  const requestOtp = useCallback((mobile: string) => authApi.requestOtp(mobile), []);
-
-  const verifyOtp = useCallback(async (mobile: string, code: string) => {
-    const result = await authApi.verifyOtp(mobile, code);
-    if (!result) return false;
+  const login = useCallback(async (emailOrPhone: string, password: string) => {
+    const result = await authApi.login(emailOrPhone, password);
     setProfile(result);
-    await refreshBookings();
-    return true;
-  }, [refreshBookings]);
+    const list = await bookingApi.listBookings(result.customerId);
+    setBookings(list);
+    setActiveDraft(selectActiveWizardDraft(list));
+  }, []);
 
-  const loginWithEmail = useCallback(async (email: string, name: string) => {
-    const result = await authApi.loginWithEmail(email, name);
+  const signup = useCallback(async (input: { name: string; email: string; phone: string; password: string }) => {
+    const result = await authApi.signup(input);
     setProfile(result);
-    await refreshBookings();
-  }, [refreshBookings]);
+    const list = await bookingApi.listBookings(result.customerId);
+    setBookings(list);
+    setActiveDraft(selectActiveWizardDraft(list));
+  }, []);
 
   const logout = useCallback(async () => {
     await authApi.logout();
@@ -113,11 +141,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const startNewBooking = useCallback(async () => {
     if (!profile) throw new Error("Sign in first.");
-    const booking = await bookingApi.createBooking(profile.customerId);
-    setActiveDraft(booking);
-    await refreshBookings();
+    const booking = await bookingApi.startFreshBooking(profile.customerId);
+    upsertLocalBooking(booking);
     return booking;
-  }, [profile, refreshBookings]);
+  }, [profile, upsertLocalBooking]);
 
   const loadDraft = useCallback(async (bookingId: string) => {
     const booking = await bookingApi.getBooking(bookingId);
@@ -129,13 +156,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const withDraft = useCallback(
     async (fn: (bookingId: string) => Promise<Booking>) => {
-      if (!activeDraft) throw new Error("No active booking draft.");
-      const updated = await fn(activeDraft.bookingId);
-      setActiveDraft(updated);
-      await refreshBookings();
+      const current = activeDraftRef.current;
+      if (!current) throw new Error("No active booking draft.");
+      const updated = await fn(current.bookingId);
+      upsertLocalBooking(updated);
       return updated;
     },
-    [activeDraft, refreshBookings],
+    [upsertLocalBooking],
   );
 
   const addDay = useCallback(async () => {
@@ -154,10 +181,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateDay = useCallback(
-    async (dayId: string, patch: Partial<EventDay>) => {
-      await withDraft((id) => bookingApi.updateDay(id, dayId, patch));
+    async (dayId: string | string[], patch: Partial<EventDay>) => {
+      const resolved = normalizeRouteParam(dayId);
+      const { dayId: _ignoredId, order: _ignoredOrder, ...safePatch } = patch;
+      const owner = resolved ? await bookingApi.getBookingContainingDay(resolved) : null;
+      const bookingId = owner?.bookingId ?? activeDraftRef.current?.bookingId;
+      if (!bookingId) return;
+      const updated = await bookingApi.updateDay(bookingId, resolved, safePatch);
+      upsertLocalBooking(updated);
     },
-    [withDraft],
+    [upsertLocalBooking],
   );
 
   const deleteDay = useCallback(
@@ -190,13 +223,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const submitBudget = useCallback(
     async (budget: number) => {
-      if (!activeDraft) throw new Error("No active booking draft.");
-      const { booking, feasibility } = await bookingApi.submitBudget(activeDraft.bookingId, budget);
-      setActiveDraft(booking);
-      await refreshBookings();
+      const current = activeDraftRef.current;
+      if (!current) throw new Error("No active booking draft.");
+      const { booking, feasibility } = await bookingApi.submitBudget(current.bookingId, budget);
+      upsertLocalBooking(booking);
       return feasibility;
     },
-    [activeDraft, refreshBookings],
+    [upsertLocalBooking],
   );
 
   const selectPackage = useCallback(
@@ -262,9 +295,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     () => ({
       ready,
       profile,
-      requestOtp,
-      verifyOtp,
-      loginWithEmail,
+      login,
+      signup,
       logout,
       updateProfile: updateProfileFn,
       bookings,
@@ -298,9 +330,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [
       ready,
       profile,
-      requestOtp,
-      verifyOtp,
-      loginWithEmail,
+      login,
+      signup,
       logout,
       updateProfileFn,
       bookings,

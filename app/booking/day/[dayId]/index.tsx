@@ -18,27 +18,40 @@ import {
   CORE_SERVICE_REQUIRED_MESSAGE,
   END_BEFORE_START_MESSAGE,
   OVERNIGHT_EVENT_MESSAGE,
-  hasCoreService,
+  shouldShowCoreServiceError,
   validateDay,
 } from "@/src/engine/validation";
+import {
+  applyAerialGate,
+  isAerialEnabled,
+  isAerialSelectable,
+  isPhotographySelected,
+  isVideographySelected,
+  setAerialEnabled,
+  setPhotographySelected,
+  setVideographySelected,
+} from "@/src/domain/dayServices";
+import { sanitizeEventDay, hydrateEditorDay } from "@/src/domain/defaults";
+import * as bookingApi from "@/src/services/bookingApi";
 import { durationMinutes, formatDuration, inferOvernight, isEndAfterStart } from "@/src/utils/dateTime";
+import { normalizeRouteParam } from "@/src/utils/routeParam";
 import type { EventDay } from "@/src/types/booking";
 import { colors, radius, spacing } from "@/src/constants/theme";
 
 const GROUPS = ["wedding", "personal", "commercial"] as const;
 
 export default function DayEditorScreen() {
-  const { dayId } = useLocalSearchParams<{ dayId: string }>();
-  const { activeDraft, updateDay } = useAppStore();
+  const params = useLocalSearchParams<{ dayId: string | string[] }>();
+  const dayId = normalizeRouteParam(params.dayId);
+  const { activeDraft, updateDay, loadDraft } = useAppStore();
   const [day, setDay] = useState<EventDay | null>(null);
-  const [aerialOpen, setAerialOpen] = useState(false);
   const [showMoreTypes, setShowMoreTypes] = useState(false);
-  const [photoOpen, setPhotoOpen] = useState(false);
-  const [videoOpen, setVideoOpen] = useState(false);
+  const [saveAttempted, setSaveAttempted] = useState(false);
 
   const activeDraftRef = useRef(activeDraft);
   const updateDayRef = useRef(updateDay);
   const dayRef = useRef<EventDay | null>(null);
+  const persistChainRef = useRef(Promise.resolve());
 
   useEffect(() => {
     activeDraftRef.current = activeDraft;
@@ -46,46 +59,110 @@ export default function DayEditorScreen() {
   useEffect(() => {
     updateDayRef.current = updateDay;
   }, [updateDay]);
+
+  const loadDraftRef = useRef(loadDraft);
   useEffect(() => {
-    dayRef.current = day;
-  }, [day]);
+    loadDraftRef.current = loadDraft;
+  }, [loadDraft]);
+
+  useEffect(() => {
+    if (!dayId) router.replace("/booking/new");
+  }, [dayId]);
+
+  const persistDay = useCallback((next: EventDay) => {
+    persistChainRef.current = persistChainRef.current.then(
+      () => updateDayRef.current(next.dayId, next),
+      () => updateDayRef.current(next.dayId, next),
+    ).catch(() => undefined);
+  }, []);
+
+  const flushPersist = useCallback(async () => {
+    const snapshot = dayRef.current;
+    if (!snapshot) return;
+    persistDay(snapshot);
+    await persistChainRef.current;
+  }, [persistDay]);
+
+  const applyFoundDay = useCallback(
+    (found: EventDay) => {
+      const next = hydrateEditorDay(found, dayRef.current);
+      setDay(next);
+      dayRef.current = next;
+      const storedIncomplete =
+        (!found.eventTypeIds.length && next.eventTypeIds.length > 0) ||
+        (!found.eventDate && !!next.eventDate) ||
+        (!found.startTime && !!next.startTime) ||
+        (!found.endTime && !!next.endTime) ||
+        (!found.location.formattedAddress && !!next.location.formattedAddress);
+      if (storedIncomplete) persistDay(next);
+    },
+    [persistDay],
+  );
 
   const syncFromStore = useCallback(() => {
     const found = activeDraftRef.current?.days.find((d) => d.dayId === dayId) ?? null;
-    setDay(found);
-    dayRef.current = found;
     if (found) {
-      if (found.aerial.photographyDrones > 0 || found.aerial.videographyDrones > 0) setAerialOpen(true);
-      if (found.photography.traditional || found.photography.candid) setPhotoOpen(true);
-      if (found.videography.traditional || found.videography.candid) setVideoOpen(true);
+      applyFoundDay(found);
+      return;
     }
-  }, [dayId]);
+    void bookingApi.getBookingContainingDay(dayId).then(async (booking) => {
+      if (!booking) return;
+      await loadDraftRef.current(booking.bookingId);
+      const day = booking.days.find((d) => d.dayId === dayId);
+      if (day) applyFoundDay(day);
+    });
+  }, [applyFoundDay, dayId]);
 
   useFocusEffect(
     useCallback(() => {
       syncFromStore();
       return () => {
-        if (dayRef.current) void updateDayRef.current(dayRef.current.dayId, dayRef.current);
+        const snapshot = dayRef.current;
+        if (!snapshot) return;
+        persistChainRef.current = persistChainRef.current.then(
+          () => updateDayRef.current(snapshot.dayId, snapshot),
+          () => updateDayRef.current(snapshot.dayId, snapshot),
+        ).catch(() => undefined);
       };
     }, [dayId, syncFromStore]),
   );
 
-  if (!day) return null;
+  if (!dayId) return null;
+  if (!day) {
+    return (
+      <WizardScreen title="Event day" step="event">
+        <Muted>Loading this event day…</Muted>
+      </WizardScreen>
+    );
+  }
 
-  const patch = (p: Partial<EventDay>) => setDay((prev) => (prev ? { ...prev, ...p } : prev));
+  const applyDay = (updater: (prev: EventDay) => EventDay) => {
+    const prev = dayRef.current;
+    if (!prev) return;
+    const next = sanitizeEventDay({ ...updater(prev), dayId: prev.dayId, order: prev.order, dayRevision: (prev.dayRevision ?? 0) + 1 });
+    dayRef.current = next;
+    setDay(next);
+    persistDay(next);
+  };
+  const patch = (p: Partial<EventDay>) => applyDay((prev) => ({ ...prev, ...p }));
   const toggleEventType = (id: string) => {
-    patch({ eventTypeIds: day.eventTypeIds.includes(id) ? day.eventTypeIds.filter((t) => t !== id) : [...day.eventTypeIds, id] });
+    applyDay((prev) => ({
+      ...prev,
+      eventTypeIds: prev.eventTypeIds.includes(id) ? prev.eventTypeIds.filter((t) => t !== id) : [...prev.eventTypeIds, id],
+    }));
   };
 
   const issues = validateDay(day);
   const issueOf = (code: string) => issues.find((i) => i.code === code)?.message;
-  const coreOn = hasCoreService(day);
+  const showCoreError = shouldShowCoreServiceError(day, saveAttempted);
+  const aerialSelectable = isAerialSelectable(day);
+  const aerialOn = isAerialEnabled(day);
   const bothTimesSelected = Boolean(day.startTime && day.endTime);
   const wouldBeOvernight = Boolean(day.startTime && day.endTime && !isEndAfterStart(day.startTime, day.endTime, false));
   const duration = bothTimesSelected ? durationMinutes(day.startTime!, day.endTime!, day.overnight) : null;
 
-  const photoOn = day.photography.traditional || day.photography.candid;
-  const videoOn = day.videography.traditional || day.videography.candid;
+  const photoOn = isPhotographySelected(day);
+  const videoOn = isVideographySelected(day);
 
   const photoSummary = [
     day.photography.traditional ? `Traditional ×${day.photography.traditionalCount}` : null,
@@ -104,48 +181,22 @@ export default function DayEditorScreen() {
   const featured = ["wedding", "pre_wedding", "birthday", "baby_shoot", "maternity_shoot", "corporate_event"]
     .map((id) => DEFAULT_EVENT_CATEGORIES.find((c) => c.id === id && c.enabled))
     .filter(Boolean) as typeof DEFAULT_EVENT_CATEGORIES;
-  const extraTypes = DEFAULT_EVENT_CATEGORIES.filter((c) => c.enabled && !featured.some((f) => f.id === c.id));
+  const poojaTypes = DEFAULT_EVENT_CATEGORIES.filter((c) => c.enabled && c.group === "pooja");
+  const extraTypes = DEFAULT_EVENT_CATEGORIES.filter(
+    (c) => c.enabled && c.group !== "pooja" && !featured.some((f) => f.id === c.id),
+  );
 
   const onDone = () => {
+    setSaveAttempted(true);
     if (issues.length) {
       Alert.alert("Almost there", issues[0].message);
       return;
     }
-    void updateDay(day.dayId, day);
-    router.back();
+    void flushPersist().then(() => router.back());
   };
 
-  const togglePhotography = () => {
-    if (photoOn) {
-      setPhotoOpen(false);
-      const nextPhoto = { traditional: false, traditionalCount: 1, candid: false, candidCount: 1 };
-      if (!videoOn) {
-        setAerialOpen(false);
-        patch({ photography: nextPhoto, aerial: { photographyDrones: 0, videographyDrones: 0 } });
-      } else {
-        patch({ photography: nextPhoto });
-      }
-    } else {
-      setPhotoOpen(true);
-      patch({ photography: { ...day.photography, traditional: true, traditionalCount: Math.max(1, day.photography.traditionalCount) } });
-    }
-  };
-
-  const toggleVideography = () => {
-    if (videoOn) {
-      setVideoOpen(false);
-      const nextVideo = { traditional: false, traditionalCount: 1, candid: false, candidCount: 1 };
-      if (!photoOn) {
-        setAerialOpen(false);
-        patch({ videography: nextVideo, aerial: { photographyDrones: 0, videographyDrones: 0 } });
-      } else {
-        patch({ videography: nextVideo });
-      }
-    } else {
-      setVideoOpen(true);
-      patch({ videography: { ...day.videography, traditional: true, traditionalCount: Math.max(1, day.videography.traditionalCount) } });
-    }
-  };
+  const togglePhotography = () => applyDay((prev) => setPhotographySelected(prev, !isPhotographySelected(prev)));
+  const toggleVideography = () => applyDay((prev) => setVideographySelected(prev, !isVideographySelected(prev)));
 
   return (
     <WizardScreen title={`Day ${day.order}`} step="event" footer={<Button label="Save" onPress={onDone} flex={1} />}>
@@ -167,6 +218,14 @@ export default function DayEditorScreen() {
       {issueOf("EVENT_TYPE_REQUIRED") ? (
         <Muted style={{ color: colors.danger, fontWeight: "600" }}>{issueOf("EVENT_TYPE_REQUIRED")}</Muted>
       ) : null}
+      <View style={{ gap: 6 }}>
+        <Muted style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>{EVENT_GROUP_LABEL.pooja}</Muted>
+        <ChipGroup>
+          {poojaTypes.map((c) => (
+            <Chip key={c.id} label={c.label} selected={day.eventTypeIds.includes(c.id)} onPress={() => toggleEventType(c.id)} />
+          ))}
+        </ChipGroup>
+      </View>
       <ExpandRow
         open={showMoreTypes}
         onPress={() => setShowMoreTypes((v) => !v)}
@@ -197,17 +256,17 @@ export default function DayEditorScreen() {
         ) : null}
 
         <View style={{ flexDirection: "row", gap: spacing.sm }}>
-          <TimeField
+            <TimeField
             label="Start time"
             value={day.startTime}
             placeholder="Select start time"
-            onChange={(t) => patch({ startTime: t, overnight: inferOvernight(t, day.endTime) })}
+            onChange={(t) => applyDay((prev) => ({ ...prev, startTime: t, overnight: inferOvernight(t, prev.endTime) }))}
           />
           <TimeField
             label="End time"
             value={day.endTime}
             placeholder="Select end time"
-            onChange={(t) => patch({ endTime: t, overnight: inferOvernight(day.startTime, t) })}
+            onChange={(t) => applyDay((prev) => ({ ...prev, endTime: t, overnight: inferOvernight(prev.startTime, t) }))}
           />
         </View>
         {issueOf("START_TIME_REQUIRED") ? (
@@ -234,7 +293,9 @@ export default function DayEditorScreen() {
 
         <Pressable
           style={styles.locationField}
-          onPress={() => router.push(`/booking/day/${day.dayId}/location`)}
+          onPress={() => {
+            void flushPersist().then(() => router.push(`/booking/day/${day.dayId}/location`));
+          }}
           accessibilityRole="button"
           accessibilityLabel="Event location"
         >
@@ -264,8 +325,7 @@ export default function DayEditorScreen() {
         summary={photoSummary}
         onPress={togglePhotography}
       >
-        {photoOpen ? (
-          <>
+        <>
             <StyleRow
               label="Traditional"
               description="Classic, posed coverage"
@@ -274,8 +334,12 @@ export default function DayEditorScreen() {
               min={ADMIN_LIMITS.minPhotographers}
               max={ADMIN_LIMITS.maxPhotographersPerType}
               countLabel="Photographers"
-              onToggle={(v) => patch({ photography: { ...day.photography, traditional: v } })}
-              onCountChange={(n) => patch({ photography: { ...day.photography, traditionalCount: n } })}
+              onToggle={(v) =>
+                applyDay((prev) =>
+                  applyAerialGate({ ...prev, photography: { ...prev.photography, traditional: v } }),
+                )
+              }
+              onCountChange={(n) => applyDay((prev) => ({ ...prev, photography: { ...prev.photography, traditionalCount: n } }))}
             />
             <StyleRow
               label="Candid"
@@ -285,11 +349,12 @@ export default function DayEditorScreen() {
               min={ADMIN_LIMITS.minPhotographers}
               max={ADMIN_LIMITS.maxPhotographersPerType}
               countLabel="Photographers"
-              onToggle={(v) => patch({ photography: { ...day.photography, candid: v } })}
-              onCountChange={(n) => patch({ photography: { ...day.photography, candidCount: n } })}
+              onToggle={(v) =>
+                applyDay((prev) => applyAerialGate({ ...prev, photography: { ...prev.photography, candid: v } }))
+              }
+              onCountChange={(n) => applyDay((prev) => ({ ...prev, photography: { ...prev.photography, candidCount: n } }))}
             />
           </>
-        ) : null}
       </ServiceSelectCard>
 
       <ServiceSelectCard
@@ -300,8 +365,7 @@ export default function DayEditorScreen() {
         summary={videoSummary}
         onPress={toggleVideography}
       >
-        {videoOpen ? (
-          <>
+        <>
             <StyleRow
               label="Traditional"
               description="Classic ceremony filming"
@@ -310,8 +374,12 @@ export default function DayEditorScreen() {
               min={ADMIN_LIMITS.minVideographers}
               max={ADMIN_LIMITS.maxVideographersPerType}
               countLabel="Videographers"
-              onToggle={(v) => patch({ videography: { ...day.videography, traditional: v } })}
-              onCountChange={(n) => patch({ videography: { ...day.videography, traditionalCount: n } })}
+              onToggle={(v) =>
+                applyDay((prev) =>
+                  applyAerialGate({ ...prev, videography: { ...prev.videography, traditional: v } }),
+                )
+              }
+              onCountChange={(n) => applyDay((prev) => ({ ...prev, videography: { ...prev.videography, traditionalCount: n } }))}
             />
             <StyleRow
               label="Candid"
@@ -321,14 +389,15 @@ export default function DayEditorScreen() {
               min={ADMIN_LIMITS.minVideographers}
               max={ADMIN_LIMITS.maxVideographersPerType}
               countLabel="Videographers"
-              onToggle={(v) => patch({ videography: { ...day.videography, candid: v } })}
-              onCountChange={(n) => patch({ videography: { ...day.videography, candidCount: n } })}
+              onToggle={(v) =>
+                applyDay((prev) => applyAerialGate({ ...prev, videography: { ...prev.videography, candid: v } }))
+              }
+              onCountChange={(n) => applyDay((prev) => ({ ...prev, videography: { ...prev.videography, candidCount: n } }))}
             />
           </>
-        ) : null}
       </ServiceSelectCard>
 
-      {issueOf("CORE_SERVICE_REQUIRED") ? (
+      {showCoreError ? (
         <Card style={{ borderColor: colors.danger }}>
           <Badge label="Action needed" tone="red" />
           <Muted style={{ color: colors.danger, fontWeight: "600" }}>{CORE_SERVICE_REQUIRED_MESSAGE}</Muted>
@@ -339,10 +408,10 @@ export default function DayEditorScreen() {
 
       <AddOnCard
         title="Drone / Aerial"
-        subtitle="Aerial photography and videography"
+        subtitle={aerialSelectable ? "Optional aerial photography or videography" : "Select photography or videography first."}
         icon={<Plane size={18} color={colors.primaryDark} />}
-        enabled={aerialOpen && coreOn}
-        disabled={!coreOn}
+        enabled={aerialOn}
+        disabled={!aerialSelectable}
         disabledReason="Select photography or videography first."
         summary={[
           day.aerial.photographyDrones ? `${day.aerial.photographyDrones} photo drone(s)` : null,
@@ -350,25 +419,21 @@ export default function DayEditorScreen() {
         ]
           .filter(Boolean)
           .join(" · ")}
-        onToggle={(v) => {
-          if (!coreOn) return;
-          setAerialOpen(v);
-          if (!v) patch({ aerial: { photographyDrones: 0, videographyDrones: 0 } });
-        }}
+        onToggle={(v) => applyDay((prev) => setAerialEnabled(prev, v))}
       >
         <Stepper
           label="Photo drones"
           value={day.aerial.photographyDrones}
           min={0}
           max={ADMIN_LIMITS.maxDronesPerType}
-          onChange={(n) => patch({ aerial: { ...day.aerial, photographyDrones: n } })}
+          onChange={(n) => applyDay((prev) => ({ ...prev, aerial: { ...prev.aerial, photographyDrones: n } }))}
         />
         <Stepper
           label="Video drones"
           value={day.aerial.videographyDrones}
           min={0}
           max={ADMIN_LIMITS.maxDronesPerType}
-          onChange={(n) => patch({ aerial: { ...day.aerial, videographyDrones: n } })}
+          onChange={(n) => applyDay((prev) => ({ ...prev, aerial: { ...prev.aerial, videographyDrones: n } }))}
         />
       </AddOnCard>
 
@@ -379,15 +444,16 @@ export default function DayEditorScreen() {
         enabled={day.ledWall.enabled === true}
         summary={day.ledWall.enabled ? `${day.ledWall.size} · ${day.ledWall.screenCount} screen(s)` : undefined}
         onToggle={(v) =>
-          patch({
-            ledWall: v ? { ...day.ledWall, enabled: true } : { enabled: false, size: "8 x 12", screenCount: 1 },
-          })
+          applyDay((prev) => ({
+            ...prev,
+            ledWall: v ? { ...prev.ledWall, enabled: true } : { enabled: false, size: "8 x 12", screenCount: 1 },
+          }))
         }
       >
         <Muted style={{ fontWeight: "700", color: colors.ink }}>Size</Muted>
         <ChipGroup>
           {LED_WALL_SIZES.map((size) => (
-            <Chip key={size} label={size} selected={day.ledWall.size === size} onPress={() => patch({ ledWall: { ...day.ledWall, size } })} />
+            <Chip key={size} label={size} selected={day.ledWall.size === size} onPress={() => applyDay((prev) => ({ ...prev, ledWall: { ...prev.ledWall, size } }))} />
           ))}
         </ChipGroup>
         <Stepper
@@ -395,7 +461,7 @@ export default function DayEditorScreen() {
           value={day.ledWall.screenCount}
           min={1}
           max={ADMIN_LIMITS.maxLedScreens}
-          onChange={(n) => patch({ ledWall: { ...day.ledWall, screenCount: n } })}
+          onChange={(n) => applyDay((prev) => ({ ...prev, ledWall: { ...prev.ledWall, screenCount: n } }))}
         />
       </AddOnCard>
 
@@ -406,17 +472,18 @@ export default function DayEditorScreen() {
         enabled={day.webLive.enabled === true}
         summary={day.webLive.enabled ? `${day.webLive.quality} · ${day.webLive.accessType} link` : undefined}
         onToggle={(v) =>
-          patch({
+          applyDay((prev) => ({
+            ...prev,
             webLive: v
-              ? { ...day.webLive, enabled: true }
+              ? { ...prev.webLive, enabled: true }
               : { enabled: false, quality: "HD", cameraCount: 1, streamingPlatform: "", accessType: "private" },
-          })
+          }))
         }
       >
         <Muted style={{ fontWeight: "700", color: colors.ink }}>Quality</Muted>
         <ChipGroup>
           {WEB_LIVE_QUALITIES.map((q) => (
-            <Chip key={q} label={q} selected={day.webLive.quality === q} onPress={() => patch({ webLive: { ...day.webLive, quality: q } })} />
+            <Chip key={q} label={q} selected={day.webLive.quality === q} onPress={() => applyDay((prev) => ({ ...prev, webLive: { ...prev.webLive, quality: q } }))} />
           ))}
         </ChipGroup>
         <Stepper
@@ -424,11 +491,11 @@ export default function DayEditorScreen() {
           value={day.webLive.cameraCount}
           min={1}
           max={6}
-          onChange={(n) => patch({ webLive: { ...day.webLive, cameraCount: n } })}
+          onChange={(n) => applyDay((prev) => ({ ...prev, webLive: { ...prev.webLive, cameraCount: n } }))}
         />
         <ChipGroup>
-          <Chip label="Private link" selected={day.webLive.accessType === "private"} onPress={() => patch({ webLive: { ...day.webLive, accessType: "private" } })} />
-          <Chip label="Public link" selected={day.webLive.accessType === "public"} onPress={() => patch({ webLive: { ...day.webLive, accessType: "public" } })} />
+          <Chip label="Private link" selected={day.webLive.accessType === "private"} onPress={() => applyDay((prev) => ({ ...prev, webLive: { ...prev.webLive, accessType: "private" } }))} />
+          <Chip label="Public link" selected={day.webLive.accessType === "public"} onPress={() => applyDay((prev) => ({ ...prev, webLive: { ...prev.webLive, accessType: "public" } }))} />
         </ChipGroup>
       </AddOnCard>
     </WizardScreen>

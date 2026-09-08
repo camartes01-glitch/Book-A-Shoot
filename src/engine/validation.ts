@@ -49,6 +49,13 @@ export function validateCoreServiceRule(day: EventDay): ValidationIssue[] {
   return [];
 }
 
+/** Day-editor banner: hide the core-service error on a fresh empty day until
+ * Save/Continue, but show it immediately if an add-on is on without a core service. */
+export function shouldShowCoreServiceError(day: EventDay, saveAttempted: boolean): boolean {
+  if (hasCoreService(day)) return false;
+  return saveAttempted || validateCoreServiceRule(day).length > 0;
+}
+
 export function validateDay(day: EventDay): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 

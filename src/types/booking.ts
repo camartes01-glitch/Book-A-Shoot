@@ -9,7 +9,7 @@
  * this would be split across real relational tables server-side.
  */
 
-export type EventCategoryGroup = "wedding" | "personal" | "commercial";
+export type EventCategoryGroup = "wedding" | "personal" | "commercial" | "pooja";
 
 export type EventCategory = {
   id: string;
@@ -67,6 +67,8 @@ export type WebLiveRequirement = {
 export type EventDay = {
   dayId: string;
   order: number;
+  /** Monotonic editor revision. Stale persists with a lower revision are ignored. */
+  dayRevision?: number;
   eventDate: string | null; // ISO yyyy-MM-dd
   eventTypeIds: string[];
   location: EventLocation;
@@ -102,6 +104,15 @@ export type Deliverables = {
 
 export type PackageTierId = "essential" | "signature" | "elite";
 
+export type PackageServiceLine = {
+  serviceId: string;
+  label: string;
+  quantity: number;
+  minPrice: number;
+  maxPrice: number;
+  note?: string;
+};
+
 export type PackageOption = {
   id: PackageTierId;
   label: string;
@@ -109,6 +120,7 @@ export type PackageOption = {
   maxPrice: number;
   headline: string;
   bullets: string[];
+  serviceLines: PackageServiceLine[];
   recommended: boolean;
 };
 
@@ -179,6 +191,10 @@ export type Booking = {
   estimatedAmount: number | null;
   counterOffer: CounterOffer | null;
   draftCompletionPct: number;
+  /** Camartes `POST /api/bookings` identifier when the request was accepted by the backend. */
+  remoteBookingId?: string | null;
+  /** Raw Camartes status string, when the backend returned one. */
+  remoteStatus?: string | null;
 };
 
 export type CustomerProfile = {

@@ -55,3 +55,22 @@ export function latestDate(dates: string[]): string | null {
   if (!valid.length) return null;
   return valid.reduce((max, d) => (d > max ? d : max));
 }
+
+/** Expo datetimepicker is native-only in SDK 57. Web booking uses HTML inputs. */
+export function usesHtmlDateTimeInputs(os: string): boolean {
+  return os === "web";
+}
+
+export function normalizeHtmlDateValue(raw: string): string | null {
+  const value = raw.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
+export function normalizeHtmlTimeValue(raw: string): string | null {
+  const match = raw.trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}

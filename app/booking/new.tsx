@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Alert, View } from "react-native";
 import { router } from "expo-router";
 import { WizardScreen } from "@/src/components/WizardScreen";
@@ -10,6 +10,8 @@ import { colors, spacing } from "@/src/constants/theme";
 
 export default function BookingDaysScreen() {
   const { activeDraft, addDay, duplicateEventDay, deleteDay, reorderDays } = useAppStore();
+  const continueLock = useRef(false);
+  const addLock = useRef(false);
 
   useEffect(() => {
     if (!activeDraft) router.replace("/(tabs)");
@@ -25,6 +27,8 @@ export default function BookingDaysScreen() {
       Alert.alert("Finish your event details", issues[0].message);
       return;
     }
+    if (continueLock.current) return;
+    continueLock.current = true;
     router.push("/booking/deliverables");
   };
 
@@ -43,7 +47,18 @@ export default function BookingDaysScreen() {
       onBack={() => router.replace("/(tabs)")}
       footer={
         <>
-          <Button label="Add another day" variant="outline" flex={1} onPress={() => void addDay()} />
+          <Button
+            label="Add another day"
+            variant="outline"
+            flex={1}
+            onPress={() => {
+              if (addLock.current) return;
+              addLock.current = true;
+              void addDay().finally(() => {
+                addLock.current = false;
+              });
+            }}
+          />
           <Button label="Continue" flex={1} onPress={onContinue} disabled={!canContinue} />
         </>
       }

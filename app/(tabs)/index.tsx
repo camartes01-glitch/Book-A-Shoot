@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Image, ImageBackground, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { Camera, Clock3, MapPin, Search, Video } from "lucide-react-native";
@@ -7,12 +7,20 @@ import { ScreenContainer } from "@/src/components/ScreenContainer";
 import { BookAShootLogo } from "@/src/components/BookAShootLogo";
 import { EventCategoryCard } from "@/src/components/EventCategoryCard";
 import { Badge, Button, Card, Muted, SectionTitle } from "@/src/components/ui";
-import { DEFAULT_EVENT_CATEGORIES, HOME_QUICK_PICKS, getEnabledCategories } from "@/src/constants/eventCategories";
+import {
+  DEFAULT_EVENT_CATEGORIES,
+  HOME_POOJA_DISCOVERY,
+  HOME_QUICK_PICKS,
+  categoryMatchesSearchQuery,
+  getEnabledCategories,
+} from "@/src/constants/eventCategories";
 import { PORTFOLIO_STRIP, SEARCH_EXAMPLES, categoryImageFor } from "@/src/constants/homeMedia";
 import { useAppStore } from "@/src/state/AppProvider";
 import * as bookingApi from "@/src/services/bookingApi";
+import { setPhotographySelected, setVideographySelected } from "@/src/domain/dayServices";
 import { colors, elevation, radius, spacing } from "@/src/constants/theme";
 import { formatDateLong } from "@/src/utils/format";
+import { isLocalWizardBooking } from "@/src/domain/bookingRequest";
 
 const ACTIVE_STATUSES = new Set([
   "VENDOR_SELECTED",
@@ -27,6 +35,7 @@ const ACTIVE_STATUSES = new Set([
 export default function HomeScreen() {
   const { profile, bookings, activeDraft, startNewBooking, loadDraft } = useAppStore();
   const [searchOpen, setSearchOpen] = useState(false);
+  const startingRef = useRef(false);
 
   const enquiries = bookings.filter((b) => b.status === "SUBMITTED" || b.status === "MATCHING").length;
   const upcoming = bookings.filter((b) => ACTIVE_STATUSES.has(b.status));
@@ -41,18 +50,60 @@ export default function HomeScreen() {
   }, []);
 
   const onCreateBooking = async () => {
-    await startNewBooking();
+    if (startingRef.current) return;
+    startingRef.current = true;
+    try {
+      await startNewBooking();
+      router.push("/booking/new");
+    } finally {
+      startingRef.current = false;
+    }
+  };
+
+  const openWizardDay = (dayId: string | undefined) => {
+    if (!dayId) {
+      router.push("/booking/new");
+      return;
+    }
     router.push("/booking/new");
+    router.push(`/booking/day/${dayId}`);
   };
 
   const onQuickPick = async (categoryId: string) => {
-    const booking = await startNewBooking();
-    const firstDay = booking.days[0];
-    if (firstDay) {
-      await bookingApi.updateDay(booking.bookingId, firstDay.dayId, { eventTypeIds: [categoryId] });
-      await loadDraft(booking.bookingId);
+    if (startingRef.current) return;
+    startingRef.current = true;
+    try {
+      const booking = await startNewBooking();
+      const firstDay = booking.days[0];
+      if (firstDay) {
+        if (categoryId !== HOME_POOJA_DISCOVERY.id) {
+          await bookingApi.updateDay(booking.bookingId, firstDay.dayId, { eventTypeIds: [categoryId] });
+          await loadDraft(booking.bookingId);
+        }
+      }
+      openWizardDay(firstDay?.dayId);
+    } finally {
+      startingRef.current = false;
     }
-    router.push(`/booking/day/${firstDay?.dayId}`);
+  };
+
+  const onStartService = async (kind: "photography" | "videography") => {
+    if (startingRef.current) return;
+    startingRef.current = true;
+    try {
+      const booking = await startNewBooking();
+      const firstDay = booking.days[0];
+      if (firstDay) {
+        const next = kind === "photography" ? setPhotographySelected(firstDay, true) : setVideographySelected(firstDay, true);
+        await bookingApi.updateDay(booking.bookingId, firstDay.dayId, next);
+        await loadDraft(booking.bookingId);
+        openWizardDay(firstDay.dayId);
+        return;
+      }
+      router.push("/booking/new");
+    } finally {
+      startingRef.current = false;
+    }
   };
 
   const onContinueDraft = async () => {
@@ -101,7 +152,7 @@ export default function HomeScreen() {
       </Pressable>
 
       <View style={styles.body}>
-        {activeDraft && activeDraft.status === "DRAFT" ? (
+        {activeDraft && isLocalWizardBooking(activeDraft) && activeDraft.draftCompletionPct > 0 ? (
           <Pressable onPress={onContinueDraft}>
             <Card accent>
               <View style={styles.draftRow}>
@@ -123,6 +174,12 @@ export default function HomeScreen() {
               if (!cat) return null;
               return <EventCategoryCard key={id} category={cat} onPress={() => onQuickPick(id)} width={118} />;
             })}
+            <EventCategoryCard
+              key={HOME_POOJA_DISCOVERY.id}
+              category={HOME_POOJA_DISCOVERY}
+              onPress={() => onQuickPick(HOME_POOJA_DISCOVERY.id)}
+              width={118}
+            />
             <Pressable onPress={onCreateBooking} style={styles.moreCard} accessibilityRole="button" accessibilityLabel="More event types">
               <Text style={styles.morePlus}>+</Text>
               <Text style={styles.moreLabel}>More</Text>
@@ -131,7 +188,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.cta}>
-          <Text style={styles.ctaTitle}>Book a Shoot</Text>
+          <Text style={styles.ctaTitle}>Book coverage</Text>
           <Text style={styles.ctaSub}>Tell us the event. We'll match real photographers and videographers.</Text>
           <Button label="Start booking" onPress={onCreateBooking} />
         </View>
@@ -139,8 +196,8 @@ export default function HomeScreen() {
         <View style={{ gap: spacing.sm }}>
           <SectionTitle>Popular services</SectionTitle>
           <View style={styles.serviceRow}>
-            <ServiceChip icon={<Camera size={16} color={colors.primaryDark} />} label="Photography" onPress={onCreateBooking} />
-            <ServiceChip icon={<Video size={16} color={colors.primaryDark} />} label="Videography" onPress={onCreateBooking} />
+            <ServiceChip icon={<Camera size={16} color={colors.primaryDark} />} label="Photography" onPress={() => void onStartService("photography")} />
+            <ServiceChip icon={<Video size={16} color={colors.primaryDark} />} label="Videography" onPress={() => void onStartService("videography")} />
           </View>
         </View>
 
@@ -218,9 +275,7 @@ function SearchSheet({
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
-  const matches = getEnabledCategories().filter(
-    (c) => !q || c.label.toLowerCase().includes(q) || q.split(" ").some((part) => c.label.toLowerCase().includes(part)),
-  );
+  const matches = getEnabledCategories().filter((c) => categoryMatchesSearchQuery(c, q));
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>

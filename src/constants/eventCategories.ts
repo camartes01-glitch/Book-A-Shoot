@@ -1,4 +1,4 @@
-import type { EventCategory } from "@/src/types/booking";
+import type { EventCategory, EventCategoryGroup } from "@/src/types/booking";
 
 /**
  * Initial event categories (spec section 8 / "Event Categories").
@@ -36,18 +36,62 @@ export const DEFAULT_EVENT_CATEGORIES: EventCategory[] = [
   { id: "real_estate_shoot", group: "commercial", label: "Real Estate Shoot", enabled: true, order: 21 },
   { id: "food_photography", group: "commercial", label: "Food Photography", enabled: true, order: 22 },
   { id: "commercial_other", group: "commercial", label: "Other Commercial Shoot", enabled: true, order: 23 },
+
+  { id: "ganesh_pooja", group: "pooja", label: "Ganesh Pooja", enabled: true, order: 24 },
+  { id: "satyanarayan_pooja", group: "pooja", label: "Satyanarayan Pooja", enabled: true, order: 25 },
+  { id: "gruha_pravesh_pooja", group: "pooja", label: "Gruha Pravesh Pooja", enabled: true, order: 26 },
+  { id: "lakshmi_pooja", group: "pooja", label: "Lakshmi Pooja", enabled: true, order: 27 },
+  { id: "saraswati_pooja", group: "pooja", label: "Saraswati Pooja", enabled: true, order: 28 },
+  { id: "navratri_pooja", group: "pooja", label: "Navratri Pooja", enabled: true, order: 29 },
+  { id: "diwali_pooja", group: "pooja", label: "Diwali Pooja", enabled: true, order: 30 },
+  { id: "durga_pooja", group: "pooja", label: "Durga Pooja", enabled: true, order: 31 },
+  { id: "varalakshmi_vratham", group: "pooja", label: "Varalakshmi Vratham", enabled: true, order: 32 },
+  { id: "naming_ceremony_pooja", group: "pooja", label: "Naming Ceremony Pooja", enabled: true, order: 33 },
+  { id: "wedding_pooja", group: "pooja", label: "Wedding Pooja", enabled: true, order: 34 },
+  { id: "other_pooja", group: "pooja", label: "Other Pooja", enabled: true, order: 35 },
 ];
 
-export const EVENT_GROUP_LABEL: Record<EventCategoryGroupKey, string> = {
+export const EVENT_GROUP_LABEL: Record<EventCategoryGroup, string> = {
   wedding: "Wedding",
   personal: "Personal Events",
   commercial: "Commercial",
+  pooja: "Pooja",
 };
 
-type EventCategoryGroupKey = "wedding" | "personal" | "commercial";
+export const POOJA_EVENT_TYPE_IDS = DEFAULT_EVENT_CATEGORIES.filter((c) => c.group === "pooja").map((c) => c.id);
+
+/** Home discovery card for Pooja. Starts a booking without preselecting a subtype. */
+export const HOME_POOJA_DISCOVERY: EventCategory = {
+  id: "pooja",
+  group: "pooja",
+  label: "Pooja",
+  enabled: true,
+  order: 0,
+};
 
 export function getEnabledCategories(categories: EventCategory[] = DEFAULT_EVENT_CATEGORIES) {
   return [...categories].filter((c) => c.enabled).sort((a, b) => a.order - b.order);
+}
+
+export function eventTypeLabel(id: string, categories: EventCategory[] = DEFAULT_EVENT_CATEGORIES): string {
+  return categories.find((c) => c.id === id)?.label ?? id;
+}
+
+export function eventTypeLabels(ids: string[], categories: EventCategory[] = DEFAULT_EVENT_CATEGORIES): string {
+  return ids.map((id) => eventTypeLabel(id, categories)).join(", ");
+}
+
+/** Existing home/search matching, plus Pooja group discovery for queries like "Pooja" / "puja". */
+export function categoryMatchesSearchQuery(category: EventCategory, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const label = category.label.toLowerCase();
+  const groupLabel = EVENT_GROUP_LABEL[category.group].toLowerCase();
+  const idText = category.id.replace(/_/g, " ");
+  if (label.includes(q) || groupLabel.includes(q) || idText.includes(q)) return true;
+  if (q.split(/\s+/).some((part) => part.length > 0 && (label.includes(part) || idText.includes(part)))) return true;
+  if (category.group === "pooja" && (q.includes("pooja") || q.includes("puja"))) return true;
+  return false;
 }
 
 /** Popular marketplace categories on Home. */

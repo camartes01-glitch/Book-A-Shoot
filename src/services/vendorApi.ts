@@ -9,8 +9,9 @@
  * returns zero vendors for that capability rather than inventing any —
  * matching spec section 47 ("Never fabricate providers").
  *
- * On network failure this falls back to the last successfully fetched
- * catalog cached on-device (AsyncStorage), never to made-up data.
+ * On network failure the matching screen surfaces the error. An empty live
+ * result stays empty — cached catalogs are not substituted in as if they were
+ * matches for the current event.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { CustomerVendor } from "@/src/types/vendor";
@@ -42,6 +43,7 @@ type RawSearchHit = {
   filmmaking_style?: string[];
   equipment?: string[];
   equipment_owned?: string[];
+  kyc_verified?: boolean;
   coverage_areas?: string[];
   coverage_area?: string;
   service_areas?: string[];
@@ -51,19 +53,30 @@ type RawSearchHit = {
   pricing?: RawPricing;
 };
 
-async function fetchServiceType(serviceType: string): Promise<RawSearchHit[]> {
-  try {
-    const res = await fetch(`${CAMARTES_API}/api/providers/search`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ service_type: serviceType }),
-    });
-    if (!res.ok) return [];
-    const rows = (await res.json()) as RawSearchHit[];
-    return Array.isArray(rows) ? rows : [];
-  } catch {
-    return [];
+export type CatalogQuery = {
+  city?: string | null;
+  eventDate?: string | null;
+  serviceTypes?: string[];
+  latitude?: number | null;
+  longitude?: number | null;
+};
+
+async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): Promise<RawSearchHit[]> {
+  const body: Record<string, unknown> = { service_type: serviceType };
+  if (query.city?.trim()) body.city = query.city.trim();
+  if (query.eventDate?.trim()) body.event_date = query.eventDate.trim();
+  if (typeof query.latitude === "number") body.latitude = query.latitude;
+  if (typeof query.longitude === "number") body.longitude = query.longitude;
+  const res = await fetch(`${CAMARTES_API}/api/providers/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`Camartes provider search failed (${res.status}) for ${serviceType}.`);
   }
+  const rows = (await res.json()) as RawSearchHit[];
+  return Array.isArray(rows) ? rows : [];
 }
 
 function extractDayRate(pricing: RawPricing | undefined): number | null {
@@ -83,9 +96,9 @@ function parseProjectsCompleted(raw: string | undefined): number {
   return single ? parseInt(single[1], 10) : 0;
 }
 
-function ratingOf(hit: RawSearchHit): number {
+function ratingOf(hit: RawSearchHit): number | null {
   const r = hit.avg_rating || hit.average_rating || hit.rating;
-  return r && r > 0 ? Math.round(r * 10) / 10 : 4.3;
+  return r && r > 0 ? Math.round(r * 10) / 10 : null;
 }
 
 function idOf(hit: RawSearchHit): string | null {
@@ -104,6 +117,7 @@ type Aggregate = {
   reviewCount: number;
   completedProjects: number;
   isAvailable: boolean;
+  kycVerified: boolean;
   serviceAreas: Set<string>;
   portfolio: string[];
   dayRates: number[];
@@ -131,6 +145,7 @@ function newAggregate(vendorId: string): Aggregate {
     reviewCount: 0,
     completedProjects: 0,
     isAvailable: true,
+    kycVerified: false,
     serviceAreas: new Set(),
     portfolio: [],
     dayRates: [],
@@ -154,11 +169,14 @@ function mergeHit(acc: Aggregate, hit: RawSearchHit) {
   acc.about = acc.about || hit.tagline || "";
   acc.experienceYears = Math.max(acc.experienceYears, hit.years_experience ?? 0);
   const rating = ratingOf(hit);
-  acc.ratingSum += rating;
-  acc.ratingCount += 1;
+  if (rating != null) {
+    acc.ratingSum += rating;
+    acc.ratingCount += 1;
+  }
   acc.reviewCount += hit.review_count ?? 0;
   acc.completedProjects = Math.max(acc.completedProjects, parseProjectsCompleted(hit.projects_completed));
   if (hit.is_available === false) acc.isAvailable = false;
+  if (hit.kyc_verified === true) acc.kycVerified = true;
   for (const area of hit.coverage_areas ?? []) acc.serviceAreas.add(area);
   if (hit.coverage_area) acc.serviceAreas.add(hit.coverage_area);
   for (const item of hit.portfolio_items ?? []) if (item.image) acc.portfolio.push(item.image);
@@ -170,14 +188,24 @@ function mergeHit(acc: Aggregate, hit: RawSearchHit) {
 
   if (hit.service_type === "photographer") {
     const styles = (hit.shooting_style ?? []).map((s) => s.toLowerCase());
-    acc.photographyTraditional = acc.photographyTraditional || styles.includes("traditional");
-    acc.photographyCandid = acc.photographyCandid || styles.includes("candid");
+    if (!styles.length) {
+      acc.photographyTraditional = true;
+      acc.photographyCandid = true;
+    } else {
+      acc.photographyTraditional = acc.photographyTraditional || styles.includes("traditional");
+      acc.photographyCandid = acc.photographyCandid || styles.includes("candid");
+    }
     if (hasDrone) acc.aerialPhotography = true;
   }
   if (hit.service_type === "videographer") {
     const styles = (hit.filmmaking_style ?? []).map((s) => s.toLowerCase());
-    acc.videographyTraditional = acc.videographyTraditional || styles.includes("traditional");
-    acc.videographyCandid = acc.videographyCandid || styles.some((s) => s === "cinematic" || s === "candid" || s === "documentary");
+    if (!styles.length) {
+      acc.videographyTraditional = true;
+      acc.videographyCandid = true;
+    } else {
+      acc.videographyTraditional = acc.videographyTraditional || styles.includes("traditional");
+      acc.videographyCandid = acc.videographyCandid || styles.some((s) => s === "cinematic" || s === "candid" || s === "documentary");
+    }
     if (hasDrone) acc.aerialVideography = true;
   }
   if (hit.service_type === "photography_firm") {
@@ -195,7 +223,7 @@ function mergeHit(acc: Aggregate, hit: RawSearchHit) {
   if (hit.service_type === "led_wall") {
     acc.ledWallAvailable = true;
   }
-  if (hit.service_type === "web_live_services") {
+  if (hit.service_type === "web_live_services" || hit.service_type === "live_stream") {
     acc.webLiveAvailable = true;
     acc.webLiveQualities.add("HD");
     acc.webLiveQualities.add("4K");
@@ -203,23 +231,23 @@ function mergeHit(acc: Aggregate, hit: RawSearchHit) {
 }
 
 function toCustomerVendor(acc: Aggregate, fetchedLive: boolean): CustomerVendor {
-  const rating = acc.ratingCount ? Math.round((acc.ratingSum / acc.ratingCount) * 10) / 10 : 4.3;
+  const rating = acc.ratingCount ? Math.round((acc.ratingSum / acc.ratingCount) * 10) / 10 : 0;
   const basePricePerDay = acc.dayRates.length
     ? Math.round(acc.dayRates.reduce((a, b) => a + b, 0) / acc.dayRates.length)
-    : 18000;
-  const completedBookings = Math.max(acc.completedProjects, acc.reviewCount * 4, 5);
+    : 0;
+  const completedBookings = acc.completedProjects || acc.reviewCount;
 
   return {
     vendorId: acc.vendorId,
-    studioName: acc.name,
-    city: acc.city || "Hyderabad",
-    area: acc.city || "Hyderabad",
+    studioName: acc.name || "Studio",
+    city: acc.city,
+    area: acc.city,
     lat: 0,
     lng: 0,
     experienceYears: acc.experienceYears,
     rating,
     completedBookings,
-    responseRatePct: 80 + Math.round((rating / 5) * 18),
+    responseRatePct: 0,
     photography: {
       traditional: acc.photographyTraditional,
       candid: acc.photographyCandid,
@@ -247,9 +275,10 @@ function toCustomerVendor(acc: Aggregate, fetchedLive: boolean): CustomerVendor 
     portfolioImages: acc.portfolio.slice(0, 12),
     about: acc.about || "Listed on the Camartes Vendor Platform.",
     serviceAreas: [...acc.serviceAreas],
-    kycVerified: true,
+    kycVerified: acc.kycVerified,
     liveSource: fetchedLive,
     basePricePerDay,
+    listedAvailable: acc.isAvailable,
     contactMaskedUntilAccepted: true,
     phone: acc.phone,
   };
@@ -280,9 +309,10 @@ export type VendorCatalogResult = {
 
 /** Fetches every relevant service category from the live Camartes Vendor
  * Platform and returns one merged, deduped vendor per underlying provider. */
-export async function fetchVendorCatalog(): Promise<VendorCatalogResult> {
+export async function fetchVendorCatalog(query: CatalogQuery = {}): Promise<VendorCatalogResult> {
   try {
-    const results = await Promise.all(SEARCH_SERVICE_TYPES.map(fetchServiceType));
+    const types = query.serviceTypes?.length ? query.serviceTypes : SEARCH_SERVICE_TYPES;
+    const results = await Promise.all(types.map((serviceType) => fetchServiceType(serviceType, query)));
     const byId = new Map<string, Aggregate>();
 
     results.forEach((hits) => {
@@ -297,20 +327,102 @@ export async function fetchVendorCatalog(): Promise<VendorCatalogResult> {
 
     const vendors = [...byId.values()].map((acc) => toCustomerVendor(acc, true));
 
-    if (!vendors.length) {
-      const cached = await readCache();
-      return { vendors: cached, live: false, fetchedAt: new Date().toISOString() };
+    if (vendors.length) {
+      await writeCache(vendors);
     }
-
-    await writeCache(vendors);
     return { vendors, live: true, fetchedAt: new Date().toISOString() };
-  } catch {
-    const cached = await readCache();
-    return { vendors: cached, live: false, fetchedAt: new Date().toISOString() };
+  } catch (error) {
+    throw error instanceof Error ? error : new Error("Could not load providers from Camartes.");
   }
 }
 
+function asStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.filter((item): item is string => typeof item === "string");
+  return items.length ? items : undefined;
+}
+
+function publicHitFromProfileRow(row: Record<string, unknown>, serviceType: string, fallbackId: string): RawSearchHit {
+  const pricing = row.pricing && typeof row.pricing === "object" ? (row.pricing as RawPricing) : undefined;
+  const portfolio = Array.isArray(row.portfolio_items)
+    ? (row.portfolio_items as Array<{ image?: string }>).filter((item) => item && typeof item.image === "string")
+    : undefined;
+  return {
+    user_id: typeof row.user_id === "string" ? row.user_id : fallbackId,
+    provider_id: typeof row.provider_id === "string" ? row.provider_id : fallbackId,
+    id: typeof row.id === "string" ? row.id : fallbackId,
+    display_name: typeof row.display_name === "string" ? row.display_name : undefined,
+    full_name: typeof row.full_name === "string" ? row.full_name : undefined,
+    city: typeof row.city === "string" ? row.city : undefined,
+    location: typeof row.location === "string" ? row.location : undefined,
+    service_type: serviceType,
+    avg_rating: typeof row.avg_rating === "number" ? row.avg_rating : undefined,
+    average_rating: typeof row.average_rating === "number" ? row.average_rating : undefined,
+    rating: typeof row.rating === "number" ? row.rating : undefined,
+    review_count: typeof row.review_count === "number" ? row.review_count : undefined,
+    years_experience: typeof row.years_experience === "number" ? row.years_experience : undefined,
+    is_available: typeof row.is_available === "boolean" ? row.is_available : undefined,
+    shooting_style: asStringArray(row.shooting_style),
+    filmmaking_style: asStringArray(row.filmmaking_style),
+    equipment: asStringArray(row.equipment),
+    equipment_owned: asStringArray(row.equipment_owned),
+    coverage_areas: asStringArray(row.coverage_areas),
+    coverage_area: typeof row.coverage_area === "string" ? row.coverage_area : undefined,
+    tagline: typeof row.tagline === "string" ? row.tagline : undefined,
+    projects_completed: typeof row.projects_completed === "string" ? row.projects_completed : undefined,
+    portfolio_items: portfolio,
+    pricing,
+  };
+}
+
+function hitsFromProviderProfile(raw: Record<string, unknown>): RawSearchHit[] {
+  const id = String(raw.provider_id ?? raw.user_id ?? raw.id ?? "");
+  const profiles = raw.service_profiles;
+  const hits: RawSearchHit[] = [];
+  if (profiles && typeof profiles === "object" && !Array.isArray(profiles)) {
+    const entries = Object.entries(profiles as Record<string, unknown>);
+    const hasCore = entries.some(([key]) => key === "photographer" || key === "videographer");
+    for (const [key, value] of entries) {
+      if (!value || typeof value !== "object") continue;
+      if (key === "photography_firm" && hasCore) continue;
+      const row = value as Record<string, unknown>;
+      const serviceType = typeof row.service_type === "string" ? row.service_type : key;
+      hits.push(publicHitFromProfileRow(row, serviceType, id));
+    }
+  }
+  return hits;
+}
+
 export async function fetchVendorById(vendorId: string): Promise<CustomerVendor | null> {
-  const { vendors } = await fetchVendorCatalog();
-  return vendors.find((v) => v.vendorId === vendorId) ?? null;
+  const res = await fetch(`${CAMARTES_API}/api/providers/${encodeURIComponent(vendorId)}`);
+  if (!res.ok) {
+    throw new Error(`Provider ${vendorId} could not be loaded (${res.status}).`);
+  }
+  const raw = (await res.json()) as Record<string, unknown>;
+  const hits = hitsFromProviderProfile(raw);
+  const acc = newAggregate(vendorId);
+  acc.name = String(raw.full_name ?? raw.name ?? "Studio");
+  acc.city = typeof raw.city === "string" ? raw.city : "";
+  acc.kycVerified = raw.kyc_verified === true;
+  acc.isAvailable = raw.is_available !== false;
+  const ratingRaw = raw.avg_rating ?? raw.average_rating ?? raw.rating;
+  if (typeof ratingRaw === "number" && ratingRaw > 0) {
+    acc.ratingSum += ratingRaw;
+    acc.ratingCount += 1;
+  }
+  for (const hit of hits) mergeHit(acc, hit);
+  return toCustomerVendor(acc, true);
+}
+
+/** Test helper: map raw catalog search hits with the same rules the live client uses. */
+export function vendorsFromSearchHits(hits: RawSearchHit[], live = true): CustomerVendor[] {
+  const byId = new Map<string, Aggregate>();
+  for (const hit of hits) {
+    const id = idOf(hit);
+    if (!id) continue;
+    const acc = byId.get(id) ?? newAggregate(id);
+    mergeHit(acc, hit);
+    byId.set(id, acc);
+  }
+  return [...byId.values()].map((acc) => toCustomerVendor(acc, live));
 }

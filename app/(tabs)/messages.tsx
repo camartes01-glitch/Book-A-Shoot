@@ -34,17 +34,18 @@ export default function MessagesScreen() {
       ) : (
         threads.map((b) => {
           const unlocked = CONTACT_UNLOCKED_STATUSES.has(b.status);
+          const studio = b.matches?.find((m) => m.vendorId === b.selectedVendorId)?.studioName ?? "Service provider";
           return (
             <Pressable key={b.bookingId} onPress={() => router.push(`/bookings/${b.bookingId}`)}>
               <Card>
                 <View style={styles.row}>
-                  <Title>{b.matches?.find((m) => m.vendorId === b.selectedVendorId)?.studioName ?? "Service provider"}</Title>
-                  <Badge label={unlocked ? "Contact unlocked" : "On-platform only"} tone={unlocked ? "green" : "peach"} />
+                  <Title>{studio}</Title>
+                  <Badge label={unlocked ? "Accepted on Camartes" : "Request sent"} tone={unlocked ? "green" : "peach"} />
                 </View>
                 <Muted>
                   {unlocked
-                    ? "Direct contact details are now visible in the booking details."
-                    : "Contact details unlock automatically once the vendor accepts your request."}
+                    ? "The provider has accepted this booking on Camartes. Open the booking for the latest status."
+                    : "Waiting for the provider to respond on Camartes. This is not a confirmed conversation."}
                 </Muted>
               </Card>
             </Pressable>

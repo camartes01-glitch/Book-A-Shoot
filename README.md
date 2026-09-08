@@ -111,9 +111,10 @@ node scripts/serve-apk.js   # listens on 0.0.0.0:43159, GET /camartes-customer.a
 
 ## Known gaps / next steps
 
-- `bookingApi.ts` runs against on-device storage; the function boundaries are designed so a real Camartes booking backend can be swapped in without touching the UI.
-- Vendor availability calendars aren't exposed by the current public vendor catalog API, so `simulateVendorCalendarAvailability` deterministically derives a stand-in per vendor+date (clearly isolated and commented) — replace with a real `GET /api/vendors/{id}/availability` call the moment it exists.
-- Vendor accept/reject/counter-offer is simulated client-side for demo purposes (`simulateVendorResponse`) since there's no live vendor-side app wired to this project yet; a real integration would instead subscribe to vendor-platform webhooks/events.
+- Wizard drafts stay on-device because Camartes has no draft-booking API. Provider matching calls `POST /api/providers/search` and submit calls authenticated `POST /api/bookings`.
+- Per-date vendor calendars are not exposed by the catalog. Matching uses the live `is_available` flag; it does not invent day-by-day availability. `simulateVendorCalendarAvailability` is unused by matching and remains only for older unit tests.
+- Vendor accept/reject is **not** simulated in this customer app (`simulateVendorResponse` was removed). After submit, Camartes `pending`/`requested` displays as Request sent. Confirmed is shown only when Camartes reports `confirmed`. Acceptance must happen in the Vendor Platform.
+- Booking POST requires a real Camartes customer session (`email_or_phone` + password). There is no guest booking submit.
 - Google/Apple OAuth need credentials configured before those buttons can do more than explain what's missing.
-- No payment gateway is integrated yet ("Proceed to payment" advances the state machine only).
+- No payment gateway is integrated. This app does not mark bookings paid or confirmed locally.
 - Day reordering uses simple up/down controls rather than drag-and-drop.

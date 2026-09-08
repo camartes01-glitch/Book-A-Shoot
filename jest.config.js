@@ -1,8 +1,8 @@
-/** Only pure business-logic modules (engine/) are unit tested here — no
- * native rendering required, so a plain ts-jest setup is enough and fast. */
 module.exports = {
   testEnvironment: "node",
-  testMatch: ["**/src/engine/**/__tests__/**/*.test.ts"],
+  testMatch: ["**/src/**/__tests__/**/*.test.ts"],
+  setupFiles: ["<rootDir>/jest.setup.js"],
+  setupFilesAfterEnv: ["<rootDir>/jest.env.js"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",
   },

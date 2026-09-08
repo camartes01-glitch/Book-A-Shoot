@@ -45,11 +45,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     minHeight: touchTarget - 4,
+    maxWidth: "100%",
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.border,
   },
   chipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
-  label: { fontSize: 13, fontWeight: "700", color: colors.ink },
+  label: { fontSize: 13, fontWeight: "700", color: colors.ink, flexShrink: 1 },
   labelSelected: { color: colors.white },
 });

@@ -1,13 +1,17 @@
 import { useState } from "react";
-import { Pressable, View } from "react-native";
+import { Alert, Pressable, View } from "react-native";
 import { router } from "expo-router";
 import { Pencil } from "lucide-react-native";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { Button, Card, Muted, SectionTitle } from "@/src/components/ui";
 import { useAppStore } from "@/src/state/AppProvider";
-import { formatDateLong, formatInr, formatTime12h } from "@/src/utils/format";
+import { generatePackageOptions } from "@/src/engine/pricing";
+import { formatDateLong, formatInr, formatInrRange, formatTime12h } from "@/src/utils/format";
+import { durationMinutes, formatDuration } from "@/src/utils/dateTime";
 import { colors } from "@/src/constants/theme";
 import { DEFAULT_EVENT_CATEGORIES } from "@/src/constants/eventCategories";
+import { selectedAddOnLabels, selectedCoreServiceLabels } from "@/src/domain/dayServices";
+import { CamartesApiError } from "@/src/services/camartesClient";
 
 function EditLink({ onPress, label }: { onPress: () => void; label: string }) {
   return (
@@ -32,40 +36,44 @@ function SectionHead({ title, onEdit }: { title: string; onEdit: () => void }) {
 export default function ConfirmBookingScreen() {
   const { activeDraft, submitVendorRequest, clearActiveDraft } = useAppStore();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  if (!activeDraft || !activeDraft.selectedVendorId) return null;
+  if (!activeDraft || !activeDraft.selectedVendorId) {
+    return (
+      <WizardScreen title="Review & send" step="providers">
+        <Muted>Select a provider before sending a booking request.</Muted>
+        <Button label="Find providers" onPress={() => router.replace("/booking/matches")} />
+      </WizardScreen>
+    );
+  }
   const match = activeDraft.matches?.find((m) => m.vendorId === activeDraft.selectedVendorId);
-  const pkg = activeDraft.packageOptions?.find((p) => p.id === activeDraft.selectedPackage);
+  const pkg =
+    activeDraft.packageOptions?.find((p) => p.id === activeDraft.selectedPackage) ??
+    generatePackageOptions(activeDraft, activeDraft.budget ?? 0).find((p) => p.id === activeDraft.selectedPackage);
   const days = [...activeDraft.days].sort((a, b) => a.order - b.order);
   const firstDay = days[0];
   const eventLabel = days
     .flatMap((day) => day.eventTypeIds.map((id) => DEFAULT_EVENT_CATEGORIES.find((c) => c.id === id)?.label ?? id))
     .filter(Boolean)
     .join(" · ");
-  const services = Array.from(
-    new Set(
-      days.flatMap((day) => [
-        day.photography.traditional || day.photography.candid ? "Photography" : null,
-        day.videography.traditional || day.videography.candid ? "Videography" : null,
-      ]),
-    ),
-  ).filter(Boolean);
-  const addOns = Array.from(
-    new Set(
-      days.flatMap((day) => [
-        day.aerial.photographyDrones || day.aerial.videographyDrones ? "Drone / Aerial" : null,
-        day.ledWall.enabled ? "LED Wall" : null,
-        day.webLive.enabled ? "Web Live" : null,
-      ]),
-    ),
-  ).filter(Boolean);
+  const services = Array.from(new Set(days.flatMap((day) => selectedCoreServiceLabels(day))));
+  const addOns = Array.from(new Set(days.flatMap((day) => selectedAddOnLabels(day))));
 
   const onSubmit = async () => {
     setLoading(true);
+    setError(null);
     try {
       const submitted = await submitVendorRequest();
       clearActiveDraft();
       router.replace(`/bookings/${submitted.bookingId}`);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Could not send the booking request.";
+      setError(message);
+      if (e instanceof CamartesApiError && e.status === 401) {
+        Alert.alert("Sign in required", message, [{ text: "Sign in", onPress: () => router.push("/(auth)/login") }]);
+      } else {
+        Alert.alert("Request not sent", message);
+      }
     } finally {
       setLoading(false);
     }
@@ -74,6 +82,8 @@ export default function ConfirmBookingScreen() {
   return (
     <WizardScreen title="Review & send" step="providers" footer={<Button label="Send booking request" onPress={onSubmit} loading={loading} flex={1} />}>
       <SectionTitle>You're almost booked</SectionTitle>
+      {error ? <Muted style={{ color: colors.danger, fontWeight: "700" }}>{error}</Muted> : null}
+      <Muted>Sending this request creates a real booking on Camartes. It is not confirmed until the provider and Camartes say so.</Muted>
 
       <Card>
         <SectionHead title="Event" onEdit={() => router.push("/booking/new")} />
@@ -83,15 +93,20 @@ export default function ConfirmBookingScreen() {
         </Muted>
       </Card>
 
-      <Card>
-        <SectionHead title="Date and time" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}` : "/booking/new")} />
-        {days.map((day) => (
-          <Muted key={day.dayId} style={{ fontWeight: "700", color: colors.ink }}>
-            Day {day.order}: {formatDateLong(day.eventDate)} · {formatTime12h(day.startTime)} – {formatTime12h(day.endTime)}
-            {day.overnight ? " · Ends the next day" : ""}
-          </Muted>
-        ))}
-      </Card>
+        <Card>
+          <SectionHead title="Date and time" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}` : "/booking/new")} />
+          {days.map((day) => {
+            const minutes =
+              day.startTime && day.endTime ? durationMinutes(day.startTime, day.endTime, day.overnight) : null;
+            return (
+              <Muted key={day.dayId} style={{ fontWeight: "700", color: colors.ink }}>
+                Day {day.order}: {formatDateLong(day.eventDate)} · {formatTime12h(day.startTime)} – {formatTime12h(day.endTime)}
+                {day.overnight ? " · Ends the next day" : ""}
+                {minutes != null ? ` · ${formatDuration(minutes)}` : ""}
+              </Muted>
+            );
+          })}
+        </Card>
 
       <Card>
         <SectionHead title="Location" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}/location` : "/booking/new")} />
@@ -127,7 +142,10 @@ export default function ConfirmBookingScreen() {
       <Card>
         <SectionHead title="Package" onEdit={() => router.push("/booking/packages")} />
         <Muted style={{ fontWeight: "800", color: colors.ink }}>{pkg?.label ?? activeDraft.selectedPackage}</Muted>
-        <Muted style={{ fontSize: 20, fontWeight: "800", color: colors.primaryDark }}>{formatInr(activeDraft.estimatedAmount ?? 0)}</Muted>
+        {pkg && pkg.maxPrice > 0 ? (
+          <Muted style={{ fontSize: 20, fontWeight: "800", color: colors.primaryDark }}>{formatInrRange(pkg.minPrice, pkg.maxPrice)}</Muted>
+        ) : null}
+        <Muted>Approved range for your selected services. Not a provider quote.</Muted>
       </Card>
 
       <Card>

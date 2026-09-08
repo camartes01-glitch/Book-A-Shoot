@@ -1,11 +1,24 @@
-import { useState } from "react";
+import { createElement, useState } from "react";
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { CalendarDays, Clock } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, radius, spacing, touchTarget } from "@/src/constants/theme";
 import { formatDateLong, formatTime12h } from "@/src/utils/format";
+import { normalizeHtmlDateValue, normalizeHtmlTimeValue, usesHtmlDateTimeInputs } from "@/src/utils/dateTime";
 import { Button } from "@/src/components/ui";
+
+const webInputStyle = {
+  flex: 1,
+  border: "none",
+  outline: "none",
+  background: "transparent",
+  fontSize: 15,
+  fontWeight: 700,
+  color: colors.text,
+  minHeight: touchTarget,
+  width: "100%",
+} as const;
 
 function toDate(iso: string | null): Date {
   if (!iso) return new Date();
@@ -87,6 +100,28 @@ export function DateField({
     setShow(false);
   };
 
+  if (usesHtmlDateTimeInputs(Platform.OS)) {
+    return (
+      <View style={{ gap: 6, flex: 1 }}>
+        <Text style={styles.label}>{label}</Text>
+        <View style={styles.field}>
+          <CalendarDays size={18} color={colors.primaryDark} />
+          {createElement("input", {
+            type: "date",
+            "aria-label": label,
+            value: value ?? "",
+            min: minimumDate ? toIsoDate(minimumDate) : undefined,
+            onChange: (event: { target: { value: string } }) => {
+              const next = normalizeHtmlDateValue(event.target.value);
+              if (next) onChange(next);
+            },
+            style: webInputStyle,
+          })}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={{ gap: 6, flex: 1 }}>
       <Text style={styles.label}>{label}</Text>
@@ -143,6 +178,27 @@ export function TimeField({
     onChange(toHhmm(draft));
     setShow(false);
   };
+
+  if (usesHtmlDateTimeInputs(Platform.OS)) {
+    return (
+      <View style={{ gap: 6, flex: 1 }}>
+        <Text style={styles.label}>{label}</Text>
+        <View style={styles.field}>
+          <Clock size={18} color={colors.primaryDark} />
+          {createElement("input", {
+            type: "time",
+            "aria-label": label,
+            value: value ?? "",
+            onChange: (event: { target: { value: string } }) => {
+              const next = normalizeHtmlTimeValue(event.target.value);
+              if (next) onChange(next);
+            },
+            style: webInputStyle,
+          })}
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={{ gap: 6, flex: 1 }}>

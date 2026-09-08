@@ -30,14 +30,16 @@ export default function VendorMatchesScreen() {
 
   useEffect(() => {
     if (!activeDraft?.matches) void runMatching();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeDraft?.matches, runMatching]);
 
   const onSelect = async (vendorId: string) => {
     setSelecting(vendorId);
+    setError(null);
     try {
       await selectVendor(vendorId);
       router.push("/booking/confirm");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not select that provider.");
     } finally {
       setSelecting(null);
     }

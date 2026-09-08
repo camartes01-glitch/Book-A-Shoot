@@ -41,10 +41,10 @@ export type CustomerVendor = {
   kycVerified: boolean;
   /** From the live Camartes catalog when true, otherwise a cached snapshot. */
   liveSource: boolean;
-  /** Base day-rate estimate used by the pricing engine; sourced from vendor
-   * platform pricing rules (never hard-coded on the client for real pricing —
-   * this is the last value returned by the vendor platform for this vendor). */
+  /** Vendor day-rate from the catalog when the platform returned one. 0 means no catalog price. */
   basePricePerDay: number;
+  /** `is_available` from the live catalog search. Unknown defaults to true. */
+  listedAvailable: boolean;
   contactMaskedUntilAccepted: boolean;
   phone?: string;
   email?: string;

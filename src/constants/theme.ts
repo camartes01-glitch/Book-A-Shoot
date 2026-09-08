@@ -1,4 +1,4 @@
-/** BOOK A SHOOT by Camartes — warm cream + brand orange. */
+/** Camartes customer app — warm cream + brand orange. */
 export const colors = {
   bg: "#FFF7ED",
   bgWarm: "#FFEDD5",

@@ -164,6 +164,7 @@ describe("Android QA — budget and vendor matching", () => {
       kycVerified: true,
       liveSource: true,
       basePricePerDay: 15000,
+      listedAvailable: true,
       contactMaskedUntilAccepted: true,
     }));
     const results = matchVendors(

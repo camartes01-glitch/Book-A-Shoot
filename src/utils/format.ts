@@ -15,6 +15,10 @@ export function formatInr(amount: number): string {
   return `${isNegative ? "-" : ""}\u20B9${result}`;
 }
 
+export function formatInrRange(min: number, max: number): string {
+  return `${formatInr(min)} – ${formatInr(max)}`;
+}
+
 export function formatDateLong(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(`${iso}T00:00:00`);

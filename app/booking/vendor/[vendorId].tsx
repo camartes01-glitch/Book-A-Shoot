@@ -17,28 +17,45 @@ export default function VendorProfileScreen() {
   const { activeDraft, selectVendor } = useAppStore();
   const [vendor, setVendor] = useState<CustomerVendor | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
-      setVendor(await getVendorProfile(vendorId));
-      setLoading(false);
+      setError(null);
+      try {
+        setVendor(await getVendorProfile(vendorId));
+      } catch (e) {
+        setVendor(null);
+        setError(e instanceof Error ? e.message : "Could not load this provider from Camartes.");
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [vendorId]);
 
   const match = activeDraft?.matches?.find((m) => m.vendorId === vendorId);
 
   const onSelect = async () => {
-    await selectVendor(vendorId);
-    router.push("/booking/confirm");
+    try {
+      await selectVendor(vendorId);
+      router.push("/booking/confirm");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not select this provider.");
+    }
   };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top", "left", "right", "bottom"]}>
       <ProgressHeader title="Provider profile" step="providers" />
-      {loading || !vendor ? (
+      {loading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           <ActivityIndicator color={colors.primary} size="large" />
+        </View>
+      ) : error || !vendor ? (
+        <View style={{ flex: 1, padding: spacing.lg, gap: spacing.md, justifyContent: "center" }}>
+          <Muted style={{ color: colors.danger, fontWeight: "700" }}>{error || "This provider could not be loaded."}</Muted>
+          <Button label="Back to matches" onPress={() => router.back()} />
         </View>
       ) : (
         <>
@@ -114,8 +131,10 @@ export default function VendorProfileScreen() {
 
           <Card>
             <SectionTitle>Package estimate</SectionTitle>
-            <Muted style={{ fontSize: 20, fontWeight: "800", color: colors.primaryDark }}>{formatInr(match?.estimatedPrice ?? vendor.basePricePerDay)}</Muted>
-            <Badge label={match?.available ? "Available for your dates" : "Availability pending"} tone={match?.available ? "green" : "amber"} />
+            <Muted style={{ fontSize: 20, fontWeight: "800", color: colors.primaryDark }}>
+              {match?.estimatedPrice ? formatInr(match.estimatedPrice) : vendor.basePricePerDay > 0 ? formatInr(vendor.basePricePerDay) : "Price from catalog not listed"}
+            </Muted>
+            <Badge label={match?.available ? "Available in the live catalog" : "Availability not confirmed for these dates"} tone={match?.available ? "green" : "amber"} />
           </Card>
           </ScrollView>
           <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.md, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg }}>

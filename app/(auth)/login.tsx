@@ -1,49 +1,46 @@
 import { useState } from "react";
 import { Alert, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
-import { Mail } from "lucide-react-native";
 import { ScreenContainer } from "@/src/components/ScreenContainer";
 import { BookAShootLogo } from "@/src/components/BookAShootLogo";
 import { Button, Divider, Field, Muted } from "@/src/components/ui";
 import { useAppStore } from "@/src/state/AppProvider";
+import { CamartesApiError } from "@/src/services/camartesClient";
 import { colors, spacing } from "@/src/constants/theme";
 
 export default function LoginScreen() {
-  const { requestOtp, loginWithEmail } = useAppStore();
-  const [mobile, setMobile] = useState("");
-  const [emailMode, setEmailMode] = useState(false);
-  const [email, setEmail] = useState("");
+  const { login, signup } = useAppStore();
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [emailOrPhone, setEmailOrPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [phoneError, setPhoneError] = useState("");
+  const [error, setError] = useState("");
 
-  const digits = mobile.replace(/\D/g, "");
-  const phoneValid = digits.length === 10;
-
-  const onSendOtp = async () => {
-    if (!phoneValid) {
-      setPhoneError("Enter a valid 10-digit Indian mobile number.");
-      return;
-    }
-    setPhoneError("");
+  const onSignIn = async () => {
+    setError("");
     setLoading(true);
     try {
-      const { demoOtp } = await requestOtp(digits);
-      router.push({ pathname: "/(auth)/otp", params: { mobile: digits, demoOtp } });
+      await login(emailOrPhone, password);
+      router.replace("/(tabs)");
+    } catch (e) {
+      setError(e instanceof CamartesApiError || e instanceof Error ? e.message : "Could not sign in.");
     } finally {
       setLoading(false);
     }
   };
 
-  const onEmailContinue = async () => {
-    if (!email.includes("@")) {
-      Alert.alert("Enter a valid email address");
-      return;
-    }
+  const onCreateAccount = async () => {
+    setError("");
     setLoading(true);
     try {
-      await loginWithEmail(email.trim(), name.trim());
+      await signup({ name, email, phone, password: signupPassword });
       router.replace("/(tabs)");
+    } catch (e) {
+      setError(e instanceof CamartesApiError || e instanceof Error ? e.message : "Could not create the account.");
     } finally {
       setLoading(false);
     }
@@ -52,7 +49,7 @@ export default function LoginScreen() {
   const oauthComingSoon = (provider: string) => {
     Alert.alert(
       `${provider} sign-in`,
-      `${provider} sign-in needs OAuth credentials configured for Camartes. Add them as an app secret to enable this, or continue with mobile OTP or email for now.`,
+      `${provider} sign-in needs OAuth credentials configured for Camartes. Use email or phone and password for now.`,
     );
   };
 
@@ -63,38 +60,72 @@ export default function LoginScreen() {
         <Muted style={styles.tagline}>Find photographers and videographers for your event.</Muted>
       </View>
 
-      {!emailMode ? (
+      {mode === "signin" ? (
         <View style={{ gap: spacing.md }}>
+          <Field
+            label="Email or phone"
+            placeholder="you@email.com or 98765 43210"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={emailOrPhone}
+            onChangeText={setEmailOrPhone}
+          />
+          <Field
+            label="Password"
+            placeholder="Your Camartes password"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+          />
+          {error ? <Muted style={{ color: colors.danger, fontWeight: "700" }}>{error}</Muted> : null}
+          <Button label="Sign in" onPress={onSignIn} loading={loading} disabled={!emailOrPhone.trim() || !password} />
+        </View>
+      ) : (
+        <View style={{ gap: spacing.md }}>
+          <Field label="Full name" placeholder="Your name" value={name} onChangeText={setName} />
+          <Field
+            label="Email address"
+            placeholder="you@email.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+          />
           <Field
             label="Mobile number"
             placeholder="98765 43210"
             keyboardType="phone-pad"
             maxLength={10}
-            value={digits}
-            onChangeText={(text) => {
-              setMobile(text.replace(/\D/g, "").slice(0, 10));
-              if (phoneError) setPhoneError("");
-            }}
-            error={phoneError}
-            hint={digits.length && !phoneValid ? `${digits.length}/10 digits` : "+91 · 10 digits"}
+            value={phone.replace(/\D/g, "").slice(0, 10)}
+            onChangeText={(text) => setPhone(text.replace(/\D/g, "").slice(0, 10))}
+            hint="+91 · 10 digits"
           />
-          <Button label="Send OTP" onPress={onSendOtp} loading={loading} disabled={!phoneValid} />
-        </View>
-      ) : (
-        <View style={{ gap: spacing.md }}>
-          <Field label="Full name" placeholder="Your name" value={name} onChangeText={setName} />
-          <Field label="Email address" placeholder="you@email.com" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
-          <Button label="Continue" onPress={onEmailContinue} loading={loading} />
+          <Field
+            label="Password"
+            placeholder="At least 8 characters"
+            secureTextEntry
+            value={signupPassword}
+            onChangeText={setSignupPassword}
+          />
+          {error ? <Muted style={{ color: colors.danger, fontWeight: "700" }}>{error}</Muted> : null}
+          <Button
+            label="Create account"
+            onPress={onCreateAccount}
+            loading={loading}
+            disabled={!name.trim() || !email.includes("@") || phone.replace(/\D/g, "").length !== 10 || signupPassword.length < 8}
+          />
         </View>
       )}
 
       <Divider />
 
       <Button
-        label={emailMode ? "Use mobile number instead" : "Continue with email"}
+        label={mode === "signin" ? "Create a Camartes account" : "Already have an account? Sign in"}
         variant="outline"
-        icon={<Mail size={16} color={colors.primaryDark} />}
-        onPress={() => setEmailMode((v) => !v)}
+        onPress={() => {
+          setError("");
+          setMode((current) => (current === "signin" ? "signup" : "signin"));
+        }}
       />
       <Button label="Continue with Google" variant="ghost" onPress={() => oauthComingSoon("Google")} />
       <Button label="Continue with Apple" variant="ghost" onPress={() => oauthComingSoon("Apple")} />
