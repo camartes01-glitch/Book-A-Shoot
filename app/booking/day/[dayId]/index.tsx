@@ -19,6 +19,8 @@ import {
   END_BEFORE_START_MESSAGE,
   OVERNIGHT_EVENT_MESSAGE,
   hasCoreService,
+  isEventStepComplete,
+  isServicesStepComplete,
   shouldShowCoreServiceError,
   validateDay,
 } from "@/src/engine/validation";
@@ -42,7 +44,7 @@ import { colors, radius, spacing } from "@/src/constants/theme";
 const GROUPS = ["wedding", "pooja", "personal", "commercial"] as const;
 
 export default function DayEditorScreen() {
-  const params = useLocalSearchParams<{ dayId: string | string[]; step?: string }>();
+  const params = useLocalSearchParams<{ dayId: string | string[]; step?: string; back?: string }>();
   const dayId = normalizeRouteParam(params.dayId);
   const rawStep = Array.isArray(params.step) ? params.step[0] : params.step;
   const [screenStep, setScreenStep] = useState<"event" | "services">(rawStep === "services" ? "services" : "event");
@@ -51,10 +53,29 @@ export default function DayEditorScreen() {
   const [showMoreTypes, setShowMoreTypes] = useState(false);
   const [saveAttempted, setSaveAttempted] = useState(false);
 
+  useEffect(() => {
+    if (rawStep === "services") {
+      setScreenStep("services");
+    } else if (rawStep === "event") {
+      setScreenStep("event");
+    }
+  }, [rawStep]);
+
+  useEffect(() => {
+    if (params.back === "1") {
+      userNavigatedBackRef.current = true;
+    }
+  }, [params.back]);
+
   const activeDraftRef = useRef(activeDraft);
   const updateDayRef = useRef(updateDay);
   const dayRef = useRef<EventDay | null>(null);
   const persistChainRef = useRef(Promise.resolve());
+
+  const userNavigatedBackRef = useRef(false);
+  const eventTransitionLockRef = useRef(false);
+  const servicesDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const servicesTransitionLockRef = useRef(false);
 
   useEffect(() => {
     activeDraftRef.current = activeDraft;
@@ -106,7 +127,22 @@ export default function DayEditorScreen() {
   const syncFromStore = useCallback(() => {
     const found = activeDraftRef.current?.days.find((d) => d.dayId === dayId) ?? null;
     if (found) {
+      const prevLoc = dayRef.current?.location.formattedAddress;
       applyFoundDay(found);
+      if (
+        screenStep === "event" &&
+        !userNavigatedBackRef.current &&
+        found.location.formattedAddress &&
+        prevLoc !== found.location.formattedAddress &&
+        isEventStepComplete(found) &&
+        !eventTransitionLockRef.current
+      ) {
+        eventTransitionLockRef.current = true;
+        setTimeout(() => {
+          setScreenStep("services");
+          eventTransitionLockRef.current = false;
+        }, 200);
+      }
       return;
     }
     void bookingApi.getBookingContainingDay(dayId).then(async (booking) => {
@@ -115,12 +151,17 @@ export default function DayEditorScreen() {
       const day = booking.days.find((d) => d.dayId === dayId);
       if (day) applyFoundDay(day);
     });
-  }, [applyFoundDay, dayId]);
+  }, [applyFoundDay, dayId, screenStep]);
 
   useFocusEffect(
     useCallback(() => {
+      servicesTransitionLockRef.current = false;
       syncFromStore();
       return () => {
+        if (servicesDebounceTimerRef.current) {
+          clearTimeout(servicesDebounceTimerRef.current);
+          servicesDebounceTimerRef.current = null;
+        }
         const snapshot = dayRef.current;
         if (!snapshot || snapshot.dayId !== dayId) return;
         persistChainRef.current = persistChainRef.current.then(
@@ -140,13 +181,35 @@ export default function DayEditorScreen() {
     );
   }
 
-  const applyDay = (updater: (prev: EventDay) => EventDay) => {
+  const applyDay = (updater: (prev: EventDay) => EventDay, stepContext?: "event" | "services") => {
     const prev = dayRef.current;
     if (!prev) return;
     const next = sanitizeEventDay({ ...updater(prev), dayId: prev.dayId, order: prev.order, dayRevision: (prev.dayRevision ?? 0) + 1 });
     dayRef.current = next;
     setDay(next);
     persistDay(next);
+
+    const context = stepContext ?? screenStep;
+    if (context === "event") {
+      userNavigatedBackRef.current = false;
+      if (isEventStepComplete(next) && !eventTransitionLockRef.current) {
+        eventTransitionLockRef.current = true;
+        setTimeout(() => {
+          setScreenStep("services");
+          eventTransitionLockRef.current = false;
+        }, 150);
+      }
+    } else if (context === "services") {
+      if (servicesDebounceTimerRef.current) {
+        clearTimeout(servicesDebounceTimerRef.current);
+        servicesDebounceTimerRef.current = null;
+      }
+      if (isServicesStepComplete(next)) {
+        servicesDebounceTimerRef.current = setTimeout(() => {
+          void onContinueToBudget();
+        }, 1200);
+      }
+    }
   };
   const patch = (p: Partial<EventDay>) => applyDay((prev) => ({ ...prev, ...p }));
 
@@ -156,67 +219,19 @@ export default function DayEditorScreen() {
       eventTypeIds: prev.eventTypeIds.includes(id)
         ? prev.eventTypeIds.filter((t) => t !== id)
         : [...prev.eventTypeIds, id],
-    }));
-    const current = dayRef.current;
-    if (
-      current &&
-      current.eventDate &&
-      current.startTime &&
-      current.endTime &&
-      (current.overnight || isEndAfterStart(current.startTime, current.endTime, false))
-    ) {
-      setTimeout(() => {
-        setScreenStep("services");
-      }, 100);
-    }
+    }), "event");
   };
 
   const onDateChange = (iso: string) => {
-    applyDay((prev) => {
-      const next = { ...prev, eventDate: iso };
-      if (
-        next.eventTypeIds.length > 0 &&
-        next.eventDate &&
-        next.startTime &&
-        next.endTime &&
-        (next.overnight || isEndAfterStart(next.startTime, next.endTime, false))
-      ) {
-        setTimeout(() => setScreenStep("services"), 150);
-      }
-      return next;
-    });
+    applyDay((prev) => ({ ...prev, eventDate: iso }), "event");
   };
 
   const onStartTimeChange = (t: string) => {
-    applyDay((prev) => {
-      const next = { ...prev, startTime: t, overnight: inferOvernight(t, prev.endTime) };
-      if (
-        next.eventTypeIds.length > 0 &&
-        next.eventDate &&
-        next.startTime &&
-        next.endTime &&
-        (next.overnight || isEndAfterStart(next.startTime, next.endTime, false))
-      ) {
-        setTimeout(() => setScreenStep("services"), 150);
-      }
-      return next;
-    });
+    applyDay((prev) => ({ ...prev, startTime: t, overnight: inferOvernight(t, prev.endTime) }), "event");
   };
 
   const onEndTimeChange = (t: string) => {
-    applyDay((prev) => {
-      const next = { ...prev, endTime: t, overnight: inferOvernight(prev.startTime, t) };
-      if (
-        next.eventTypeIds.length > 0 &&
-        next.eventDate &&
-        next.startTime &&
-        next.endTime &&
-        (next.overnight || isEndAfterStart(next.startTime, next.endTime, false))
-      ) {
-        setTimeout(() => setScreenStep("services"), 150);
-      }
-      return next;
-    });
+    applyDay((prev) => ({ ...prev, endTime: t, overnight: inferOvernight(prev.startTime, t) }), "event");
   };
 
   const issues = validateDay(day);
@@ -253,13 +268,7 @@ export default function DayEditorScreen() {
     (c) => c.enabled && c.group !== "pooja" && !featured.some((f) => f.id === c.id),
   );
 
-  const canContinueToServices = Boolean(
-    day.eventTypeIds.length > 0 &&
-      day.eventDate &&
-      day.startTime &&
-      day.endTime &&
-      (day.overnight || isEndAfterStart(day.startTime, day.endTime, false)),
-  );
+  const canContinueToServices = isEventStepComplete(day);
 
   const onContinueToServices = () => {
     setSaveAttempted(true);
@@ -270,26 +279,38 @@ export default function DayEditorScreen() {
         Alert.alert("Date needed", "Please choose the event date.");
       } else if (!day.startTime || !day.endTime) {
         Alert.alert("Time needed", "Please choose start and end times.");
+      } else if (!day.location?.formattedAddress) {
+        Alert.alert("Location needed", "Please select the event location.");
       } else {
         Alert.alert("Invalid times", END_BEFORE_START_MESSAGE);
       }
       return;
     }
+    userNavigatedBackRef.current = false;
     setScreenStep("services");
+    router.setParams({ step: "services" });
   };
 
   const onContinueToBudget = async () => {
+    if (servicesDebounceTimerRef.current) {
+      clearTimeout(servicesDebounceTimerRef.current);
+      servicesDebounceTimerRef.current = null;
+    }
     setSaveAttempted(true);
-    if (!hasCoreService(day)) {
+    const currentDay = dayRef.current ?? day;
+    if (!currentDay || !hasCoreService(currentDay)) {
       Alert.alert("Service required", CORE_SERVICE_REQUIRED_MESSAGE);
       return;
     }
+    if (servicesTransitionLockRef.current) return;
+    servicesTransitionLockRef.current = true;
+    router.setParams({ step: "services" });
     await flushPersist();
     router.push("/booking/budget");
   };
 
-  const togglePhotography = () => applyDay((prev) => setPhotographySelected(prev, !isPhotographySelected(prev)));
-  const toggleVideography = () => applyDay((prev) => setVideographySelected(prev, !isVideographySelected(prev)));
+  const togglePhotography = () => applyDay((prev) => setPhotographySelected(prev, !isPhotographySelected(prev)), "services");
+  const toggleVideography = () => applyDay((prev) => setVideographySelected(prev, !isVideographySelected(prev)), "services");
 
   if (screenStep === "event") {
     return (
@@ -422,7 +443,15 @@ export default function DayEditorScreen() {
     <WizardScreen
       title="What services do you need?"
       step="services"
-      onBack={() => setScreenStep("event")}
+      onBack={() => {
+        if (servicesDebounceTimerRef.current) {
+          clearTimeout(servicesDebounceTimerRef.current);
+          servicesDebounceTimerRef.current = null;
+        }
+        userNavigatedBackRef.current = true;
+        setScreenStep("event");
+        router.setParams({ step: "event" });
+      }}
       footer={
         <Button
           label="Continue to budget"

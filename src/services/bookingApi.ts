@@ -23,7 +23,7 @@ import {
 } from "@/src/domain/bookingRequest";
 import { checkBudgetFeasibility, generatePackageOptions } from "@/src/engine/pricing";
 import { matchVendors } from "@/src/engine/matching";
-import { validateBooking, validateBudget } from "@/src/engine/validation";
+import { defaultExpectedDeliveryDate, validateBooking, validateBudget } from "@/src/engine/validation";
 import { fetchVendorById, fetchVendorCatalog } from "@/src/services/vendorApi";
 import { camartesFetch, CamartesApiError, getAuthToken } from "@/src/services/camartesClient";
 import { getStoredProfile } from "@/src/services/authApi";
@@ -342,8 +342,10 @@ export async function submitBudget(
 
   const feasibility = checkBudgetFeasibility(booking, budget);
   const packageOptions = generatePackageOptions(booking, budget);
+  const defaultDelivery = !booking.expectedDeliveryDate ? defaultExpectedDeliveryDate(booking.days) : null;
   const saved = await saveBooking({
     ...booking,
+    expectedDeliveryDate: booking.expectedDeliveryDate ?? defaultDelivery,
     budget,
     packageOptions,
     ...invalidateMatches(booking),
@@ -366,8 +368,14 @@ export async function selectPackage(bookingId: string, tier: PackageTierId): Pro
 }
 
 export async function getVendorMatches(bookingId: string): Promise<Booking> {
-  const booking = await getBooking(bookingId);
+  let booking = await getBooking(bookingId);
   if (!booking) throw new Error("Booking not found");
+  if (!booking.expectedDeliveryDate) {
+    const defaultDelivery = defaultExpectedDeliveryDate(booking.days);
+    if (defaultDelivery) {
+      booking = await saveBooking({ ...booking, expectedDeliveryDate: defaultDelivery });
+    }
+  }
   const validationIssues = validateBooking(booking);
   if (validationIssues.length) throw new Error(validationIssues[0].message);
   if (!booking.selectedPackage) throw new Error("Select a package before matching vendors.");
@@ -402,8 +410,14 @@ export async function selectVendor(bookingId: string, vendorId: string): Promise
 }
 
 export async function submitVendorRequest(bookingId: string): Promise<Booking> {
-  const booking = await getBooking(bookingId);
+  let booking = await getBooking(bookingId);
   if (!booking) throw new Error("Booking not found");
+  if (!booking.expectedDeliveryDate) {
+    const defaultDelivery = defaultExpectedDeliveryDate(booking.days);
+    if (defaultDelivery) {
+      booking = await saveBooking({ ...booking, expectedDeliveryDate: defaultDelivery });
+    }
+  }
   const issues = validateBooking(booking);
   if (issues.length) throw new Error(issues[0].message);
   if (!booking.selectedVendorId) throw new Error("Select a service provider first.");

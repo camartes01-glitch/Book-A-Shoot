@@ -4,23 +4,29 @@
 
 import { createEmptyDay, emptyDeliverables, sanitizeEventDay } from "@/src/domain/defaults";
 import { setPhotographySelected, setVideographySelected } from "@/src/domain/dayServices";
-import { CORE_SERVICE_REQUIRED_MESSAGE, hasCoreService, validateDay } from "@/src/engine/validation";
+import {
+  CORE_SERVICE_REQUIRED_MESSAGE,
+  hasCoreService,
+  isEventStepComplete,
+  isServicesStepComplete,
+  validateDay,
+} from "@/src/engine/validation";
 import { isEndAfterStart } from "@/src/utils/dateTime";
 import type { EventDay, PackageTierId } from "@/src/types/booking";
 
 function canAdvanceFromEvent(day: EventDay): boolean {
-  return Boolean(
-    day.eventTypeIds.length > 0 &&
-      day.eventDate &&
-      day.startTime &&
-      day.endTime &&
-      (day.overnight || isEndAfterStart(day.startTime, day.endTime, false)),
-  );
+  return isEventStepComplete(day);
 }
 
 function canAdvanceFromServices(day: EventDay): boolean {
-  return hasCoreService(day);
+  return isServicesStepComplete(day);
 }
+
+const validLocation = {
+  ...createEmptyDay(1).location,
+  formattedAddress: "Banjara Hills, Hyderabad",
+  city: "Hyderabad",
+};
 
 describe("Automatic Navigation & Validation Gates", () => {
   describe("Step 1: Event auto-advance rules", () => {
@@ -31,41 +37,96 @@ describe("Automatic Navigation & Validation Gates", () => {
         eventDate: "2026-11-20",
         startTime: "10:00",
         endTime: "18:00",
+        location: validLocation,
       });
       expect(canAdvanceFromEvent(day)).toBe(false);
     });
 
-    test("does not advance if only date is selected but start/end time is missing", () => {
+    test("does not advance if date is missing", () => {
+      const day = sanitizeEventDay({
+        ...createEmptyDay(1),
+        eventTypeIds: ["wedding"],
+        eventDate: null,
+        startTime: "10:00",
+        endTime: "18:00",
+        location: validLocation,
+      });
+      expect(canAdvanceFromEvent(day)).toBe(false);
+    });
+
+    test("does not advance if date is in the past", () => {
+      const day = sanitizeEventDay({
+        ...createEmptyDay(1),
+        eventTypeIds: ["wedding"],
+        eventDate: "2020-01-01",
+        startTime: "10:00",
+        endTime: "18:00",
+        location: validLocation,
+      });
+      expect(canAdvanceFromEvent(day)).toBe(false);
+    });
+
+    test("does not advance if start or end time is missing", () => {
       const day = sanitizeEventDay({
         ...createEmptyDay(1),
         eventTypeIds: ["wedding"],
         eventDate: "2026-11-20",
         startTime: null,
-        endTime: null,
+        endTime: "18:00",
+        location: validLocation,
       });
       expect(canAdvanceFromEvent(day)).toBe(false);
     });
 
-    test("does not advance if end time is before start time and not overnight", () => {
-      const day = sanitizeEventDay({
-        ...createEmptyDay(1),
-        eventTypeIds: ["wedding"],
-        eventDate: "2026-11-20",
-        startTime: "18:00",
-        endTime: "10:00",
-        overnight: false,
-      });
-      // Overnight is inferred by sanitizeEventDay, but if explicitly forced same-day:
-      expect(isEndAfterStart("18:00", "10:00", false)).toBe(false);
-    });
-
-    test("auto-advances to Services once event, date, start time, and end time are all set", () => {
+    test("does not advance if location is missing", () => {
       const day = sanitizeEventDay({
         ...createEmptyDay(1),
         eventTypeIds: ["wedding"],
         eventDate: "2026-11-20",
         startTime: "10:00",
         endTime: "18:00",
+        location: { ...validLocation, formattedAddress: "" },
+      });
+      expect(canAdvanceFromEvent(day)).toBe(false);
+    });
+
+    test("does not advance if end time is before start time and not overnight", () => {
+      const day = {
+        ...sanitizeEventDay({
+          ...createEmptyDay(1),
+          eventTypeIds: ["wedding"],
+          eventDate: "2026-11-20",
+          startTime: "18:00",
+          endTime: "10:00",
+          location: validLocation,
+        }),
+        overnight: false,
+      };
+      expect(isEndAfterStart("18:00", "10:00", false)).toBe(false);
+      expect(canAdvanceFromEvent(day)).toBe(false);
+    });
+
+    test("supports valid overnight schedule (e.g. 20:00 to 02:00)", () => {
+      const day = sanitizeEventDay({
+        ...createEmptyDay(1),
+        eventTypeIds: ["wedding"],
+        eventDate: "2026-11-20",
+        startTime: "20:00",
+        endTime: "02:00",
+        location: validLocation,
+      });
+      expect(day.overnight).toBe(true);
+      expect(canAdvanceFromEvent(day)).toBe(true);
+    });
+
+    test("auto-advances to Services once event, date, start time, end time, and location are all set", () => {
+      const day = sanitizeEventDay({
+        ...createEmptyDay(1),
+        eventTypeIds: ["wedding"],
+        eventDate: "2026-11-20",
+        startTime: "10:00",
+        endTime: "18:00",
+        location: validLocation,
       });
       expect(canAdvanceFromEvent(day)).toBe(true);
     });
@@ -74,6 +135,18 @@ describe("Automatic Navigation & Validation Gates", () => {
       const day = sanitizeEventDay({ ...createEmptyDay(1), eventTypeIds: ["wedding"] });
       expect(day.eventTypeIds).toEqual(["wedding"]);
       expect(day.eventTypeIds).not.toContain("engagement");
+    });
+
+    test("selecting Engagement selects ONLY Engagement", () => {
+      const day = sanitizeEventDay({ ...createEmptyDay(1), eventTypeIds: ["engagement"] });
+      expect(day.eventTypeIds).toEqual(["engagement"]);
+      expect(day.eventTypeIds).not.toContain("wedding");
+    });
+
+    test("Wedding + Engagement requires explicit multi-select", () => {
+      const day = sanitizeEventDay({ ...createEmptyDay(1), eventTypeIds: ["wedding", "engagement"] });
+      expect(day.eventTypeIds).toContain("wedding");
+      expect(day.eventTypeIds).toContain("engagement");
     });
   });
 

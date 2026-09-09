@@ -56,6 +56,26 @@ export function shouldShowCoreServiceError(day: EventDay, saveAttempted: boolean
   return saveAttempted || validateCoreServiceRule(day).length > 0;
 }
 
+/** Check if all required fields in the Event step are valid (event types, future date, start/end time, location). */
+export function isEventStepComplete(day: EventDay): boolean {
+  if (!day.eventTypeIds || day.eventTypeIds.length === 0) return false;
+  if (!day.eventDate || isPastDate(day.eventDate)) return false;
+  if (!day.startTime || !day.endTime) return false;
+  if (!day.overnight && !isEndAfterStart(day.startTime, day.endTime, false)) return false;
+  if (!day.location?.formattedAddress || !day.location.formattedAddress.trim()) return false;
+  return true;
+}
+
+/** Check if all required services configuration is complete (at least one core service with valid counts). */
+export function isServicesStepComplete(day: EventDay): boolean {
+  if (!hasCoreService(day)) return false;
+  if (day.photography.traditional && day.photography.traditionalCount < ADMIN_LIMITS.minPhotographers) return false;
+  if (day.photography.candid && day.photography.candidCount < ADMIN_LIMITS.minPhotographers) return false;
+  if (day.videography.traditional && day.videography.traditionalCount < ADMIN_LIMITS.minVideographers) return false;
+  if (day.videography.candid && day.videography.candidCount < ADMIN_LIMITS.minVideographers) return false;
+  return true;
+}
+
 export function validateDay(day: EventDay): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
@@ -141,6 +161,17 @@ export function validateExpectedDelivery(days: EventDay[], expectedDeliveryDate:
     ];
   }
   return [];
+}
+
+export function defaultExpectedDeliveryDate(days: EventDay[]): string | null {
+  const finalEventDate = latestDate(days.map((d) => d.eventDate ?? ""));
+  if (!finalEventDate) return null;
+  const d = new Date(`${finalEventDate}T00:00:00`);
+  d.setDate(d.getDate() + 30);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 /** Rule 10: budget must be greater than zero. */

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { router } from "expo-router";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { PackageTierCard } from "@/src/components/PackageTierCard";
@@ -11,6 +11,7 @@ export default function PackagesScreen() {
   const { activeDraft, selectPackage } = useAppStore();
   const [selected, setSelected] = useState<PackageTierId | null>(activeDraft?.selectedPackage ?? null);
   const [loading, setLoading] = useState(false);
+  const transitionLockRef = useRef(false);
   const pricingKey = activeDraft ? bookingPricingInputKey(activeDraft) : "";
   const options = useMemo(
     () => (activeDraft ? resolvePackageOptions(activeDraft) : []),
@@ -23,6 +24,8 @@ export default function PackagesScreen() {
   }, [activeDraft?.selectedPackage]);
 
   const onSelectPackage = async (tier: PackageTierId) => {
+    if (transitionLockRef.current) return;
+    transitionLockRef.current = true;
     setSelected(tier);
     setLoading(true);
     try {
@@ -30,17 +33,24 @@ export default function PackagesScreen() {
       router.push("/booking/matches");
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        transitionLockRef.current = false;
+      }, 500);
     }
   };
 
   const onContinue = async () => {
-    if (!selected) return;
+    if (!selected || transitionLockRef.current) return;
+    transitionLockRef.current = true;
     setLoading(true);
     try {
       await selectPackage(selected);
       router.push("/booking/matches");
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        transitionLockRef.current = false;
+      }, 500);
     }
   };
 
@@ -48,6 +58,7 @@ export default function PackagesScreen() {
     <WizardScreen
       title="Choose your package"
       step="packages"
+      onBack={() => router.push("/booking/budget")}
       footer={<Button label="Find providers" onPress={onContinue} disabled={!selected} loading={loading} flex={1} />}
     >
       <Muted>

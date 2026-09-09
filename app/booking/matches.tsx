@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { router } from "expo-router";
 import { SearchX, SlidersHorizontal } from "lucide-react-native";
@@ -16,6 +16,7 @@ export default function VendorMatchesScreen() {
   const [loading, setLoading] = useState(!activeDraft?.matches);
   const [error, setError] = useState<string | null>(null);
   const [selecting, setSelecting] = useState<string | null>(null);
+  const transitionLockRef = useRef(false);
 
   const runMatching = useCallback(async () => {
     setLoading(true);
@@ -34,6 +35,8 @@ export default function VendorMatchesScreen() {
   }, [activeDraft?.matches, runMatching]);
 
   const onSelect = async (vendorId: string) => {
+    if (transitionLockRef.current) return;
+    transitionLockRef.current = true;
     setSelecting(vendorId);
     setError(null);
     try {
@@ -41,8 +44,12 @@ export default function VendorMatchesScreen() {
       router.push("/booking/confirm");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not select that provider.");
+      transitionLockRef.current = false;
     } finally {
       setSelecting(null);
+      setTimeout(() => {
+        transitionLockRef.current = false;
+      }, 500);
     }
   };
 
@@ -51,7 +58,11 @@ export default function VendorMatchesScreen() {
   const pkgLabel = quoted?.label;
 
   return (
-    <WizardScreen title="Choose your photographer or videographer" step="providers">
+    <WizardScreen
+      title="Choose your photographer or videographer"
+      step="providers"
+      onBack={() => router.push("/booking/packages")}
+    >
       {loading ? (
         <View style={{ paddingVertical: spacing.xl, alignItems: "center", gap: spacing.sm }}>
           <ActivityIndicator color={colors.primary} size="large" />

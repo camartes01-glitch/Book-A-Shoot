@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Alert, View } from "react-native";
 import { router } from "expo-router";
 import { AlertTriangle } from "lucide-react-native";
@@ -16,6 +16,7 @@ export default function BudgetScreen() {
   const [digits, setDigits] = useState(activeDraft?.budget ? String(activeDraft.budget) : "");
   const [loading, setLoading] = useState(false);
   const [feasibility, setFeasibility] = useState<BudgetFeasibilityResult | null>(null);
+  const transitionLockRef = useRef(false);
 
   const numeric = parseInt(digits, 10) || 0;
   const display = digits ? formatInr(numeric).replace("₹", "₹ ") : "";
@@ -29,6 +30,8 @@ export default function BudgetScreen() {
       Alert.alert("Enter your budget", "Budget must be greater than zero.");
       return;
     }
+    if (transitionLockRef.current) return;
+    transitionLockRef.current = true;
     setLoading(true);
     try {
       const result = await submitBudget(numeric);
@@ -38,12 +41,17 @@ export default function BudgetScreen() {
       }
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        transitionLockRef.current = false;
+      }, 500);
     }
   };
 
   const BUDGET_OPTIONS = [50000, 75000, 100000, 150000, 200000, 300000];
 
   const onSelectBudgetOption = async (val: number) => {
+    if (transitionLockRef.current) return;
+    transitionLockRef.current = true;
     setDigits(String(val));
     setLoading(true);
     try {
@@ -51,12 +59,20 @@ export default function BudgetScreen() {
       router.push("/booking/packages");
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        transitionLockRef.current = false;
+      }, 500);
     }
   };
 
   const onFooter = async () => {
     if (feasibility?.isBelowEstimate) {
+      if (transitionLockRef.current) return;
+      transitionLockRef.current = true;
       router.push("/booking/packages");
+      setTimeout(() => {
+        transitionLockRef.current = false;
+      }, 500);
       return;
     }
     await onCheck();
@@ -66,6 +82,14 @@ export default function BudgetScreen() {
     <WizardScreen
       title="What is your budget?"
       step="budget"
+      onBack={() => {
+        const first = activeDraft?.days?.[0];
+        if (first) {
+          router.push({ pathname: "/booking/day/[dayId]", params: { dayId: first.dayId, step: "services", back: "1" } });
+        } else {
+          router.back();
+        }
+      }}
       footer={<Button label={feasibility?.isBelowEstimate ? "Show closest options" : "Continue"} onPress={onFooter} loading={loading} flex={1} />}
     >
       <SectionTitle>Approved coverage rates</SectionTitle>

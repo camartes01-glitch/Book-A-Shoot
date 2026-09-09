@@ -90,7 +90,12 @@ export default function ConfirmBookingScreen() {
   };
 
   return (
-    <WizardScreen title="Review your booking" step="review" footer={<Button label="Send booking request" onPress={onSubmit} loading={loading} flex={1} />}>
+    <WizardScreen
+      title="Review your booking"
+      step="review"
+      onBack={() => router.push("/booking/matches")}
+      footer={<Button label="Send booking request" onPress={onSubmit} loading={loading} flex={1} />}
+    >
       <SectionTitle>You're almost booked</SectionTitle>
       {error ? <Muted style={{ color: colors.danger, fontWeight: "700" }}>{error}</Muted> : null}
       <Muted>Sending this request creates a real booking on Camartes. It is not confirmed until the provider and Camartes say so.</Muted>
