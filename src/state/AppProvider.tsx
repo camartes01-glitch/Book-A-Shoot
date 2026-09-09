@@ -41,6 +41,8 @@ type AppContextValue = {
   confirmBooking: () => Promise<void>;
   markPaymentComplete: () => Promise<void>;
   cancelBooking: (bookingId: string) => Promise<void>;
+  deleteBooking: (bookingId: string) => Promise<void>;
+  deleteDraft: (bookingId: string) => Promise<void>;
   reopenForMatching: (bookingId: string) => Promise<void>;
 
   notifications: AppNotification[];
@@ -212,6 +214,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const current = activeDraftRef.current;
       if (!current) throw new Error("No active booking draft.");
       const updated = await fn(current.bookingId);
+      // Guard against race conditions where the draft was deleted while fn was processing
+      if (activeDraftRef.current?.bookingId !== current.bookingId) {
+        return updated;
+      }
       upsertLocalBooking(updated);
       return updated;
     },
@@ -331,6 +337,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [refreshBookings, activeDraft],
   );
 
+  const deleteBooking = useCallback(
+    async (bookingId: string) => {
+      const target =
+        bookings.find((b) => b.bookingId === bookingId || b.remoteBookingId === bookingId) ??
+        (activeDraftRef.current?.bookingId === bookingId ? activeDraftRef.current : null);
+
+      if (target && (isLocalWizardBooking(target) || (!target.remoteBookingId && target.status === "DRAFT"))) {
+        // Local draft: permanently delete from local storage & memory
+        await bookingApi.deleteDraft(target.bookingId);
+        if (activeDraftRef.current?.bookingId === target.bookingId) {
+          activeDraftRef.current = null;
+          setActiveDraft(null);
+        }
+        setBookings((prev) =>
+          prev.filter((b) => b.bookingId !== target.bookingId && b.remoteBookingId !== target.bookingId),
+        );
+      } else {
+        // Submitted server booking: request cancellation via Camartes backend
+        await bookingApi.cancelBooking(bookingId);
+        await refreshBookings();
+        if (activeDraftRef.current?.bookingId === bookingId) {
+          activeDraftRef.current = null;
+          setActiveDraft(null);
+        }
+      }
+    },
+    [bookings, refreshBookings],
+  );
+
   const reopenForMatching = useCallback(
     async (bookingId: string) => {
       const updated = await bookingApi.reopenForMatching(bookingId);
@@ -376,6 +411,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       confirmBooking,
       markPaymentComplete,
       cancelBooking,
+      deleteBooking,
+      deleteDraft: deleteBooking,
       reopenForMatching,
       notifications,
       refreshNotifications,
@@ -412,6 +449,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       confirmBooking,
       markPaymentComplete,
       cancelBooking,
+      deleteBooking,
       reopenForMatching,
       notifications,
       refreshNotifications,

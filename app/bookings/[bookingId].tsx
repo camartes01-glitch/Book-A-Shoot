@@ -17,6 +17,9 @@ import { colors, spacing } from "@/src/constants/theme";
 import { useAppStore } from "@/src/state/AppProvider";
 import { normalizeRouteParam } from "@/src/utils/routeParam";
 
+import { ConfirmDialog } from "@/src/components/ConfirmDialog";
+import { isLocalWizardBooking } from "@/src/domain/bookingRequest";
+
 const TERMINAL_ALTERNATE = new Set(["VENDOR_REJECTED", "CUSTOMER_CANCELLED", "VENDOR_CANCELLED", "EXPIRED"]);
 const CANCELLABLE = new Set(["SUBMITTED", "MATCHING", "VENDOR_SELECTED", "REQUEST_SENT", "VENDOR_ACCEPTED", "CUSTOMER_CONFIRMED"]);
 const CONTACT_UNLOCKED = new Set(["VENDOR_ACCEPTED", "CUSTOMER_CONFIRMED", "PAYMENT_PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED"]);
@@ -24,11 +27,12 @@ const CONTACT_UNLOCKED = new Set(["VENDOR_ACCEPTED", "CUSTOMER_CONFIRMED", "PAYM
 export default function BookingDetailScreen() {
   const { bookingId: bookingIdParam } = useLocalSearchParams<{ bookingId: string | string[] }>();
   const bookingId = normalizeRouteParam(bookingIdParam);
-  const { reopenForMatching, refreshBookings } = useAppStore();
+  const { reopenForMatching, refreshBookings, deleteBooking } = useAppStore();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
+  const [confirmMode, setConfirmMode] = useState<"delete" | "cancel" | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -262,10 +266,58 @@ export default function BookingDetailScreen() {
           </View>
         </Card>
 
-        {CANCELLABLE.has(booking.status) ? (
-          <Button label="Cancel booking" variant="danger" onPress={() => run(() => bookingApi.cancelBooking(booking.bookingId))} loading={busy} />
+        {isLocalWizardBooking(booking) || (!booking.remoteBookingId && booking.status === "DRAFT") ? (
+          <Button
+            label="Delete booking"
+            variant="danger"
+            onPress={() => setConfirmMode("delete")}
+            disabled={busy}
+          />
+        ) : CANCELLABLE.has(booking.status) ? (
+          <Button
+            label="Cancel booking"
+            variant="danger"
+            onPress={() => setConfirmMode("cancel")}
+            disabled={busy}
+          />
         ) : null}
       </ScrollView>
+
+      <ConfirmDialog
+        visible={confirmMode !== null}
+        title={confirmMode === "delete" ? "Delete booking?" : "Cancel booking?"}
+        message={
+          confirmMode === "delete"
+            ? "This will remove the entire booking and all of its event days. This action cannot be undone."
+            : "This will cancel your booking request with Camartes. This action cannot be undone."
+        }
+        confirmLabel={confirmMode === "delete" ? "Delete booking" : "Cancel booking"}
+        cancelLabel="Cancel"
+        confirmVariant="danger"
+        loading={busy}
+        onConfirm={async () => {
+          if (confirmMode === "delete") {
+            setBusy(true);
+            try {
+              await deleteBooking(booking.bookingId);
+              setConfirmMode(null);
+              router.replace("/(tabs)/bookings");
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : "Could not delete booking.";
+              Alert.alert("Could not delete booking", msg);
+            } finally {
+              setBusy(false);
+            }
+          } else if (confirmMode === "cancel") {
+            await run(() => bookingApi.cancelBooking(booking.bookingId));
+            setConfirmMode(null);
+          }
+        }}
+        onCancel={() => {
+          if (!busy) setConfirmMode(null);
+        }}
+        testID="booking-detail-confirm-dialog"
+      />
     </SafeAreaView>
   );
 }

@@ -15,6 +15,7 @@ export function DayCard({
   onPress,
   onEdit,
   onDelete,
+  onDisabledDelete,
   deletable,
   onMoveUp,
   onMoveDown,
@@ -23,6 +24,7 @@ export function DayCard({
   onPress: () => void;
   onEdit?: () => void;
   onDelete: () => void;
+  onDisabledDelete?: () => void;
   deletable: boolean;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
@@ -33,22 +35,11 @@ export function DayCard({
 
   const handleDelete = () => {
     if (!deletable) {
-      Alert.alert("Cannot remove day", "A booking must have at least one event day.");
+      if (onDisabledDelete) onDisabledDelete();
+      else onDelete();
       return;
     }
-    if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.confirm === "function") {
-      const ok = window.confirm(`Remove Day ${day.order}? This will remove all details configured for this event day.`);
-      if (ok) onDelete();
-    } else {
-      Alert.alert(
-        `Remove Day ${day.order}`,
-        "Are you sure you want to remove this event day? All configured details for this day will be removed.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Delete", style: "destructive", onPress: onDelete },
-        ]
-      );
-    }
+    onDelete();
   };
 
   return (
@@ -96,6 +87,7 @@ export function DayCard({
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel={`Edit day ${day.order}`}
+          testID={`day-edit-btn-${day.dayId}`}
         >
           <Pencil size={14} color={colors.primaryDark} />
           <Text style={styles.actionText}>Edit</Text>
@@ -105,7 +97,12 @@ export function DayCard({
           style={[styles.actionBtn, !deletable && { opacity: 0.4 }]}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel={`Delete day ${day.order}`}
+          accessibilityLabel={
+            deletable
+              ? `Delete day ${day.order}`
+              : `Cannot delete day ${day.order}, minimum one event day required`
+          }
+          testID={`day-delete-btn-${day.dayId}`}
         >
           <Trash2 size={14} color={colors.danger} />
           <Text style={[styles.actionText, { color: colors.danger }]}>Delete</Text>

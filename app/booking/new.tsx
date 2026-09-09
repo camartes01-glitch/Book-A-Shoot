@@ -1,15 +1,21 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, View } from "react-native";
 import { router } from "expo-router";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { Button, Muted, SectionTitle } from "@/src/components/ui";
 import { DayCard } from "@/src/components/DayCard";
+import { ConfirmDialog } from "@/src/components/ConfirmDialog";
 import { useAppStore } from "@/src/state/AppProvider";
 import { validateDays } from "@/src/engine/validation";
 import { colors, spacing } from "@/src/constants/theme";
+import type { EventDay } from "@/src/types/booking";
 
 export default function BookingDaysScreen() {
   const { activeDraft, addDay, duplicateEventDay, deleteDay, reorderDays } = useAppStore();
+  const [dayToDelete, setDayToDelete] = useState<EventDay | null>(null);
+  const [singleDayNotice, setSingleDayNotice] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const continueLock = useRef(false);
   const addLock = useRef(false);
 
@@ -38,6 +44,20 @@ export default function BookingDaysScreen() {
     if (swap < 0 || swap >= next.length) return;
     [next[index], next[swap]] = [next[swap], next[index]];
     void reorderDays(next.map((d) => d.dayId));
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!dayToDelete || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await deleteDay(dayToDelete.dayId);
+      setDayToDelete(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not remove this day.";
+      Alert.alert("Could not remove day", msg);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -79,12 +99,44 @@ export default function BookingDaysScreen() {
             deletable={days.length > 1}
             onPress={() => router.push(`/booking/day/${day.dayId}`)}
             onEdit={() => router.push(`/booking/day/${day.dayId}`)}
-            onDelete={() => void deleteDay(day.dayId)}
+            onDelete={() => setDayToDelete(day)}
+            onDisabledDelete={() => setSingleDayNotice(true)}
             onMoveUp={index > 0 ? () => move(index, -1) : undefined}
             onMoveDown={index < days.length - 1 ? () => move(index, 1) : undefined}
           />
         ))}
       </View>
+
+      <ConfirmDialog
+        visible={dayToDelete !== null}
+        title="Delete event day?"
+        message={
+          dayToDelete
+            ? `This will remove Day ${dayToDelete.order} and all of its details from the booking.`
+            : "This will remove this event day and all of its details from the booking."
+        }
+        confirmLabel="Delete Day"
+        cancelLabel="Cancel"
+        confirmVariant="danger"
+        loading={isDeleting}
+        onConfirm={() => void handleConfirmDelete()}
+        onCancel={() => {
+          if (!isDeleting) setDayToDelete(null);
+        }}
+        testID="day-delete-confirm-dialog"
+      />
+
+      <ConfirmDialog
+        visible={singleDayNotice}
+        title="Cannot delete day"
+        message="A booking must have at least one event day. Add another day before removing this one."
+        confirmLabel="Understood"
+        cancelLabel="Close"
+        confirmVariant="primary"
+        onConfirm={() => setSingleDayNotice(false)}
+        onCancel={() => setSingleDayNotice(false)}
+        testID="single-day-notice-dialog"
+      />
     </WizardScreen>
   );
 }

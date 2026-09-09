@@ -295,13 +295,20 @@ export async function updateDay(bookingId: string, dayId: string | string[], pat
 }
 
 export async function deleteDay(bookingId: string, dayId: string): Promise<Booking> {
-  const booking = await getBooking(bookingId);
-  if (!booking) throw new Error("Booking not found");
-  if (booking.days.length <= 1) {
-    throw new Error("A booking must have at least one event day.");
-  }
-  const days = booking.days.filter((d) => d.dayId !== dayId).map((d, i) => ({ ...d, order: i + 1 }));
-  return saveBooking({ ...booking, days, ...invalidateStalePackageAndMatches(booking) });
+  const write = dayWriteChain.then(async () => {
+    const booking = await getBooking(bookingId);
+    if (!booking) throw new Error("Booking not found");
+    if (booking.days.length <= 1) {
+      throw new Error("A booking must have at least one event day.");
+    }
+    const days = booking.days.filter((d) => d.dayId !== dayId).map((d, i) => ({ ...d, order: i + 1 }));
+    return saveBooking({ ...booking, days, ...invalidateStalePackageAndMatches(booking) });
+  });
+  dayWriteChain = write.then(
+    () => undefined,
+    () => undefined,
+  );
+  return write;
 }
 
 export async function reorderDays(bookingId: string, orderedDayIds: string[]): Promise<Booking> {
@@ -525,5 +532,18 @@ export async function cancelBooking(bookingId: string): Promise<Booking> {
 
 export async function deleteDraft(bookingId: string): Promise<void> {
   const all = await readAllBookings();
-  await writeAllBookings(all.filter((b) => b.bookingId !== bookingId));
+  await writeAllBookings(all.filter((b) => b.bookingId !== bookingId && b.remoteBookingId !== bookingId));
+}
+
+export async function deleteBooking(
+  bookingId: string,
+): Promise<{ deleted: boolean; cancelled: boolean; booking?: Booking }> {
+  const booking = await getBooking(bookingId);
+  if (!booking) throw new Error("Booking not found");
+  if (isLocalWizardBooking(booking) || (!booking.remoteBookingId && booking.status === "DRAFT")) {
+    await deleteDraft(booking.bookingId);
+    return { deleted: true, cancelled: false };
+  }
+  const updated = await cancelBooking(booking.bookingId);
+  return { deleted: false, cancelled: true, booking: updated };
 }

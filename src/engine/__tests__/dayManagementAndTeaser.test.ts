@@ -265,3 +265,94 @@ describe("Part 6: Automatic Booking Progression Logic", () => {
     expect(hasCoreService(withBoth)).toBe(true);
   });
 });
+
+describe("Part 8: Delete Day Behavior, Minimum-Day Protection & Data Integrity", () => {
+  test("Deleting a day does not delete the entire booking", async () => {
+    const fresh = await bookingApi.startFreshBooking("cust_del_day");
+    const day1Id = fresh.days[0].dayId;
+    const withDay2 = await bookingApi.addDay(fresh.bookingId);
+    const day2Id = withDay2.days[1].dayId;
+
+    const after = await bookingApi.deleteDay(fresh.bookingId, day2Id);
+    // Booking itself still exists!
+    const inStore = await bookingApi.getBooking(fresh.bookingId);
+    expect(inStore).not.toBeNull();
+    expect(inStore?.bookingId).toBe(fresh.bookingId);
+    expect(inStore?.days).toHaveLength(1);
+    expect(inStore?.days[0].dayId).toBe(day1Id);
+  });
+
+  test("Deleting Day 1 from a 3-day booking preserves Day 2 and Day 3 and renumbers them 1, 2", async () => {
+    const fresh = await bookingApi.startFreshBooking("cust_del_day_3");
+    const day1Id = fresh.days[0].dayId;
+    const withDay2 = await bookingApi.addDay(fresh.bookingId);
+    const day2Id = withDay2.days[1].dayId;
+    const withDay3 = await bookingApi.addDay(fresh.bookingId);
+    const day3Id = withDay3.days[2].dayId;
+
+    await bookingApi.updateDay(fresh.bookingId, day2Id, { eventTypeIds: ["engagement"] });
+    await bookingApi.updateDay(fresh.bookingId, day3Id, { eventTypeIds: ["reception"] });
+
+    // Delete Day 1
+    const after = await bookingApi.deleteDay(fresh.bookingId, day1Id);
+    expect(after.days).toHaveLength(2);
+
+    // Day 2 is now visual Day 1
+    expect(after.days[0].dayId).toBe(day2Id);
+    expect(after.days[0].order).toBe(1);
+    expect(after.days[0].eventTypeIds).toEqual(["engagement"]);
+
+    // Day 3 is now visual Day 2
+    expect(after.days[1].dayId).toBe(day3Id);
+    expect(after.days[1].order).toBe(2);
+    expect(after.days[1].eventTypeIds).toEqual(["reception"]);
+  });
+
+  test("Deleting one booking's day does not affect another booking's days", async () => {
+    const bookingA = await bookingApi.startFreshBooking("cust_iso_a");
+    const aDay1 = bookingA.days[0].dayId;
+    const aWithDay2 = await bookingApi.addDay(bookingA.bookingId);
+    const aDay2 = aWithDay2.days[1].dayId;
+    await bookingApi.updateDay(bookingA.bookingId, aDay2, { eventTypeIds: ["wedding"] });
+
+    const bookingB = await bookingApi.startFreshBooking("cust_iso_b");
+    const bDay1 = bookingB.days[0].dayId;
+    const bWithDay2 = await bookingApi.addDay(bookingB.bookingId);
+    const bDay2 = bWithDay2.days[1].dayId;
+    await bookingApi.updateDay(bookingB.bookingId, bDay2, { eventTypeIds: ["pre_wedding"] });
+
+    // Delete Day 2 from Booking A
+    await bookingApi.deleteDay(bookingA.bookingId, aDay2);
+
+    // Verify Booking A has only 1 day
+    const aAfter = await bookingApi.getBooking(bookingA.bookingId);
+    expect(aAfter?.days).toHaveLength(1);
+    expect(aAfter?.days[0].dayId).toBe(aDay1);
+
+    // Verify Booking B still has both Day 1 and Day 2 intact
+    const bAfter = await bookingApi.getBooking(bookingB.bookingId);
+    expect(bAfter?.days).toHaveLength(2);
+    expect(bAfter?.days[0].dayId).toBe(bDay1);
+    expect(bAfter?.days[1].dayId).toBe(bDay2);
+    expect(bAfter?.days[1].eventTypeIds).toEqual(["pre_wedding"]);
+  });
+
+  test("Stale asynchronous write cannot resurrect a deleted day", async () => {
+    const fresh = await bookingApi.startFreshBooking("cust_stale");
+    const withDay2 = await bookingApi.addDay(fresh.bookingId);
+    const day2Id = withDay2.days[1].dayId;
+
+    // Delete Day 2
+    await bookingApi.deleteDay(fresh.bookingId, day2Id);
+
+    // Attempt to update the deleted day
+    await expect(
+      bookingApi.updateDay(fresh.bookingId, day2Id, { eventTypeIds: ["wedding"] }),
+    ).rejects.toThrow(/Could not save this event day/i);
+
+    // Ensure day2 was not resurrected in the booking
+    const current = await bookingApi.getBooking(fresh.bookingId);
+    expect(current?.days).toHaveLength(1);
+    expect(current?.days.some((d) => d.dayId === day2Id)).toBe(false);
+  });
+});
