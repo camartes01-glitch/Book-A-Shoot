@@ -149,3 +149,75 @@ export async function logout(): Promise<void> {
   await setAuthToken(null);
   await AsyncStorage.removeItem(PROFILE_KEY);
 }
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Camartes password reset is email-OTP only (`POST /api/auth/send-password-reset-otp`). */
+export function parsePasswordResetEmail(value: string): string {
+  const identifier = value.trim();
+  if (!identifier) {
+    throw new CamartesApiError("Enter the email on your Camartes account.", 400);
+  }
+  const digits = identifier.replace(/\D/g, "");
+  if (!identifier.includes("@") && digits.length >= 10) {
+    throw new CamartesApiError("Password reset is sent to the email on your Camartes account. Enter that email address.", 400);
+  }
+  if (!EMAIL_PATTERN.test(identifier)) {
+    throw new CamartesApiError("Enter a valid email address.", 400);
+  }
+  return identifier;
+}
+
+export function parsePasswordResetOtp(value: string): string {
+  const otp = value.trim();
+  if (!otp) {
+    throw new CamartesApiError("Enter the reset code from your email.", 400);
+  }
+  if (!/^[0-9]{4,8}$/.test(otp)) {
+    throw new CamartesApiError("Enter the 4 to 8 digit reset code from your email.", 400);
+  }
+  return otp;
+}
+
+export async function requestPasswordReset(emailOrPhone: string): Promise<{ message: string; sent: boolean }> {
+  const email = parsePasswordResetEmail(emailOrPhone);
+  const payload = await camartesFetch<{ message?: unknown; sent?: unknown }>(
+    "/api/auth/send-password-reset-otp",
+    {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    },
+    { auth: false },
+  );
+  const message =
+    typeof payload?.message === "string" && payload.message.trim()
+      ? payload.message.trim()
+      : "A reset code has been sent to your email if an account exists.";
+  return { message, sent: payload?.sent !== false };
+}
+
+export async function confirmPasswordReset(input: {
+  email: string;
+  otp: string;
+  newPassword: string;
+}): Promise<{ message: string }> {
+  const email = parsePasswordResetEmail(input.email);
+  const otp = parsePasswordResetOtp(input.otp);
+  const newPassword = input.newPassword;
+  if (!newPassword || newPassword.length < 8) {
+    throw new CamartesApiError("Enter a new password of at least 8 characters.", 400);
+  }
+  const payload = await camartesFetch<{ message?: unknown }>(
+    "/api/auth/reset-password",
+    {
+      method: "POST",
+      body: JSON.stringify({ email, otp, new_password: newPassword }),
+    },
+    { auth: false },
+  );
+  const message =
+    typeof payload?.message === "string" && payload.message.trim()
+      ? payload.message.trim()
+      : "Your password has been updated. You can sign in with the new password.";
+  return { message };
+}

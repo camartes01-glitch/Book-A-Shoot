@@ -174,3 +174,28 @@ describe("BOOK A SHOOT branding lock", () => {
     expect(h).toBeLessThan(600);
   });
 });
+
+describe("Forgot Password login lock", () => {
+  test("Forgot Password sits between Password and Sign in and keeps Google, Apple, and signup", () => {
+    const login = fs.readFileSync(path.join(ROOT, "app/(auth)/login.tsx"), "utf8");
+    const reset = fs.readFileSync(path.join(ROOT, "app/(auth)/forgot-password.tsx"), "utf8");
+    const passwordIndex = login.indexOf('label="Password"');
+    const forgotIndex = login.indexOf("Forgot Password?");
+    const signInIndex = login.indexOf('label="Sign in"');
+    expect(passwordIndex).toBeGreaterThan(-1);
+    expect(forgotIndex).toBeGreaterThan(passwordIndex);
+    expect(signInIndex).toBeGreaterThan(forgotIndex);
+    expect(login).toContain('accessibilityRole="link"');
+    expect(login).toContain('accessibilityLabel="Forgot Password?"');
+    expect(login).toContain('pathname: "/(auth)/forgot-password"');
+    expect(login).toContain("Create a Camartes account");
+    expect(login).toContain("Continue with Google");
+    expect(login).toContain("Continue with Apple");
+    expect(reset).toContain("Forgot Password");
+    expect(reset).toContain("Send reset code");
+    expect(reset).toContain("Back to Sign In");
+    expect(reset).toContain("requestPasswordReset");
+    expect(reset).toContain("confirmPasswordReset");
+    expect(reset).not.toContain("Math.random");
+  });
+});

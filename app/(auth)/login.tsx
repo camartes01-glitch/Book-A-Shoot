@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { ScreenContainer } from "@/src/components/ScreenContainer";
 import { BookAShootLogo } from "@/src/components/BookAShootLogo";
 import { Button, Divider, Field, Muted } from "@/src/components/ui";
 import { useAppStore } from "@/src/state/AppProvider";
 import { CamartesApiError } from "@/src/services/camartesClient";
-import { colors, spacing } from "@/src/constants/theme";
+import { colors, spacing, touchTarget } from "@/src/constants/theme";
 
 export default function LoginScreen() {
   const { login, signup } = useAppStore();
@@ -77,6 +77,21 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
           />
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="Forgot Password?"
+            hitSlop={8}
+            onPress={() => {
+              const identifier = emailOrPhone.trim();
+              router.push({
+                pathname: "/(auth)/forgot-password",
+                params: identifier.includes("@") ? { email: identifier } : {},
+              });
+            }}
+            style={styles.forgotLink}
+          >
+            <Text style={styles.forgotLinkText}>Forgot Password?</Text>
+          </Pressable>
           {error ? <Muted style={{ color: colors.danger, fontWeight: "700" }}>{error}</Muted> : null}
           <Button label="Sign in" onPress={onSignIn} loading={loading} disabled={!emailOrPhone.trim() || !password} />
         </View>
@@ -140,4 +155,11 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   brandRow: { alignItems: "center", gap: spacing.sm, marginBottom: spacing.md, marginTop: spacing.sm },
   tagline: { textAlign: "center", paddingHorizontal: spacing.md },
+  forgotLink: {
+    alignSelf: "flex-start",
+    justifyContent: "center",
+    minHeight: touchTarget,
+    marginTop: -spacing.sm,
+  },
+  forgotLinkText: { color: colors.primaryDark, fontSize: 14, fontWeight: "700" },
 });
