@@ -62,7 +62,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [activeDraft]);
 
   const upsertLocalBooking = useCallback((updated: Booking) => {
-    setActiveDraft(updated);
+    setActiveDraft((prev) => {
+      if (!prev || prev.bookingId === updated.bookingId) return updated;
+      return prev;
+    });
     setBookings((list) => {
       const idx = list.findIndex((b) => b.bookingId === updated.bookingId);
       if (idx === -1) return [updated, ...list];
@@ -185,9 +188,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const startNewBooking = useCallback(async () => {
     if (!profile) throw new Error("Sign in first.");
     const booking = await bookingApi.startFreshBooking(profile.customerId);
-    upsertLocalBooking(booking);
+    setActiveDraft(booking);
+    setBookings((list) => {
+      const idx = list.findIndex((b) => b.bookingId === booking.bookingId);
+      if (idx === -1) return [booking, ...list];
+      const next = [...list];
+      next[idx] = booking;
+      return next;
+    });
     return booking;
-  }, [profile, upsertLocalBooking]);
+  }, [profile]);
 
   const loadDraft = useCallback(async (bookingId: string) => {
     const booking = await bookingApi.getBooking(bookingId);

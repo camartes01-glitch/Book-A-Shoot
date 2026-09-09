@@ -1,5 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { CheckCircle2, ChevronDown, ChevronUp, Circle, Copy, MapPin, Trash2 } from "lucide-react-native";
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { CheckCircle2, ChevronDown, ChevronUp, Circle, MapPin, Pencil, Trash2 } from "lucide-react-native";
 import type { EventDay } from "@/src/types/booking";
 import { DEFAULT_EVENT_CATEGORIES } from "@/src/constants/eventCategories";
 import { dayMissingLabels, isDayComplete } from "@/src/engine/validation";
@@ -13,7 +13,7 @@ function categoryLabel(id: string): string {
 export function DayCard({
   day,
   onPress,
-  onDuplicate,
+  onEdit,
   onDelete,
   deletable,
   onMoveUp,
@@ -21,7 +21,7 @@ export function DayCard({
 }: {
   day: EventDay;
   onPress: () => void;
-  onDuplicate: () => void;
+  onEdit?: () => void;
   onDelete: () => void;
   deletable: boolean;
   onMoveUp?: () => void;
@@ -30,6 +30,26 @@ export function DayCard({
   const complete = isDayComplete(day);
   const typeLabel = day.eventTypeIds.length ? day.eventTypeIds.map(categoryLabel).join(" + ") : "Event type not set";
   const missing = complete ? [] : dayMissingLabels(day);
+
+  const handleDelete = () => {
+    if (!deletable) {
+      Alert.alert("Cannot remove day", "A booking must have at least one event day.");
+      return;
+    }
+    if (Platform.OS === "web" && typeof window !== "undefined" && typeof window.confirm === "function") {
+      const ok = window.confirm(`Remove Day ${day.order}? This will remove all details configured for this event day.`);
+      if (ok) onDelete();
+    } else {
+      Alert.alert(
+        `Remove Day ${day.order}`,
+        "Are you sure you want to remove this event day? All configured details for this day will be removed.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: onDelete },
+        ]
+      );
+    }
+  };
 
   return (
     <View style={[styles.card, complete && styles.cardComplete]}>
@@ -71,27 +91,25 @@ export function DayCard({
       </Pressable>
       <View style={styles.actionsRow}>
         <Pressable
-          onPress={onDuplicate}
+          onPress={onEdit ?? onPress}
           style={styles.actionBtn}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel={`Duplicate day ${day.order}`}
+          accessibilityLabel={`Edit day ${day.order}`}
         >
-          <Copy size={14} color={colors.primaryDark} />
-          <Text style={styles.actionText}>Duplicate</Text>
+          <Pencil size={14} color={colors.primaryDark} />
+          <Text style={styles.actionText}>Edit</Text>
         </Pressable>
-        {deletable ? (
-          <Pressable
-            onPress={onDelete}
-            style={styles.actionBtn}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={`Delete day ${day.order}`}
-          >
-            <Trash2 size={14} color={colors.danger} />
-            <Text style={[styles.actionText, { color: colors.danger }]}>Delete</Text>
-          </Pressable>
-        ) : null}
+        <Pressable
+          onPress={handleDelete}
+          style={[styles.actionBtn, !deletable && { opacity: 0.4 }]}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Delete day ${day.order}`}
+        >
+          <Trash2 size={14} color={colors.danger} />
+          <Text style={[styles.actionText, { color: colors.danger }]}>Delete</Text>
+        </Pressable>
         <View style={{ flex: 1 }} />
         {onMoveUp ? (
           <Pressable onPress={onMoveUp} style={styles.iconBtn} hitSlop={8} accessibilityRole="button" accessibilityLabel="Move day up">

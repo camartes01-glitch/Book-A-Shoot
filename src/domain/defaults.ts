@@ -139,6 +139,8 @@ export function emptyDeliverables(): Deliverables {
       rawVideo: false,
       editedTraditionalVideoCount: 0,
       editedCinematicVideoCount: 0,
+      teaserCinematicEnabled: false,
+      teaserDurationMinutes: 1,
     },
   };
 }

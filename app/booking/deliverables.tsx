@@ -11,10 +11,23 @@ import { useAppStore } from "@/src/state/AppProvider";
 import { ALBUM_PAGE_OPTIONS, EDITED_PHOTO_OPTIONS } from "@/src/constants/limits";
 import type { Deliverables } from "@/src/types/booking";
 import { colors, spacing } from "@/src/constants/theme";
+import { DELIVERABLES_PRICING, getBookingPricingModel } from "@/src/config/approvedBudget";
+import { formatInrRange } from "@/src/utils/format";
 
 export default function DeliverablesScreen() {
   const { activeDraft, updateDeliverables } = useAppStore();
   const [d, setD] = useState<Deliverables | null>(activeDraft?.deliverables ?? null);
+
+  const model = getBookingPricingModel(activeDraft?.days ?? []);
+  const teaserTitle =
+    model === "wedding"
+      ? "Wedding Teaser Cinematic Editing"
+      : model === "outdoor"
+        ? "Outdoor Shoot Teaser Cinematic Editing"
+        : "Teaser Cinematic Editing";
+  const pricingGroup = model === "outdoor" ? DELIVERABLES_PRICING.outdoor : DELIVERABLES_PRICING.wedding;
+  const teaserRates = pricingGroup.teaserCinematicEditingPerMin;
+  const teaserMinutes = Math.max(1, d?.video.teaserDurationMinutes ?? 1);
 
   // See the day editor screen for why these need to be refs: the
   // useFocusEffect callback below is only created once (stable deps), so
@@ -130,6 +143,35 @@ export default function DeliverablesScreen() {
           max={10}
           onChange={(n) => patchVideo({ editedCinematicVideoCount: n })}
         />
+
+        <ToggleRow
+          label={teaserTitle}
+          description="Cinematic highlight video (per minute rate)"
+          value={Boolean(d.video.teaserCinematicEnabled)}
+          onValueChange={(v) =>
+            patchVideo({
+              teaserCinematicEnabled: v,
+              teaserDurationMinutes: v && !d.video.teaserDurationMinutes ? 1 : d.video.teaserDurationMinutes,
+            })
+          }
+        />
+        {d.video.teaserCinematicEnabled ? (
+          <View style={{ gap: spacing.xs, marginTop: 4, paddingLeft: spacing.md, borderLeftWidth: 2, borderLeftColor: colors.primary }}>
+            <Stepper
+              label="Teaser duration (minutes)"
+              value={teaserMinutes}
+              min={1}
+              max={10}
+              onChange={(n) => patchVideo({ teaserDurationMinutes: n })}
+            />
+            <Muted style={{ fontSize: 13, color: colors.primaryDark, fontWeight: "700" }}>
+              Calculated range: {formatInrRange(teaserRates.essential.min * teaserMinutes, teaserRates.essential.max * teaserMinutes)} (Essential/Signature) · {formatInrRange(teaserRates.elite.min * teaserMinutes, teaserRates.elite.max * teaserMinutes)} (Elite)
+            </Muted>
+            <Muted style={{ fontSize: 12 }}>
+              Pricing: {formatInrRange(teaserRates.essential.min, teaserRates.essential.max)}/min (Essential/Signature) · {formatInrRange(teaserRates.elite.min, teaserRates.elite.max)}/min (Elite).
+            </Muted>
+          </View>
+        ) : null}
       </Card>
     </WizardScreen>
   );

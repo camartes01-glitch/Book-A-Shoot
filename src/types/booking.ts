@@ -95,6 +95,8 @@ export type VideoDeliverables = {
   rawVideo: boolean;
   editedTraditionalVideoCount: number;
   editedCinematicVideoCount: number;
+  teaserCinematicEnabled?: boolean;
+  teaserDurationMinutes?: number;
 };
 
 export type Deliverables = {

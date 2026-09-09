@@ -22,6 +22,17 @@ export default function PackagesScreen() {
     setSelected(activeDraft?.selectedPackage ?? null);
   }, [activeDraft?.selectedPackage]);
 
+  const onSelectPackage = async (tier: PackageTierId) => {
+    setSelected(tier);
+    setLoading(true);
+    try {
+      await selectPackage(tier);
+      router.push("/booking/matches");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const onContinue = async () => {
     if (!selected) return;
     setLoading(true);
@@ -35,7 +46,7 @@ export default function PackagesScreen() {
 
   return (
     <WizardScreen
-      title="Choose what works"
+      title="Choose your package"
       step="packages"
       footer={<Button label="Find providers" onPress={onContinue} disabled={!selected} loading={loading} flex={1} />}
     >
@@ -44,7 +55,7 @@ export default function PackagesScreen() {
       </Muted>
 
       {options.map((pkg) => (
-        <PackageTierCard key={pkg.id} pkg={pkg} selected={selected === pkg.id} onSelect={() => setSelected(pkg.id)} />
+        <PackageTierCard key={pkg.id} pkg={pkg} selected={selected === pkg.id} onSelect={() => void onSelectPackage(pkg.id)} />
       ))}
     </WizardScreen>
   );

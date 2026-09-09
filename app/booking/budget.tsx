@@ -41,6 +41,19 @@ export default function BudgetScreen() {
     }
   };
 
+  const BUDGET_OPTIONS = [50000, 75000, 100000, 150000, 200000, 300000];
+
+  const onSelectBudgetOption = async (val: number) => {
+    setDigits(String(val));
+    setLoading(true);
+    try {
+      await submitBudget(val);
+      router.push("/booking/packages");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const onFooter = async () => {
     if (feasibility?.isBelowEstimate) {
       router.push("/booking/packages");
@@ -51,7 +64,7 @@ export default function BudgetScreen() {
 
   return (
     <WizardScreen
-      title="Your budget"
+      title="What is your budget?"
       step="budget"
       footer={<Button label={feasibility?.isBelowEstimate ? "Show closest options" : "Continue"} onPress={onFooter} loading={loading} flex={1} />}
     >
@@ -62,9 +75,19 @@ export default function BudgetScreen() {
       ))}
 
       <SectionTitle>What's your budget?</SectionTitle>
-      <Muted>This amount is what Camartes uses for provider matching. It is kept separate from the package ranges above.</Muted>
+      <Muted>Select an option to continue, or enter a custom amount. This amount is kept separate from the package ranges above.</Muted>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginVertical: spacing.xs }}>
+        {BUDGET_OPTIONS.map((val) => (
+          <Button
+            key={val}
+            label={formatInr(val)}
+            variant={numeric === val ? "primary" : "outline"}
+            onPress={() => void onSelectBudgetOption(val)}
+          />
+        ))}
+      </View>
       <Field
-        label="Budget"
+        label="Or enter custom budget"
         placeholder="₹ 1,00,000"
         keyboardType="number-pad"
         inputMode="numeric"

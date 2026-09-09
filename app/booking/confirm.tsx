@@ -33,6 +33,8 @@ function SectionHead({ title, onEdit }: { title: string; onEdit: () => void }) {
   );
 }
 
+import { detectDayOvertime, getBookingPricingModel } from "@/src/config/approvedBudget";
+
 export default function ConfirmBookingScreen() {
   const { activeDraft, submitVendorRequest, clearActiveDraft } = useAppStore();
   const [loading, setLoading] = useState(false);
@@ -40,7 +42,7 @@ export default function ConfirmBookingScreen() {
 
   if (!activeDraft || !activeDraft.selectedVendorId) {
     return (
-      <WizardScreen title="Review & send" step="providers">
+      <WizardScreen title="Review your booking" step="review">
         <Muted>Select a provider before sending a booking request.</Muted>
         <Button label="Find providers" onPress={() => router.replace("/booking/matches")} />
       </WizardScreen>
@@ -56,6 +58,16 @@ export default function ConfirmBookingScreen() {
     .join(" · ");
   const services = Array.from(new Set(days.flatMap((day) => selectedCoreServiceLabels(day))));
   const addOns = Array.from(new Set(days.flatMap((day) => selectedAddOnLabels(day))));
+
+  const model = getBookingPricingModel(days);
+  const teaserTitle =
+    model === "wedding"
+      ? "Wedding Teaser Cinematic Editing"
+      : model === "outdoor"
+        ? "Outdoor Shoot Teaser Cinematic Editing"
+        : "Teaser Cinematic Editing";
+  const teaserEnabled = activeDraft.deliverables.video?.teaserCinematicEnabled;
+  const teaserMins = activeDraft.deliverables.video?.teaserDurationMinutes ?? 1;
 
   const onSubmit = async () => {
     setLoading(true);
@@ -78,7 +90,7 @@ export default function ConfirmBookingScreen() {
   };
 
   return (
-    <WizardScreen title="Review & send" step="providers" footer={<Button label="Send booking request" onPress={onSubmit} loading={loading} flex={1} />}>
+    <WizardScreen title="Review your booking" step="review" footer={<Button label="Send booking request" onPress={onSubmit} loading={loading} flex={1} />}>
       <SectionTitle>You're almost booked</SectionTitle>
       {error ? <Muted style={{ color: colors.danger, fontWeight: "700" }}>{error}</Muted> : null}
       <Muted>Sending this request creates a real booking on Camartes. It is not confirmed until the provider and Camartes say so.</Muted>
@@ -91,20 +103,28 @@ export default function ConfirmBookingScreen() {
         </Muted>
       </Card>
 
-        <Card>
-          <SectionHead title="Date and time" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}` : "/booking/new")} />
-          {days.map((day) => {
-            const minutes =
-              day.startTime && day.endTime ? durationMinutes(day.startTime, day.endTime, day.overnight) : null;
-            return (
-              <Muted key={day.dayId} style={{ fontWeight: "700", color: colors.ink }}>
+      <Card>
+        <SectionHead title="Date and time" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}` : "/booking/new")} />
+        {days.map((day) => {
+          const minutes =
+            day.startTime && day.endTime ? durationMinutes(day.startTime, day.endTime, day.overnight) : null;
+          const overtime = detectDayOvertime(day, durationMinutes);
+          return (
+            <View key={day.dayId} style={{ gap: 2, marginBottom: 4 }}>
+              <Muted style={{ fontWeight: "700", color: colors.ink }}>
                 Day {day.order}: {formatDateLong(day.eventDate)} · {formatTime12h(day.startTime)} – {formatTime12h(day.endTime)}
                 {day.overnight ? " · Ends the next day" : ""}
                 {minutes != null ? ` · ${formatDuration(minutes)}` : ""}
               </Muted>
-            );
-          })}
-        </Card>
+              {overtime.isExtended && overtime.note ? (
+                <Muted style={{ color: colors.primaryDark, fontWeight: "700", fontSize: 13 }}>
+                  ⚠️ {overtime.note} (standard included schedule is 8 hours)
+                </Muted>
+              ) : null}
+            </View>
+          );
+        })}
+      </Card>
 
       <Card>
         <SectionHead title="Location" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}/location` : "/booking/new")} />
@@ -127,7 +147,20 @@ export default function ConfirmBookingScreen() {
 
       <Card>
         <SectionHead title="Deliverables" onEdit={() => router.push("/booking/deliverables")} />
-        <Muted>Photos, videos and album as specified</Muted>
+        {teaserEnabled ? (
+          <Muted style={{ fontWeight: "700", color: colors.primaryDark }}>
+            🎬 {teaserTitle}: {teaserMins} min{teaserMins > 1 ? "s" : ""}
+          </Muted>
+        ) : null}
+        <Muted>
+          Photos: {activeDraft.deliverables.photo.editedPhotosOption === "custom" ? `${activeDraft.deliverables.photo.editedPhotosCustomCount ?? 0} edited` : `${activeDraft.deliverables.photo.editedPhotosOption} edited`}
+          {activeDraft.deliverables.photo.album ? ` · Album (${activeDraft.deliverables.photo.albumPagesOption === "custom" ? activeDraft.deliverables.photo.albumPagesCustomCount : activeDraft.deliverables.photo.albumPagesOption} pages)` : ""}
+          {activeDraft.deliverables.photo.rawPhotos ? " · Raw files" : ""}
+        </Muted>
+        <Muted>
+          Videos: {activeDraft.deliverables.video.editedTraditionalVideoCount} traditional · {activeDraft.deliverables.video.editedCinematicVideoCount} cinematic
+          {activeDraft.deliverables.video.rawVideo ? " · Raw footage" : ""}
+        </Muted>
         <Muted>Expected by {formatDateLong(activeDraft.expectedDeliveryDate)}</Muted>
       </Card>
 

@@ -18,6 +18,7 @@ import {
   CORE_SERVICE_REQUIRED_MESSAGE,
   END_BEFORE_START_MESSAGE,
   OVERNIGHT_EVENT_MESSAGE,
+  hasCoreService,
   shouldShowCoreServiceError,
   validateDay,
 } from "@/src/engine/validation";
@@ -38,11 +39,13 @@ import { normalizeRouteParam } from "@/src/utils/routeParam";
 import type { EventDay } from "@/src/types/booking";
 import { colors, radius, spacing } from "@/src/constants/theme";
 
-const GROUPS = ["wedding", "personal", "commercial"] as const;
+const GROUPS = ["wedding", "pooja", "personal", "commercial"] as const;
 
 export default function DayEditorScreen() {
-  const params = useLocalSearchParams<{ dayId: string | string[] }>();
+  const params = useLocalSearchParams<{ dayId: string | string[]; step?: string }>();
   const dayId = normalizeRouteParam(params.dayId);
+  const rawStep = Array.isArray(params.step) ? params.step[0] : params.step;
+  const [screenStep, setScreenStep] = useState<"event" | "services">(rawStep === "services" ? "services" : "event");
   const { activeDraft, updateDay, loadDraft } = useAppStore();
   const [day, setDay] = useState<EventDay | null>(null);
   const [showMoreTypes, setShowMoreTypes] = useState(false);
@@ -85,7 +88,8 @@ export default function DayEditorScreen() {
 
   const applyFoundDay = useCallback(
     (found: EventDay) => {
-      const next = hydrateEditorDay(found, dayRef.current);
+      const local = dayRef.current?.dayId === found.dayId ? dayRef.current : null;
+      const next = hydrateEditorDay(found, local);
       setDay(next);
       dayRef.current = next;
       const storedIncomplete =
@@ -118,7 +122,7 @@ export default function DayEditorScreen() {
       syncFromStore();
       return () => {
         const snapshot = dayRef.current;
-        if (!snapshot) return;
+        if (!snapshot || snapshot.dayId !== dayId) return;
         persistChainRef.current = persistChainRef.current.then(
           () => updateDayRef.current(snapshot.dayId, snapshot),
           () => updateDayRef.current(snapshot.dayId, snapshot),
@@ -130,7 +134,7 @@ export default function DayEditorScreen() {
   if (!dayId) return null;
   if (!day) {
     return (
-      <WizardScreen title="Event day" step="event">
+      <WizardScreen title="What are you planning?" step="event">
         <Muted>Loading this event day…</Muted>
       </WizardScreen>
     );
@@ -145,11 +149,74 @@ export default function DayEditorScreen() {
     persistDay(next);
   };
   const patch = (p: Partial<EventDay>) => applyDay((prev) => ({ ...prev, ...p }));
+
   const toggleEventType = (id: string) => {
     applyDay((prev) => ({
       ...prev,
-      eventTypeIds: prev.eventTypeIds.includes(id) ? prev.eventTypeIds.filter((t) => t !== id) : [...prev.eventTypeIds, id],
+      eventTypeIds: prev.eventTypeIds.includes(id)
+        ? prev.eventTypeIds.filter((t) => t !== id)
+        : [...prev.eventTypeIds, id],
     }));
+    const current = dayRef.current;
+    if (
+      current &&
+      current.eventDate &&
+      current.startTime &&
+      current.endTime &&
+      (current.overnight || isEndAfterStart(current.startTime, current.endTime, false))
+    ) {
+      setTimeout(() => {
+        setScreenStep("services");
+      }, 100);
+    }
+  };
+
+  const onDateChange = (iso: string) => {
+    applyDay((prev) => {
+      const next = { ...prev, eventDate: iso };
+      if (
+        next.eventTypeIds.length > 0 &&
+        next.eventDate &&
+        next.startTime &&
+        next.endTime &&
+        (next.overnight || isEndAfterStart(next.startTime, next.endTime, false))
+      ) {
+        setTimeout(() => setScreenStep("services"), 150);
+      }
+      return next;
+    });
+  };
+
+  const onStartTimeChange = (t: string) => {
+    applyDay((prev) => {
+      const next = { ...prev, startTime: t, overnight: inferOvernight(t, prev.endTime) };
+      if (
+        next.eventTypeIds.length > 0 &&
+        next.eventDate &&
+        next.startTime &&
+        next.endTime &&
+        (next.overnight || isEndAfterStart(next.startTime, next.endTime, false))
+      ) {
+        setTimeout(() => setScreenStep("services"), 150);
+      }
+      return next;
+    });
+  };
+
+  const onEndTimeChange = (t: string) => {
+    applyDay((prev) => {
+      const next = { ...prev, endTime: t, overnight: inferOvernight(prev.startTime, t) };
+      if (
+        next.eventTypeIds.length > 0 &&
+        next.eventDate &&
+        next.startTime &&
+        next.endTime &&
+        (next.overnight || isEndAfterStart(next.startTime, next.endTime, false))
+      ) {
+        setTimeout(() => setScreenStep("services"), 150);
+      }
+      return next;
+    });
   };
 
   const issues = validateDay(day);
@@ -186,135 +253,188 @@ export default function DayEditorScreen() {
     (c) => c.enabled && c.group !== "pooja" && !featured.some((f) => f.id === c.id),
   );
 
-  const onDone = () => {
+  const canContinueToServices = Boolean(
+    day.eventTypeIds.length > 0 &&
+      day.eventDate &&
+      day.startTime &&
+      day.endTime &&
+      (day.overnight || isEndAfterStart(day.startTime, day.endTime, false)),
+  );
+
+  const onContinueToServices = () => {
     setSaveAttempted(true);
-    if (issues.length) {
-      Alert.alert("Almost there", issues[0].message);
+    if (!canContinueToServices) {
+      if (!day.eventTypeIds.length) {
+        Alert.alert("Event needed", "Please select what you are planning.");
+      } else if (!day.eventDate) {
+        Alert.alert("Date needed", "Please choose the event date.");
+      } else if (!day.startTime || !day.endTime) {
+        Alert.alert("Time needed", "Please choose start and end times.");
+      } else {
+        Alert.alert("Invalid times", END_BEFORE_START_MESSAGE);
+      }
       return;
     }
-    void flushPersist().then(() => router.back());
+    setScreenStep("services");
+  };
+
+  const onContinueToBudget = async () => {
+    setSaveAttempted(true);
+    if (!hasCoreService(day)) {
+      Alert.alert("Service required", CORE_SERVICE_REQUIRED_MESSAGE);
+      return;
+    }
+    await flushPersist();
+    router.push("/booking/budget");
   };
 
   const togglePhotography = () => applyDay((prev) => setPhotographySelected(prev, !isPhotographySelected(prev)));
   const toggleVideography = () => applyDay((prev) => setVideographySelected(prev, !isVideographySelected(prev)));
 
-  return (
-    <WizardScreen title={`Day ${day.order}`} step="event" footer={<Button label="Save" onPress={onDone} flex={1} />}>
-      <View style={{ gap: 4 }}>
-        <SectionTitle>What are you planning?</SectionTitle>
-      </View>
-
-      <View style={styles.grid}>
-        {featured.map((c) => (
-          <EventCategoryCard
-            key={c.id}
-            category={c}
-            selected={day.eventTypeIds.includes(c.id)}
-            onPress={() => toggleEventType(c.id)}
-            height={100}
+  if (screenStep === "event") {
+    return (
+      <WizardScreen
+        title="What are you planning?"
+        step="event"
+        onBack={() => router.back()}
+        footer={
+          <Button
+            label="Continue to services"
+            onPress={onContinueToServices}
+            disabled={!canContinueToServices}
+            flex={1}
           />
-        ))}
-      </View>
-      {issueOf("EVENT_TYPE_REQUIRED") ? (
-        <Muted style={{ color: colors.danger, fontWeight: "600" }}>{issueOf("EVENT_TYPE_REQUIRED")}</Muted>
-      ) : null}
-      <View style={{ gap: 6 }}>
-        <Muted style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>{EVENT_GROUP_LABEL.pooja}</Muted>
-        <ChipGroup>
-          {poojaTypes.map((c) => (
-            <Chip key={c.id} label={c.label} selected={day.eventTypeIds.includes(c.id)} onPress={() => toggleEventType(c.id)} />
-          ))}
-        </ChipGroup>
-      </View>
-      <ExpandRow
-        open={showMoreTypes}
-        onPress={() => setShowMoreTypes((v) => !v)}
-        label={showMoreTypes ? "Show fewer event types" : "More event types"}
-      />
-      {showMoreTypes
-        ? GROUPS.map((group) => {
-            const cats = extraTypes.filter((c) => c.group === group);
-            if (!cats.length) return null;
-            return (
-              <View key={group} style={{ gap: 6 }}>
-                <Muted style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>{EVENT_GROUP_LABEL[group]}</Muted>
-                <ChipGroup>
-                  {cats.map((c) => (
-                    <Chip key={c.id} label={c.label} selected={day.eventTypeIds.includes(c.id)} onPress={() => toggleEventType(c.id)} />
-                  ))}
-                </ChipGroup>
-              </View>
-            );
-          })
-        : null}
-
-      <Card>
-        <SectionTitle>Tell us about your event</SectionTitle>
-        <DateField label="When is your event?" value={day.eventDate} onChange={(iso) => patch({ eventDate: iso })} minimumDate={new Date()} />
-        {issueOf("EVENT_DATE_REQUIRED") || issueOf("EVENT_DATE_PAST") ? (
-          <Muted style={{ color: colors.danger, fontWeight: "600" }}>{issueOf("EVENT_DATE_PAST") ?? issueOf("EVENT_DATE_REQUIRED")}</Muted>
-        ) : null}
-
-        <View style={{ flexDirection: "row", gap: spacing.sm }}>
-            <TimeField
-            label="Start time"
-            value={day.startTime}
-            placeholder="Select start time"
-            onChange={(t) => applyDay((prev) => ({ ...prev, startTime: t, overnight: inferOvernight(t, prev.endTime) }))}
-          />
-          <TimeField
-            label="End time"
-            value={day.endTime}
-            placeholder="Select end time"
-            onChange={(t) => applyDay((prev) => ({ ...prev, endTime: t, overnight: inferOvernight(prev.startTime, t) }))}
-          />
+        }
+      >
+        <View style={{ gap: 4 }}>
+          <SectionTitle>What are you planning?</SectionTitle>
+          <Muted>Select one event type to get started. Tapping an option advances automatically once your date and time are set.</Muted>
         </View>
-        {issueOf("START_TIME_REQUIRED") ? (
-          <Muted style={{ color: colors.danger, fontWeight: "600" }}>{issueOf("START_TIME_REQUIRED")}</Muted>
-        ) : null}
-        {issueOf("END_TIME_REQUIRED") ? (
-          <Muted style={{ color: colors.danger, fontWeight: "600" }}>{issueOf("END_TIME_REQUIRED")}</Muted>
-        ) : null}
-        {issueOf("END_BEFORE_START") ? (
-          <Muted style={{ color: colors.danger, fontWeight: "600" }}>{END_BEFORE_START_MESSAGE}</Muted>
-        ) : null}
-        {day.overnight && bothTimesSelected ? (
-          <View style={styles.overnightBadge}>
-            <Badge label="Ends the next day" tone="peach" />
-            <Muted style={{ fontWeight: "700", color: colors.primaryDark, flex: 1 }}>{OVERNIGHT_EVENT_MESSAGE}</Muted>
-          </View>
-        ) : null}
-        {wouldBeOvernight && !day.overnight ? (
-          <Muted>Overnight is inferred for times like 8:00 PM to 2:00 AM.</Muted>
-        ) : null}
-        {duration != null && (day.overnight || isEndAfterStart(day.startTime!, day.endTime!, false)) ? (
-          <Muted>Duration: {formatDuration(duration)}</Muted>
+
+        <View style={styles.grid}>
+          {featured.map((c) => (
+            <EventCategoryCard
+              key={c.id}
+              category={c}
+              selected={day.eventTypeIds.includes(c.id)}
+              onPress={() => toggleEventType(c.id)}
+              height={100}
+            />
+          ))}
+        </View>
+        {issueOf("EVENT_TYPE_REQUIRED") ? (
+          <Muted style={{ color: colors.danger, fontWeight: "600" }}>{issueOf("EVENT_TYPE_REQUIRED")}</Muted>
         ) : null}
 
-        <Pressable
-          style={styles.locationField}
-          onPress={() => {
-            void flushPersist().then(() => router.push(`/booking/day/${day.dayId}/location`));
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Event location"
-        >
-          <MapPin size={18} color={colors.primaryDark} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.locationLabel}>Where is your event?</Text>
-            <Text style={styles.locationText} numberOfLines={2}>
-              {day.location.formattedAddress || "Search area, city or venue"}
-            </Text>
-          </View>
-        </Pressable>
-        {issueOf("LOCATION_REQUIRED") ? (
-          <Muted style={{ color: colors.danger, fontWeight: "600" }}>{issueOf("LOCATION_REQUIRED")}</Muted>
-        ) : null}
-      </Card>
+        <ExpandRow
+          open={showMoreTypes}
+          onPress={() => setShowMoreTypes((v) => !v)}
+          label={showMoreTypes ? "Show fewer event types" : "More event types"}
+        />
+        {showMoreTypes
+          ? GROUPS.map((group) => {
+              const cats =
+                group === "pooja"
+                  ? poojaTypes
+                  : extraTypes.filter((c) => c.group === group);
+              if (!cats.length) return null;
+              return (
+                <View key={group} style={{ gap: 6 }}>
+                  <Muted style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>{EVENT_GROUP_LABEL[group]}</Muted>
+                  <ChipGroup>
+                    {cats.map((c) => (
+                      <Chip key={c.id} label={c.label} selected={day.eventTypeIds.includes(c.id)} onPress={() => toggleEventType(c.id)} />
+                    ))}
+                  </ChipGroup>
+                </View>
+              );
+            })
+          : null}
 
+        <Card>
+          <SectionTitle>When & where is your event?</SectionTitle>
+          <DateField label="When is your event?" value={day.eventDate} onChange={onDateChange} minimumDate={new Date()} />
+          {issueOf("EVENT_DATE_REQUIRED") || issueOf("EVENT_DATE_PAST") ? (
+            <Muted style={{ color: colors.danger, fontWeight: "600" }}>{issueOf("EVENT_DATE_PAST") ?? issueOf("EVENT_DATE_REQUIRED")}</Muted>
+          ) : null}
+
+          <View style={{ flexDirection: "row", gap: spacing.sm }}>
+            <TimeField
+              label="Start time"
+              value={day.startTime}
+              placeholder="Select start time"
+              onChange={onStartTimeChange}
+            />
+            <TimeField
+              label="End time"
+              value={day.endTime}
+              placeholder="Select end time"
+              onChange={onEndTimeChange}
+            />
+          </View>
+          {issueOf("START_TIME_REQUIRED") ? (
+            <Muted style={{ color: colors.danger, fontWeight: "600" }}>{issueOf("START_TIME_REQUIRED")}</Muted>
+          ) : null}
+          {issueOf("END_TIME_REQUIRED") ? (
+            <Muted style={{ color: colors.danger, fontWeight: "600" }}>{issueOf("END_TIME_REQUIRED")}</Muted>
+          ) : null}
+          {issueOf("END_BEFORE_START") ? (
+            <Muted style={{ color: colors.danger, fontWeight: "600" }}>{END_BEFORE_START_MESSAGE}</Muted>
+          ) : null}
+          {day.overnight && bothTimesSelected ? (
+            <View style={styles.overnightBadge}>
+              <Badge label="Ends the next day" tone="peach" />
+              <Muted style={{ fontWeight: "700", color: colors.primaryDark, flex: 1 }}>{OVERNIGHT_EVENT_MESSAGE}</Muted>
+            </View>
+          ) : null}
+          {wouldBeOvernight && !day.overnight ? (
+            <Muted>Overnight is inferred for times like 8:00 PM to 2:00 AM.</Muted>
+          ) : null}
+          {duration != null && (day.overnight || isEndAfterStart(day.startTime!, day.endTime!, false)) ? (
+            <Muted>Duration: {formatDuration(duration)}</Muted>
+          ) : null}
+
+          <Pressable
+            style={styles.locationField}
+            onPress={() => {
+              void flushPersist().then(() => router.push(`/booking/day/${day.dayId}/location`));
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Event location"
+          >
+            <MapPin size={18} color={colors.primaryDark} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.locationLabel}>Where is your event?</Text>
+              <Text style={styles.locationText} numberOfLines={2}>
+                {day.location.formattedAddress || "Search area, city or venue"}
+              </Text>
+            </View>
+          </Pressable>
+          {issueOf("LOCATION_REQUIRED") ? (
+            <Muted style={{ color: colors.danger, fontWeight: "600" }}>{issueOf("LOCATION_REQUIRED")}</Muted>
+          ) : null}
+        </Card>
+      </WizardScreen>
+    );
+  }
+
+  return (
+    <WizardScreen
+      title="What services do you need?"
+      step="services"
+      onBack={() => setScreenStep("event")}
+      footer={
+        <Button
+          label="Continue to budget"
+          onPress={onContinueToBudget}
+          disabled={!hasCoreService(day)}
+          flex={1}
+        />
+      }
+    >
       <View style={{ gap: 4 }}>
-        <SectionTitle>What do you need?</SectionTitle>
-        <Muted>Photography or videography is required.</Muted>
+        <SectionTitle>What services do you need?</SectionTitle>
+        <Muted>Photography or videography is required. You can choose both, then customize your team size and add-ons.</Muted>
       </View>
 
       <ServiceSelectCard
@@ -326,35 +446,35 @@ export default function DayEditorScreen() {
         onPress={togglePhotography}
       >
         <>
-            <StyleRow
-              label="Traditional"
-              description="Classic, posed coverage"
-              enabled={day.photography.traditional}
-              count={day.photography.traditionalCount}
-              min={ADMIN_LIMITS.minPhotographers}
-              max={ADMIN_LIMITS.maxPhotographersPerType}
-              countLabel="Photographers"
-              onToggle={(v) =>
-                applyDay((prev) =>
-                  applyAerialGate({ ...prev, photography: { ...prev.photography, traditional: v } }),
-                )
-              }
-              onCountChange={(n) => applyDay((prev) => ({ ...prev, photography: { ...prev.photography, traditionalCount: n } }))}
-            />
-            <StyleRow
-              label="Candid"
-              description="Natural, unposed moments"
-              enabled={day.photography.candid}
-              count={day.photography.candidCount}
-              min={ADMIN_LIMITS.minPhotographers}
-              max={ADMIN_LIMITS.maxPhotographersPerType}
-              countLabel="Photographers"
-              onToggle={(v) =>
-                applyDay((prev) => applyAerialGate({ ...prev, photography: { ...prev.photography, candid: v } }))
-              }
-              onCountChange={(n) => applyDay((prev) => ({ ...prev, photography: { ...prev.photography, candidCount: n } }))}
-            />
-          </>
+          <StyleRow
+            label="Traditional"
+            description="Classic, posed coverage"
+            enabled={day.photography.traditional}
+            count={day.photography.traditionalCount}
+            min={ADMIN_LIMITS.minPhotographers}
+            max={ADMIN_LIMITS.maxPhotographersPerType}
+            countLabel="Photographers"
+            onToggle={(v) =>
+              applyDay((prev) =>
+                applyAerialGate({ ...prev, photography: { ...prev.photography, traditional: v } }),
+              )
+            }
+            onCountChange={(n) => applyDay((prev) => ({ ...prev, photography: { ...prev.photography, traditionalCount: n } }))}
+          />
+          <StyleRow
+            label="Candid"
+            description="Natural, unposed moments"
+            enabled={day.photography.candid}
+            count={day.photography.candidCount}
+            min={ADMIN_LIMITS.minPhotographers}
+            max={ADMIN_LIMITS.maxPhotographersPerType}
+            countLabel="Photographers"
+            onToggle={(v) =>
+              applyDay((prev) => applyAerialGate({ ...prev, photography: { ...prev.photography, candid: v } }))
+            }
+            onCountChange={(n) => applyDay((prev) => ({ ...prev, photography: { ...prev.photography, candidCount: n } }))}
+          />
+        </>
       </ServiceSelectCard>
 
       <ServiceSelectCard
@@ -366,35 +486,35 @@ export default function DayEditorScreen() {
         onPress={toggleVideography}
       >
         <>
-            <StyleRow
-              label="Traditional"
-              description="Classic ceremony filming"
-              enabled={day.videography.traditional}
-              count={day.videography.traditionalCount}
-              min={ADMIN_LIMITS.minVideographers}
-              max={ADMIN_LIMITS.maxVideographersPerType}
-              countLabel="Videographers"
-              onToggle={(v) =>
-                applyDay((prev) =>
-                  applyAerialGate({ ...prev, videography: { ...prev.videography, traditional: v } }),
-                )
-              }
-              onCountChange={(n) => applyDay((prev) => ({ ...prev, videography: { ...prev.videography, traditionalCount: n } }))}
-            />
-            <StyleRow
-              label="Candid"
-              description="Cinematic storytelling"
-              enabled={day.videography.candid}
-              count={day.videography.candidCount}
-              min={ADMIN_LIMITS.minVideographers}
-              max={ADMIN_LIMITS.maxVideographersPerType}
-              countLabel="Videographers"
-              onToggle={(v) =>
-                applyDay((prev) => applyAerialGate({ ...prev, videography: { ...prev.videography, candid: v } }))
-              }
-              onCountChange={(n) => applyDay((prev) => ({ ...prev, videography: { ...prev.videography, candidCount: n } }))}
-            />
-          </>
+          <StyleRow
+            label="Traditional"
+            description="Classic ceremony filming"
+            enabled={day.videography.traditional}
+            count={day.videography.traditionalCount}
+            min={ADMIN_LIMITS.minVideographers}
+            max={ADMIN_LIMITS.maxVideographersPerType}
+            countLabel="Videographers"
+            onToggle={(v) =>
+              applyDay((prev) =>
+                applyAerialGate({ ...prev, videography: { ...prev.videography, traditional: v } }),
+              )
+            }
+            onCountChange={(n) => applyDay((prev) => ({ ...prev, videography: { ...prev.videography, traditionalCount: n } }))}
+          />
+          <StyleRow
+            label="Candid"
+            description="Cinematic storytelling"
+            enabled={day.videography.candid}
+            count={day.videography.candidCount}
+            min={ADMIN_LIMITS.minVideographers}
+            max={ADMIN_LIMITS.maxVideographersPerType}
+            countLabel="Videographers"
+            onToggle={(v) =>
+              applyDay((prev) => applyAerialGate({ ...prev, videography: { ...prev.videography, candid: v } }))
+            }
+            onCountChange={(n) => applyDay((prev) => ({ ...prev, videography: { ...prev.videography, candidCount: n } }))}
+          />
+        </>
       </ServiceSelectCard>
 
       {showCoreError ? (

@@ -21,7 +21,7 @@ function day(patch: Partial<EventDay> = {}): EventDay {
   return sanitizeEventDay({
     ...createEmptyDay(1),
     eventDate: "2099-10-12",
-    eventTypeIds: ["wedding"],
+    eventTypeIds: ["ganesh_pooja"],
     location: { ...createEmptyDay(1).location, formattedAddress: "Hyderabad", city: "Hyderabad" },
     startTime: "10:00",
     endTime: "16:00",

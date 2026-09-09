@@ -2,31 +2,14 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ChevronLeft } from "lucide-react-native";
 import { router } from "expo-router";
 import { colors, spacing } from "@/src/constants/theme";
+import {
+  VISUAL_INDEX,
+  WIZARD_STEPS,
+  type VisualStepId,
+  type WizardStepId,
+} from "@/src/constants/steps";
 
-/** Customer-facing marketplace steps. Engine screens map onto these five. */
-export const WIZARD_STEPS = [
-  { id: "event", label: "Event" },
-  { id: "services", label: "Services" },
-  { id: "budget", label: "Budget" },
-  { id: "packages", label: "Packages" },
-  { id: "providers", label: "Providers" },
-] as const;
-
-export type VisualStepId = (typeof WIZARD_STEPS)[number]["id"];
-
-/** Includes legacy screen ids so existing routes keep compiling. */
-export type WizardStepId = VisualStepId | "deliverables" | "matches" | "confirm";
-
-const VISUAL_INDEX: Record<WizardStepId, number> = {
-  event: 0,
-  services: 1,
-  deliverables: 1,
-  budget: 2,
-  packages: 3,
-  providers: 4,
-  matches: 4,
-  confirm: 4,
-};
+export { WIZARD_STEPS, type VisualStepId, type WizardStepId };
 
 export function ProgressHeader({
   title,
@@ -56,7 +39,7 @@ export function ProgressHeader({
         </Text>
         <View style={{ width: 34 }} />
       </View>
-      <View style={styles.stepsRow} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 4, now: activeIndex }}>
+      <View style={styles.stepsRow} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 5, now: activeIndex }}>
         {WIZARD_STEPS.map((s, i) => {
           const done = i <= activeIndex;
           return (

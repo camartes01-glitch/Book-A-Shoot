@@ -44,6 +44,7 @@
   },
   "scripts": {
     "start": "expo start",
+    "dev": "expo start --web --port 43158 --host lan",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web --port 43158 --host lan",

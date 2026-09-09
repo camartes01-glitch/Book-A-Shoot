@@ -78,7 +78,7 @@ export default function BookingDaysScreen() {
             day={day}
             deletable={days.length > 1}
             onPress={() => router.push(`/booking/day/${day.dayId}`)}
-            onDuplicate={() => void duplicateEventDay(day.dayId)}
+            onEdit={() => router.push(`/booking/day/${day.dayId}`)}
             onDelete={() => void deleteDay(day.dayId)}
             onMoveUp={index > 0 ? () => move(index, -1) : undefined}
             onMoveDown={index < days.length - 1 ? () => move(index, 1) : undefined}

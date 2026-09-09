@@ -234,11 +234,15 @@ describe("multiple event days are priced independently then summed", () => {
 });
 
 describe("occasion, date and time do not invent extra multipliers", () => {
-  test("the same selected services keep the same overall totals across occasions", () => {
+  test("the same selected services keep the same overall totals across standard occasions", () => {
     const ganesh = setPhotographySelected(day({ eventTypeIds: ["ganesh_pooja"] }), true);
-    const wedding = setPhotographySelected(day({ eventTypeIds: ["wedding"] }), true);
+    const personal = setPhotographySelected(day({ eventTypeIds: ["birthday"] }), true);
     expect(totals([ganesh]).signature).toMatchObject({ minPrice: 4000, maxPrice: 5000 });
-    expect(totals([wedding]).signature).toMatchObject({ minPrice: 4000, maxPrice: 5000 });
+    expect(totals([personal]).signature).toMatchObject({ minPrice: 4000, maxPrice: 5000 });
+
+    // Wedding uses the Wedding Package model (8,000–10,000 for Signature)
+    const wedding = setPhotographySelected(day({ eventTypeIds: ["wedding"] }), true);
+    expect(totals([wedding]).signature).toMatchObject({ minPrice: 8000, maxPrice: 10000 });
   });
 
   test("the same selected services keep the same overall totals across dates", () => {

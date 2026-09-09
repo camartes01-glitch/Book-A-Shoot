@@ -51,7 +51,7 @@ export default function VendorMatchesScreen() {
   const pkgLabel = quoted?.label;
 
   return (
-    <WizardScreen title="Find your provider" step="providers">
+    <WizardScreen title="Choose your photographer or videographer" step="providers">
       {loading ? (
         <View style={{ paddingVertical: spacing.xl, alignItems: "center", gap: spacing.sm }}>
           <ActivityIndicator color={colors.primary} size="large" />

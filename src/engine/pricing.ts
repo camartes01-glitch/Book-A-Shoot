@@ -13,7 +13,7 @@ import {
 } from "@/src/config/approvedBudget";
 
 export function estimateBookingCost(booking: Pick<Booking, "days" | "deliverables">): number {
-  return overallApprovedRange(booking.days, "essential").min;
+  return overallApprovedRange(booking.days, "essential", booking.deliverables).min;
 }
 
 export function generatePackageOptions(
@@ -21,8 +21,8 @@ export function generatePackageOptions(
   budget: number,
 ): PackageOption[] {
   const options = PACKAGE_TIER_ORDER.map((tier) => {
-    const serviceLines = approvedServiceLines(booking.days, tier);
-    const total = overallApprovedRange(booking.days, tier);
+    const serviceLines = approvedServiceLines(booking.days, tier, booking.deliverables);
+    const total = overallApprovedRange(booking.days, tier, booking.deliverables);
     return {
       id: tier,
       label: PACKAGE_TIER_META[tier].label,
@@ -72,9 +72,10 @@ export function selectedPackageQuote(
 }
 
 /** Inputs that must rebuild Essential / Signature / Elite overall totals. */
-export function bookingPricingInputKey(booking: Pick<Booking, "days" | "budget">): string {
+export function bookingPricingInputKey(booking: Pick<Booking, "days" | "budget"> & { deliverables?: Booking["deliverables"] }): string {
   return JSON.stringify({
     budget: booking.budget,
+    deliverables: booking.deliverables,
     days: booking.days.map((day) => ({
       dayId: day.dayId,
       eventDate: day.eventDate,

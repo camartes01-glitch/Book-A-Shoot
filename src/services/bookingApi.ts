@@ -202,11 +202,17 @@ let startFreshInFlight: Promise<Booking> | null = null;
 
 export async function startFreshBooking(customerId: string): Promise<Booking> {
   if (startFreshInFlight) return startFreshInFlight;
-  startFreshInFlight = createBooking(customerId);
+  const inFlight = (async () => {
+    await dayWriteChain.catch(() => undefined);
+    return createBooking(customerId);
+  })();
+  startFreshInFlight = inFlight;
   try {
-    return await startFreshInFlight;
+    return await inFlight;
   } finally {
-    startFreshInFlight = null;
+    if (startFreshInFlight === inFlight) {
+      startFreshInFlight = null;
+    }
   }
 }
 
@@ -265,7 +271,7 @@ export async function updateDay(bookingId: string, dayId: string | string[], pat
         current = owner.days.find((d) => d.dayId === resolvedDayId) ?? null;
       }
     }
-    if (!current && booking?.days.length === 1) {
+    if (!current && booking?.days.length === 1 && !resolvedDayId) {
       current = booking.days[0];
     }
     if (!booking || !current) {
@@ -291,6 +297,9 @@ export async function updateDay(bookingId: string, dayId: string | string[], pat
 export async function deleteDay(bookingId: string, dayId: string): Promise<Booking> {
   const booking = await getBooking(bookingId);
   if (!booking) throw new Error("Booking not found");
+  if (booking.days.length <= 1) {
+    throw new Error("A booking must have at least one event day.");
+  }
   const days = booking.days.filter((d) => d.dayId !== dayId).map((d, i) => ({ ...d, order: i + 1 }));
   return saveBooking({ ...booking, days, ...invalidateStalePackageAndMatches(booking) });
 }
