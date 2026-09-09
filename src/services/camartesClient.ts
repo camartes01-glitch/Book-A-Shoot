@@ -6,7 +6,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { isDemoAuthMode } from "@/src/config/authMode";
 
-export const CAMARTES_API = "https://camartes-backend.onrender.com";
+export const CAMARTES_API =
+  process.env.EXPO_PUBLIC_CAMARTES_API_URL?.trim() || "https://camartes-backend.onrender.com";
 const TOKEN_KEY = "camartes-customer:auth-token:v1";
 
 export class CamartesApiError extends Error {

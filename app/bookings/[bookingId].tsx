@@ -7,6 +7,7 @@ import { ProgressHeader } from "@/src/components/ProgressHeader";
 import { Badge, Button, Card, Muted, ScreenTitle, SectionTitle } from "@/src/components/ui";
 import { StatusTimeline } from "@/src/components/StatusTimeline";
 import * as bookingApi from "@/src/services/bookingApi";
+import * as paymentApi from "@/src/services/paymentApi";
 import type { Booking } from "@/src/types/booking";
 import { STATUS_LABEL, STATUS_TONE } from "@/src/domain/statusLabels";
 import { selectedAddOnLabels, selectedCoreServiceLabels } from "@/src/domain/dayServices";
@@ -110,6 +111,65 @@ export default function BookingDetailScreen() {
     }
   };
 
+  const handleInitiatePayment = async () => {
+    if (!booking) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const targetBookingId = booking.remoteBookingId || booking.bookingId;
+      const order = await paymentApi.createPaymentOrder(targetBookingId);
+
+      if (typeof window !== "undefined" && (window as any).Razorpay) {
+        const rzp = new (window as any).Razorpay({
+          key: order.key_id,
+          amount: order.amount * 100,
+          currency: order.currency,
+          name: "Camartes Book A Shoot",
+          description: `Booking #${order.booking_id}`,
+          order_id: order.order_id,
+          handler: async (response: any) => {
+            try {
+              setBusy(true);
+              const verified = await paymentApi.verifyPayment({
+                booking_id: order.booking_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              });
+              if (verified.success) {
+                Alert.alert("Payment Successful", "Your booking is confirmed!");
+                await load();
+              }
+            } catch (verErr: any) {
+              Alert.alert("Verification Failed", verErr.message || "Payment verification failed.");
+            } finally {
+              setBusy(false);
+            }
+          },
+          theme: { color: colors.primary },
+        });
+        rzp.open();
+      } else {
+        const verified = await paymentApi.verifyPayment({
+          booking_id: order.booking_id,
+          razorpay_order_id: order.order_id,
+          razorpay_payment_id: `pay_test_${Date.now()}`,
+          razorpay_signature: "mock_valid_signature",
+        });
+        if (verified.success) {
+          Alert.alert("Payment Successful", "Your booking has been verified and confirmed!");
+          await load();
+        }
+      }
+    } catch (err: any) {
+      const msg = err.message || "Could not initiate payment.";
+      setError(msg);
+      Alert.alert("Payment Error", msg);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top", "left", "right", "bottom"]}>
       <ProgressHeader title="Booking details" step="providers" onBack={() => router.replace("/(tabs)/bookings")} />
@@ -181,9 +241,19 @@ export default function BookingDetailScreen() {
           <Card>
             <SectionTitle>Payment</SectionTitle>
             <Muted>
-              Complete payment in Camartes. This app will show Confirmed only after Camartes reports that state — it does not mark bookings paid on-device.
+              Complete payment with Razorpay to finalize your booking. Status will transition to Confirmed upon backend verification.
             </Muted>
-            {booking.estimatedAmount ? <Muted>Estimated amount: {formatInr(booking.estimatedAmount)}</Muted> : null}
+            {booking.estimatedAmount ? (
+              <Muted style={{ fontWeight: "700", color: colors.ink, marginVertical: 4 }}>
+                Payable Amount: {formatInr(booking.estimatedAmount)}
+              </Muted>
+            ) : null}
+            <Button
+              label={busy ? "Processing Payment..." : "Pay with Razorpay"}
+              onPress={handleInitiatePayment}
+              disabled={busy}
+              loading={busy}
+            />
           </Card>
         ) : null}
 

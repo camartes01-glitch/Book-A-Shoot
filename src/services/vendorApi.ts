@@ -16,7 +16,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { CustomerVendor } from "@/src/types/vendor";
 
-export const CAMARTES_API = "https://camartes-backend.onrender.com";
+import { CAMARTES_API } from "@/src/services/camartesClient";
+export { CAMARTES_API };
 const VENDOR_CACHE_KEY = "camartes-customer:vendor-cache:v1";
 
 const SEARCH_SERVICE_TYPES = ["photographer", "videographer", "photography_firm", "fly_cam", "led_wall", "web_live_services"];
@@ -29,6 +30,7 @@ type RawSearchHit = {
   id?: string;
   display_name?: string;
   full_name?: string;
+  name?: string;
   city?: string;
   location?: string;
   service_type?: string;
@@ -41,16 +43,22 @@ type RawSearchHit = {
   is_available?: boolean;
   shooting_style?: string[];
   filmmaking_style?: string[];
+  specialties?: string[];
+  quality_options?: string[];
   equipment?: string[];
   equipment_owned?: string[];
   kyc_verified?: boolean;
   coverage_areas?: string[];
   coverage_area?: string;
-  service_areas?: string[];
   tagline?: string;
+  description?: string;
   projects_completed?: string;
   portfolio_items?: Array<{ image?: string }>;
+  portfolio?: Array<{ id?: number; title?: string; image?: string; category?: string }>;
   pricing?: RawPricing;
+  hourly_rate?: number;
+  half_day_rate?: number;
+  full_day_rate?: number;
 };
 
 export type CatalogQuery = {
@@ -62,18 +70,16 @@ export type CatalogQuery = {
 };
 
 async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): Promise<RawSearchHit[]> {
-  const body: Record<string, unknown> = { service_type: serviceType };
-  if (query.city?.trim()) body.city = query.city.trim();
-  if (query.eventDate?.trim()) body.event_date = query.eventDate.trim();
-  if (typeof query.latitude === "number") body.latitude = query.latitude;
-  if (typeof query.longitude === "number") body.longitude = query.longitude;
-  const res = await fetch(`${CAMARTES_API}/api/providers/search`, {
-    method: "POST",
+  // Use GET /api/providers/service/{service_type} instead of POST /api/providers/search
+  // The backend endpoint returns all providers for a service type with full details
+  const url = new URL(`${CAMARTES_API}/api/providers/service/${encodeURIComponent(serviceType)}`);
+
+  const res = await fetch(url.toString(), {
+    method: "GET",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new Error(`Camartes provider search failed (${res.status}) for ${serviceType}.`);
+    throw new Error(`Camartes provider service lookup failed (${res.status}) for ${serviceType}.`);
   }
   const rows = (await res.json()) as RawSearchHit[];
   return Array.isArray(rows) ? rows : [];
@@ -163,10 +169,10 @@ function newAggregate(vendorId: string): Aggregate {
 }
 
 function mergeHit(acc: Aggregate, hit: RawSearchHit) {
-  acc.name = acc.name || hit.display_name || hit.full_name || "Studio";
+  acc.name = acc.name || hit.display_name || hit.full_name || hit.name || "Studio";
   acc.city = acc.city || hit.city || hit.location || "";
   acc.phone = acc.phone || hit.contact_phone || undefined;
-  acc.about = acc.about || hit.tagline || "";
+  acc.about = acc.about || hit.tagline || hit.description || "";
   acc.experienceYears = Math.max(acc.experienceYears, hit.years_experience ?? 0);
   const rating = ratingOf(hit);
   if (rating != null) {
@@ -179,15 +185,29 @@ function mergeHit(acc: Aggregate, hit: RawSearchHit) {
   if (hit.kyc_verified === true) acc.kycVerified = true;
   for (const area of hit.coverage_areas ?? []) acc.serviceAreas.add(area);
   if (hit.coverage_area) acc.serviceAreas.add(hit.coverage_area);
-  for (const item of hit.portfolio_items ?? []) if (item.image) acc.portfolio.push(item.image);
-  const dayRate = extractDayRate(hit.pricing);
+
+  // Handle portfolio from new backend format or legacy format
+  const portfolioItems = Array.isArray(hit.portfolio) ? hit.portfolio : (hit.portfolio_items ?? []);
+  for (const item of portfolioItems) {
+    const imageUrl = typeof item === 'string' ? item : (item.image || null);
+    if (imageUrl) acc.portfolio.push(imageUrl);
+  }
+
+  // Extract day rate from new backend pricing fields or legacy pricing object
+  const dayRate = extractDayRate(hit.pricing) ||
+                  (typeof hit.full_day_rate === 'number' ? hit.full_day_rate : null) ||
+                  (typeof hit.hourly_rate === 'number' ? hit.hourly_rate * 8 : null);
   if (dayRate) acc.dayRates.push(dayRate);
 
   const equipment = [...(hit.equipment ?? []), ...(hit.equipment_owned ?? [])];
-  const hasDrone = equipment.some((e) => e.toLowerCase().includes("drone"));
+  const hasDrone = equipment.some((e) => e && typeof e === 'string' && e.toLowerCase().includes("drone"));
+
+  // Use specialties/quality_options from new backend format if available
+  const specialties = Array.isArray(hit.specialties) ? hit.specialties : (hit.shooting_style ?? []);
+  const qualityOptions = Array.isArray(hit.quality_options) ? hit.quality_options : (hit.filmmaking_style ?? []);
 
   if (hit.service_type === "photographer") {
-    const styles = (hit.shooting_style ?? []).map((s) => s.toLowerCase());
+    const styles = specialties.map((s) => typeof s === 'string' ? s.toLowerCase() : s);
     if (!styles.length) {
       acc.photographyTraditional = true;
       acc.photographyCandid = true;
@@ -198,7 +218,7 @@ function mergeHit(acc: Aggregate, hit: RawSearchHit) {
     if (hasDrone) acc.aerialPhotography = true;
   }
   if (hit.service_type === "videographer") {
-    const styles = (hit.filmmaking_style ?? []).map((s) => s.toLowerCase());
+    const styles = qualityOptions.map((s) => typeof s === 'string' ? s.toLowerCase() : s);
     if (!styles.length) {
       acc.videographyTraditional = true;
       acc.videographyCandid = true;

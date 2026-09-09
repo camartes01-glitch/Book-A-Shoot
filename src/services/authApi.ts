@@ -156,25 +156,24 @@ export async function loginWithGoogle(idToken: string): Promise<CustomerProfile>
   if (isDemoAuthMode()) {
     rejectDemoGoogleSignIn();
   }
-  if (googleLoginInFlight) return googleLoginInFlight;
   const token = idToken.trim();
   if (!token) {
-    throw new CamartesApiError("Google did not return an ID token.", 401);
+    throw new CamartesApiError("A valid Google ID token is required.", 400);
   }
-  googleLoginInFlight = (async () => {
-    const payload = await camartesFetch<unknown>(
-      "/api/auth/google",
-      {
-        method: "POST",
-        body: JSON.stringify({ id_token: token }),
-      },
-      { auth: false },
-    );
-    return profileAfterAuth(payload);
-  })().finally(() => {
-    googleLoginInFlight = null;
-  });
-  return googleLoginInFlight;
+  const response = await camartesFetch<{ access_token: string; expires_at: string }>(
+    "/api/auth/google",
+    {
+      method: "POST",
+      body: JSON.stringify({ id_token: token }),
+    },
+    { requireAuth: false },
+  );
+  if (!response?.access_token) {
+    throw new CamartesApiError("Camartes did not return a session token for Google sign-in.", 502);
+  }
+  await setAuthToken(response.access_token);
+  const me = await camartesFetch<unknown>("/api/auth/me", {}, { requireAuth: true });
+  return persistProfile(profileFromCamartesUser(me, {}));
 }
 
 export async function restoreSession(): Promise<CustomerProfile | null> {
@@ -252,19 +251,18 @@ export async function requestPasswordReset(emailOrPhone: string): Promise<{ mess
     rejectDemoPasswordReset();
   }
   const email = parsePasswordResetEmail(emailOrPhone);
-  const payload = await camartesFetch<{ message?: unknown; sent?: unknown }>(
+  const response = await camartesFetch<{ message?: string; sent?: boolean }>(
     "/api/auth/send-password-reset-otp",
     {
       method: "POST",
       body: JSON.stringify({ email }),
     },
-    { auth: false },
+    { requireAuth: false },
   );
-  const message =
-    typeof payload?.message === "string" && payload.message.trim()
-      ? payload.message.trim()
-      : "A reset code has been sent to your email if an account exists.";
-  return { message, sent: payload?.sent !== false };
+  return {
+    message: response?.message ?? "If this email is registered, a reset code has been sent.",
+    sent: response?.sent ?? true,
+  };
 }
 
 export async function confirmPasswordReset(input: {
@@ -277,21 +275,22 @@ export async function confirmPasswordReset(input: {
   }
   const email = parsePasswordResetEmail(input.email);
   const otp = parsePasswordResetOtp(input.otp);
-  const newPassword = input.newPassword;
-  if (!newPassword || newPassword.length < 8) {
-    throw new CamartesApiError("Enter a new password of at least 8 characters.", 400);
+  if (!input.newPassword || input.newPassword.length < 6) {
+    throw new CamartesApiError("Password must be at least 6 characters long.", 400);
   }
-  const payload = await camartesFetch<{ message?: unknown }>(
+  const response = await camartesFetch<{ message?: string }>(
     "/api/auth/reset-password",
     {
       method: "POST",
-      body: JSON.stringify({ email, otp, new_password: newPassword }),
+      body: JSON.stringify({
+        email,
+        otp,
+        new_password: input.newPassword,
+      }),
     },
-    { auth: false },
+    { requireAuth: false },
   );
-  const message =
-    typeof payload?.message === "string" && payload.message.trim()
-      ? payload.message.trim()
-      : "Your password has been updated. You can sign in with the new password.";
-  return { message };
+  return {
+    message: response?.message ?? "Password has been successfully reset.",
+  };
 }

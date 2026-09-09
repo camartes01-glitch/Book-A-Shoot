@@ -49,7 +49,7 @@ describe("booking matching and submission against Camartes", () => {
   beforeEach(() => {
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.includes("/api/providers/search")) {
+      if (url.includes("/api/providers/service/photographer")) {
         return jsonResponse(200, [LIVE_PHOTOGRAPHER]);
       }
       if (url.includes("/api/bookings")) {
@@ -120,7 +120,7 @@ describe("booking matching and submission against Camartes", () => {
     await setAuthToken("test-token");
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes("/api/providers/search")) return jsonResponse(200, [LIVE_PHOTOGRAPHER]);
+      if (url.includes("/api/providers/service/photographer")) return jsonResponse(200, [LIVE_PHOTOGRAPHER]);
       if (url.includes("/api/bookings") && init?.method === "POST") {
         return jsonResponse(400, { detail: "event_date is required" });
       }
@@ -144,7 +144,7 @@ describe("booking matching and submission against Camartes", () => {
     await setAuthToken("test-token");
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes("/api/providers/search")) return jsonResponse(200, [LIVE_PHOTOGRAPHER]);
+      if (url.includes("/api/providers/service/photographer")) return jsonResponse(200, [LIVE_PHOTOGRAPHER]);
       if (url.includes("/api/bookings") && init?.method === "POST") {
         return jsonResponse(403, {
           detail: {
@@ -179,7 +179,7 @@ describe("booking matching and submission against Camartes", () => {
     await setAuthToken("test-token");
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes("/api/providers/search")) return jsonResponse(200, [LIVE_PHOTOGRAPHER]);
+      if (url.includes("/api/providers/service/photographer")) return jsonResponse(200, [LIVE_PHOTOGRAPHER]);
       if (url.includes("/api/bookings") && init?.method === "POST") {
         return jsonResponse(500, { detail: "Internal server error" });
       }
@@ -204,7 +204,7 @@ describe("booking matching and submission against Camartes", () => {
     await setAuthToken("test-token");
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes("/api/providers/search")) return jsonResponse(200, [LIVE_PHOTOGRAPHER]);
+      if (url.includes("/api/providers/service/photographer")) return jsonResponse(200, [LIVE_PHOTOGRAPHER]);
       if (url.includes("/api/bookings") && init?.method === "POST") {
         return jsonResponse(200, { booking_id: "bk_live_99", status: "pending" });
       }

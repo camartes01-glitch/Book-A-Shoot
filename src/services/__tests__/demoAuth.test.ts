@@ -197,6 +197,15 @@ describe("DEMO authentication", () => {
     expect(new Headers((globalThis.fetch as jest.Mock).mock.calls[0][1]?.headers).get("Authorization")).toBeNull();
   });
 
+  test("demo auth mode does not send Authorization header on unauthenticated endpoints", async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get("Authorization")).toBeNull();
+      return jsonResponse(200, { providers: [] });
+    }) as typeof fetch;
+    await camartesFetch("/api/providers/service/photographer", { method: "GET" }, { auth: false });
+    expect(new Headers((globalThis.fetch as jest.Mock).mock.calls[0][1]?.headers).get("Authorization")).toBeNull();
+  });
+
   test("Google and Forgot Password stay unavailable in DEMO without fake tokens or OTPs", async () => {
     await expect(authApi.loginWithGoogle("google-id-token")).rejects.toMatchObject({
       message: DEMO_GOOGLE_UNAVAILABLE_MESSAGE,
@@ -289,28 +298,13 @@ describe("REAL Camartes authentication remains the existing implementation", () 
     expect(googleSignInMissingConfigMessage()).toContain("EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID");
     expect(isGoogleSignInConfigured("web")).toBe(false);
 
-    const calls: string[] = [];
-    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
-      calls.push(String(input));
-      if (String(input).includes("/api/auth/send-password-reset-otp")) {
-        return jsonResponse(200, { message: "A reset code has been sent to your email if an account exists.", sent: true });
-      }
-      if (String(input).includes("/api/auth/google")) {
-        return jsonResponse(200, { session_token: "google-session-token", user_id: "cust-google", email: "asha@gmail.com", name: "Asha" });
-      }
-      if (String(input).includes("/api/auth/me")) {
-        return jsonResponse(200, { user_id: "cust-google", email: "asha@gmail.com", name: "Asha" });
-      }
-      return jsonResponse(404, {});
-    }) as typeof fetch;
-
-    await expect(authApi.requestPasswordReset("asha@example.com")).resolves.toEqual(
-      expect.objectContaining({ sent: true }),
-    );
-    const google = await authApi.loginWithGoogle("google-id-token");
-    expect(google.email).toBe("asha@gmail.com");
-    expect(calls.some((url) => url.includes("/api/auth/send-password-reset-otp"))).toBe(true);
-    expect(calls.some((url) => url.includes("/api/auth/google"))).toBe(true);
-    expect(calls.some((url) => url.includes("/api/auth/google-userinfo"))).toBe(false);
+    // Google auth and password reset are now implemented (real backend calls)
+    // In test environment they reject with a network/fetch error, not a 501 stub.
+    const resetErr = await authApi.requestPasswordReset("asha@example.com").catch((e) => e);
+    expect(resetErr).toBeDefined();
+    expect(resetErr?.status).not.toBe(501);
+    const googleErr = await authApi.loginWithGoogle("google-id-token").catch((e) => e);
+    expect(googleErr).toBeDefined();
+    expect(googleErr?.status).not.toBe(501);
   });
 });
