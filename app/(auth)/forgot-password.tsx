@@ -4,7 +4,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import { ScreenContainer } from "@/src/components/ScreenContainer";
 import { BookAShootLogo } from "@/src/components/BookAShootLogo";
 import { Button, Field, Muted, ScreenTitle } from "@/src/components/ui";
+import { isDemoAuthMode } from "@/src/config/authMode";
 import { confirmPasswordReset, requestPasswordReset } from "@/src/services/authApi";
+import { DEMO_PASSWORD_RESET_UNAVAILABLE_MESSAGE } from "@/src/services/demoAuth";
 import { CamartesApiError } from "@/src/services/camartesClient";
 import { normalizeRouteParam } from "@/src/utils/routeParam";
 import { colors, spacing, touchTarget } from "@/src/constants/theme";
@@ -77,7 +79,9 @@ export default function ForgotPasswordScreen() {
       <ScreenTitle>{heading}</ScreenTitle>
       {step === "request" ? (
         <Muted>
-          Enter the email on your Camartes account. If it matches an account, Camartes will send a reset code.
+          {isDemoAuthMode()
+            ? DEMO_PASSWORD_RESET_UNAVAILABLE_MESSAGE
+            : "Enter the email on your Camartes account. If it matches an account, Camartes will send a reset code."}
         </Muted>
       ) : null}
       {step === "verify" ? (

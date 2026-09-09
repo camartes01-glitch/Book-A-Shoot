@@ -5,8 +5,8 @@ import { Pencil } from "lucide-react-native";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { Button, Card, Muted, SectionTitle } from "@/src/components/ui";
 import { useAppStore } from "@/src/state/AppProvider";
-import { generatePackageOptions } from "@/src/engine/pricing";
-import { formatDateLong, formatInr, formatInrRange, formatTime12h } from "@/src/utils/format";
+import { selectedPackageQuote } from "@/src/engine/pricing";
+import { formatDateLong, formatInr, formatInrRange, formatPackageOverallLabel, formatTime12h } from "@/src/utils/format";
 import { durationMinutes, formatDuration } from "@/src/utils/dateTime";
 import { colors } from "@/src/constants/theme";
 import { DEFAULT_EVENT_CATEGORIES } from "@/src/constants/eventCategories";
@@ -47,9 +47,7 @@ export default function ConfirmBookingScreen() {
     );
   }
   const match = activeDraft.matches?.find((m) => m.vendorId === activeDraft.selectedVendorId);
-  const pkg =
-    activeDraft.packageOptions?.find((p) => p.id === activeDraft.selectedPackage) ??
-    generatePackageOptions(activeDraft, activeDraft.budget ?? 0).find((p) => p.id === activeDraft.selectedPackage);
+  const pkg = selectedPackageQuote(activeDraft);
   const days = [...activeDraft.days].sort((a, b) => a.order - b.order);
   const firstDay = days[0];
   const eventLabel = days
@@ -141,9 +139,13 @@ export default function ConfirmBookingScreen() {
 
       <Card>
         <SectionHead title="Package" onEdit={() => router.push("/booking/packages")} />
-        <Muted style={{ fontWeight: "800", color: colors.ink }}>{pkg?.label ?? activeDraft.selectedPackage}</Muted>
+        <Muted style={{ fontWeight: "800", color: colors.ink, flexShrink: 1 }}>
+          {pkg ? formatPackageOverallLabel(pkg.label, pkg.minPrice, pkg.maxPrice) : (activeDraft.selectedPackage ?? "—")}
+        </Muted>
         {pkg && pkg.maxPrice > 0 ? (
-          <Muted style={{ fontSize: 20, fontWeight: "800", color: colors.primaryDark }}>{formatInrRange(pkg.minPrice, pkg.maxPrice)}</Muted>
+          <Muted style={{ fontSize: 20, fontWeight: "800", color: colors.primaryDark, flexShrink: 1 }}>
+            {formatInrRange(pkg.minPrice, pkg.maxPrice)}
+          </Muted>
         ) : null}
         <Muted>Approved range for your selected services. Not a provider quote.</Muted>
       </Card>

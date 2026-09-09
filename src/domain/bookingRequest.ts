@@ -2,6 +2,8 @@ import type { Booking, CustomerProfile, EventDay } from "@/src/types/booking";
 import { durationMinutes } from "@/src/utils/dateTime";
 import { bookingRequirementPayload, selectedAddOnLabels, selectedCoreServiceLabels } from "@/src/domain/dayServices";
 import { eventTypeLabels } from "@/src/constants/eventCategories";
+import { selectedPackageQuote } from "@/src/engine/pricing";
+import { formatInrRange } from "@/src/utils/format";
 
 /** Body for POST /api/bookings (Camartes BookingRequestModel). */
 export type CamartesBookingRequest = {
@@ -79,9 +81,13 @@ export function toCamartesBookingRequest(booking: Booking, profile: CustomerProf
       .join("\n");
   });
 
+  const quoted = selectedPackageQuote(booking);
   const message = [
     `Camartes booking request`,
     `Package: ${booking.selectedPackage ?? "n/a"}`,
+    quoted && quoted.maxPrice > 0
+      ? `Package estimate: ${formatInrRange(quoted.minPrice, quoted.maxPrice)} (customer-side approved range, not a provider quote)`
+      : null,
     booking.expectedDeliveryDate ? `Expected delivery: ${booking.expectedDeliveryDate}` : null,
     ...lines,
   ]

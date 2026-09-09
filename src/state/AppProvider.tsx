@@ -13,6 +13,7 @@ type AppContextValue = {
   profile: CustomerProfile | null;
   login: (emailOrPhone: string, password: string) => Promise<void>;
   signup: (input: { name: string; email: string; phone: string; password: string }) => Promise<void>;
+  loginWithGoogle: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (patch: Partial<CustomerProfile>) => Promise<void>;
 
@@ -95,37 +96,79 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setNotifications(await getNotifications());
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      const stored = await authApi.restoreSession();
-      setProfile(stored);
-      if (stored) {
-        const list = await bookingApi.listBookings(stored.customerId);
-        setBookings(list);
-        setActiveDraft(selectActiveWizardDraft(list));
-      }
-      setNotifications(await getNotifications());
-      setReady(true);
-    })();
+  const adoptAuthenticatedBookings = useCallback(async (customerId: string) => {
+    try {
+      const list = await bookingApi.listBookings(customerId);
+      setBookings(list);
+      setActiveDraft((prev) => {
+        if (prev && isLocalWizardBooking(prev) && !prev.remoteBookingId) {
+          return list.find((b) => b.bookingId === prev.bookingId) ?? prev;
+        }
+        if (prev) {
+          const updated = list.find(
+            (b) => b.bookingId === prev.bookingId || (prev.remoteBookingId != null && b.remoteBookingId === prev.remoteBookingId),
+          );
+          if (updated) {
+            if (prev.updatedAt > updated.updatedAt) return prev;
+            return updated;
+          }
+          if (isLocalWizardBooking(prev) && !prev.remoteBookingId) return prev;
+        }
+        return selectActiveWizardDraft(list);
+      });
+    } catch {
+      /* Auth already succeeded. Booking list/KYC errors must not unwind the session. */
+    }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const stored = await authApi.restoreSession();
+        if (cancelled) return;
+        setProfile(stored);
+        if (stored) {
+          await adoptAuthenticatedBookings(stored.customerId);
+        }
+        if (!cancelled) setNotifications(await getNotifications());
+      } finally {
+        if (!cancelled) setReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [adoptAuthenticatedBookings]);
 
   useEffect(() => subscribeNotifications(() => void refreshNotifications()), [refreshNotifications]);
 
-  const login = useCallback(async (emailOrPhone: string, password: string) => {
-    const result = await authApi.login(emailOrPhone, password);
-    setProfile(result);
-    const list = await bookingApi.listBookings(result.customerId);
-    setBookings(list);
-    setActiveDraft(selectActiveWizardDraft(list));
-  }, []);
+  const login = useCallback(
+    async (emailOrPhone: string, password: string) => {
+      const result = await authApi.login(emailOrPhone, password);
+      setProfile(result);
+      await adoptAuthenticatedBookings(result.customerId);
+    },
+    [adoptAuthenticatedBookings],
+  );
 
-  const signup = useCallback(async (input: { name: string; email: string; phone: string; password: string }) => {
-    const result = await authApi.signup(input);
-    setProfile(result);
-    const list = await bookingApi.listBookings(result.customerId);
-    setBookings(list);
-    setActiveDraft(selectActiveWizardDraft(list));
-  }, []);
+  const signup = useCallback(
+    async (input: { name: string; email: string; phone: string; password: string }) => {
+      const result = await authApi.signup(input);
+      setProfile(result);
+      await adoptAuthenticatedBookings(result.customerId);
+    },
+    [adoptAuthenticatedBookings],
+  );
+
+  const loginWithGoogle = useCallback(
+    async (idToken: string) => {
+      const result = await authApi.loginWithGoogle(idToken);
+      setProfile(result);
+      await adoptAuthenticatedBookings(result.customerId);
+    },
+    [adoptAuthenticatedBookings],
+  );
 
   const logout = useCallback(async () => {
     await authApi.logout();
@@ -297,6 +340,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       profile,
       login,
       signup,
+      loginWithGoogle,
       logout,
       updateProfile: updateProfileFn,
       bookings,
@@ -332,6 +376,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       profile,
       login,
       signup,
+      loginWithGoogle,
       logout,
       updateProfileFn,
       bookings,

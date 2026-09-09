@@ -11,7 +11,8 @@ import type { Booking } from "@/src/types/booking";
 import { STATUS_LABEL, STATUS_TONE } from "@/src/domain/statusLabels";
 import { selectedAddOnLabels, selectedCoreServiceLabels } from "@/src/domain/dayServices";
 import { eventTypeLabels } from "@/src/constants/eventCategories";
-import { formatDateLong, formatInr } from "@/src/utils/format";
+import { selectedPackageQuote } from "@/src/engine/pricing";
+import { formatDateLong, formatInr, formatInrRange, formatPackageOverallLabel } from "@/src/utils/format";
 import { colors, spacing } from "@/src/constants/theme";
 import { useAppStore } from "@/src/state/AppProvider";
 import { normalizeRouteParam } from "@/src/utils/routeParam";
@@ -88,6 +89,7 @@ export default function BookingDetailScreen() {
   const displayId = booking.remoteBookingId || booking.bookingId;
   const services = Array.from(new Set(booking.days.flatMap((day) => selectedCoreServiceLabels(day))));
   const addOns = Array.from(new Set(booking.days.flatMap((day) => selectedAddOnLabels(day))));
+  const quoted = selectedPackageQuote(booking);
 
   const run = async (fn: () => Promise<Booking>) => {
     setBusy(true);
@@ -224,12 +226,24 @@ export default function BookingDetailScreen() {
             <Muted>Add-ons</Muted>
             <Muted style={{ fontWeight: "700", flex: 1, textAlign: "right" }}>{addOns.join(" · ") || "None"}</Muted>
           </View>
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
             <Muted>Package</Muted>
-            <Muted style={{ fontWeight: "700", textTransform: "capitalize" }}>{booking.selectedPackage ?? "—"}</Muted>
+            <Muted style={{ fontWeight: "700", flex: 1, textAlign: "right", flexShrink: 1 }}>
+              {quoted
+                ? formatPackageOverallLabel(quoted.label, quoted.minPrice, quoted.maxPrice)
+                : booking.selectedPackage ?? "—"}
+            </Muted>
           </View>
+          {quoted && quoted.maxPrice > 0 ? (
+            <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+              <Muted>Package estimate</Muted>
+              <Muted style={{ fontWeight: "700", flex: 1, textAlign: "right", flexShrink: 1 }}>
+                {formatInrRange(quoted.minPrice, quoted.maxPrice)}
+              </Muted>
+            </View>
+          ) : null}
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Muted>Estimated amount</Muted>
+            <Muted>Provider estimate</Muted>
             <Muted style={{ fontWeight: "700" }}>{booking.estimatedAmount ? formatInr(booking.estimatedAmount) : "—"}</Muted>
           </View>
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>

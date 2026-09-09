@@ -16,7 +16,14 @@ export function formatInr(amount: number): string {
 }
 
 export function formatInrRange(min: number, max: number): string {
-  return `${formatInr(min)} – ${formatInr(max)}`;
+  if (min === max) return formatInr(min);
+  return `${formatInr(min)}–${formatInr(max)}`;
+}
+
+/** Package name plus the overall calculated range, e.g. Essential — ₹3,000–₹4,000. */
+export function formatPackageOverallLabel(label: string, minPrice: number, maxPrice: number): string {
+  if (maxPrice <= 0) return label;
+  return `${label} — ${formatInrRange(minPrice, maxPrice)}`;
 }
 
 export function formatDateLong(iso: string | null): string {

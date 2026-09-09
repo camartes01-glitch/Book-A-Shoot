@@ -9,12 +9,11 @@ import {
   PACKAGE_TIER_META,
   PACKAGE_TIER_ORDER,
   approvedServiceLines,
-  sumRange,
+  overallApprovedRange,
 } from "@/src/config/approvedBudget";
 
 export function estimateBookingCost(booking: Pick<Booking, "days" | "deliverables">): number {
-  const lines = approvedServiceLines(booking.days, "essential");
-  return sumRange(lines).min;
+  return overallApprovedRange(booking.days, "essential").min;
 }
 
 export function generatePackageOptions(
@@ -23,7 +22,7 @@ export function generatePackageOptions(
 ): PackageOption[] {
   const options = PACKAGE_TIER_ORDER.map((tier) => {
     const serviceLines = approvedServiceLines(booking.days, tier);
-    const total = sumRange(serviceLines);
+    const total = overallApprovedRange(booking.days, tier);
     return {
       id: tier,
       label: PACKAGE_TIER_META[tier].label,
@@ -56,6 +55,40 @@ export function generatePackageOptions(
   }
 
   return options.map((option) => ({ ...option, recommended: option.id === recommended }));
+}
+
+/** Same generator Packages, Budget, and Review use — never a second pricing path. */
+export function resolvePackageOptions(
+  booking: Pick<Booking, "days" | "deliverables" | "budget">,
+): PackageOption[] {
+  return generatePackageOptions(booking, booking.budget ?? 0);
+}
+
+export function selectedPackageQuote(
+  booking: Pick<Booking, "days" | "deliverables" | "budget" | "selectedPackage">,
+): PackageOption | undefined {
+  if (!booking.selectedPackage) return undefined;
+  return resolvePackageOptions(booking).find((option) => option.id === booking.selectedPackage);
+}
+
+/** Inputs that must rebuild Essential / Signature / Elite overall totals. */
+export function bookingPricingInputKey(booking: Pick<Booking, "days" | "budget">): string {
+  return JSON.stringify({
+    budget: booking.budget,
+    days: booking.days.map((day) => ({
+      dayId: day.dayId,
+      eventDate: day.eventDate,
+      startTime: day.startTime,
+      endTime: day.endTime,
+      overnight: day.overnight,
+      eventTypeIds: day.eventTypeIds,
+      photography: day.photography,
+      videography: day.videography,
+      aerial: day.aerial,
+      ledWall: day.ledWall,
+      webLive: day.webLive,
+    })),
+  });
 }
 
 export type BudgetFeasibilityResult = {

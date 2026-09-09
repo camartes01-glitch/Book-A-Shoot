@@ -8,6 +8,7 @@ import { ProviderCard } from "@/src/components/ProviderCard";
 import { EmptyState } from "@/src/components/EmptyState";
 import { useAppStore } from "@/src/state/AppProvider";
 import { MAX_MATCHES } from "@/src/engine/matching";
+import { selectedPackageQuote } from "@/src/engine/pricing";
 import { colors, spacing } from "@/src/constants/theme";
 
 export default function VendorMatchesScreen() {
@@ -46,7 +47,8 @@ export default function VendorMatchesScreen() {
   };
 
   const matches = activeDraft?.matches ?? [];
-  const pkgLabel = activeDraft?.packageOptions?.find((p) => p.id === activeDraft.selectedPackage)?.label;
+  const quoted = activeDraft ? selectedPackageQuote(activeDraft) : undefined;
+  const pkgLabel = quoted?.label;
 
   return (
     <WizardScreen title="Find your provider" step="providers">

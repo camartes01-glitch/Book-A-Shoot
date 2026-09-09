@@ -1,13 +1,28 @@
 /**
- * Camartes authentication. Login and signup go to the live Vendor Platform.
- * Tokens are stored on-device and never logged.
+ * Camartes authentication. Login and signup go to the live Vendor Platform
+ * when AUTH_MODE is REAL. DEMO mode uses local accounts and never calls
+ * Camartes auth APIs. Tokens are stored on-device and never logged.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { CustomerProfile } from "@/src/types/booking";
+import { isDemoAuthMode } from "@/src/config/authMode";
 import { camartesFetch, CamartesApiError, extractAccessToken, getAuthToken, setAuthToken } from "@/src/services/camartesClient";
+import {
+  loginDemo,
+  logoutDemo,
+  rejectDemoGoogleSignIn,
+  rejectDemoPasswordReset,
+  restoreDemoSession,
+  signupDemo,
+} from "@/src/services/demoAuth";
 import { makeId } from "@/src/utils/id";
 
 const PROFILE_KEY = "camartes-customer:profile:v1";
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+let loginInFlight: Promise<CustomerProfile> | null = null;
+let signupInFlight: Promise<CustomerProfile> | null = null;
+let googleLoginInFlight: Promise<CustomerProfile> | null = null;
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -59,60 +74,113 @@ export async function getStoredProfile(): Promise<CustomerProfile | null> {
   return raw ? (JSON.parse(raw) as CustomerProfile) : null;
 }
 
+async function clearLocalSession(): Promise<void> {
+  await setAuthToken(null);
+  await AsyncStorage.removeItem(PROFILE_KEY);
+}
+
 async function profileAfterAuth(payload: unknown, fallback: Partial<CustomerProfile> = {}): Promise<CustomerProfile> {
   const token = extractAccessToken(payload);
-  if (token) await setAuthToken(token);
-  if (!(await getAuthToken())) {
+  if (!token) {
     throw new CamartesApiError("Camartes did not return a sign-in token.", 401);
   }
+  await setAuthToken(token);
   try {
     const me = await camartesFetch<unknown>("/api/auth/me", {}, { requireAuth: true });
     const existing = await getStoredProfile();
-    return persistProfile(profileFromCamartesUser(me, { ...existing, ...fallback }));
-  } catch {
-    return persistProfile(profileFromCamartesUser(payload, fallback));
+    const fromAuth = profileFromCamartesUser(payload, fallback);
+    return persistProfile(profileFromCamartesUser(me, { ...existing, ...fromAuth, ...fallback }));
+  } catch (error) {
+    await clearLocalSession();
+    throw error;
   }
 }
 
 export async function login(emailOrPhone: string, password: string): Promise<CustomerProfile> {
+  if (loginInFlight) return loginInFlight;
   const identifier = emailOrPhone.trim();
   if (!identifier || !password) {
     throw new CamartesApiError("Enter your email or phone and password.", 400);
   }
-  const payload = await camartesFetch<unknown>(
-    "/api/auth/login",
-    {
-      method: "POST",
-      body: JSON.stringify({ email_or_phone: identifier, password }),
-    },
-    { auth: false },
-  );
-  return profileAfterAuth(payload, identifier.includes("@") ? { email: identifier } : { mobile: identifier.replace(/\D/g, "").slice(-10) });
+  loginInFlight = (async () => {
+    if (isDemoAuthMode()) {
+      return loginDemo(identifier, password);
+    }
+    const payload = await camartesFetch<unknown>(
+      "/api/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify({ email_or_phone: identifier, password }),
+      },
+      { auth: false },
+    );
+    return profileAfterAuth(payload, identifier.includes("@") ? { email: identifier } : { mobile: identifier.replace(/\D/g, "").slice(-10) });
+  })().finally(() => {
+    loginInFlight = null;
+  });
+  return loginInFlight;
 }
 
 export async function signup(input: { name: string; email: string; phone: string; password: string }): Promise<CustomerProfile> {
+  if (signupInFlight) return signupInFlight;
   const name = input.name.trim();
   const email = input.email.trim();
   const phone = input.phone.replace(/\D/g, "").slice(-10);
-  if (!name || !email.includes("@") || phone.length !== 10 || input.password.length < 8) {
+  if (!name || !EMAIL_PATTERN.test(email) || phone.length !== 10 || input.password.length < 8) {
     throw new CamartesApiError("Enter your name, a valid email, a 10-digit mobile number, and a password of at least 8 characters.", 400);
   }
-  const payload = await camartesFetch<unknown>(
-    "/api/auth/signup",
-    {
-      method: "POST",
-      body: JSON.stringify({ name, email, phone_number: phone, password: input.password }),
-    },
-    { auth: false },
-  );
-  const token = extractAccessToken(payload);
-  if (token) {
-    return profileAfterAuth(payload, { name, email, mobile: phone });
+  signupInFlight = (async () => {
+    if (isDemoAuthMode()) {
+      return signupDemo({ name, email, phone, password: input.password });
+    }
+    const payload = await camartesFetch<unknown>(
+      "/api/auth/signup",
+      {
+        method: "POST",
+        body: JSON.stringify({ name, email, phone_number: phone, password: input.password }),
+      },
+      { auth: false },
+    );
+    const token = extractAccessToken(payload);
+    if (token) {
+      return profileAfterAuth(payload, { name, email, mobile: phone });
+    }
+    return login(email, input.password);
+  })().finally(() => {
+    signupInFlight = null;
+  });
+  return signupInFlight;
+}
+
+export async function loginWithGoogle(idToken: string): Promise<CustomerProfile> {
+  if (isDemoAuthMode()) {
+    rejectDemoGoogleSignIn();
   }
-  return login(email, input.password);
+  if (googleLoginInFlight) return googleLoginInFlight;
+  const token = idToken.trim();
+  if (!token) {
+    throw new CamartesApiError("Google did not return an ID token.", 401);
+  }
+  googleLoginInFlight = (async () => {
+    const payload = await camartesFetch<unknown>(
+      "/api/auth/google",
+      {
+        method: "POST",
+        body: JSON.stringify({ id_token: token }),
+      },
+      { auth: false },
+    );
+    return profileAfterAuth(payload);
+  })().finally(() => {
+    googleLoginInFlight = null;
+  });
+  return googleLoginInFlight;
 }
 
 export async function restoreSession(): Promise<CustomerProfile | null> {
+  if (isDemoAuthMode()) {
+    return restoreDemoSession();
+  }
   const token = await getAuthToken();
   if (!token) {
     await AsyncStorage.removeItem(PROFILE_KEY);
@@ -124,8 +192,7 @@ export async function restoreSession(): Promise<CustomerProfile | null> {
     return persistProfile(profileFromCamartesUser(me, existing ?? {}));
   } catch (error) {
     if (error instanceof CamartesApiError && error.status === 401) {
-      await setAuthToken(null);
-      await AsyncStorage.removeItem(PROFILE_KEY);
+      await clearLocalSession();
       return null;
     }
     return getStoredProfile();
@@ -141,16 +208,17 @@ export async function updateProfile(patch: Partial<CustomerProfile>): Promise<Cu
 }
 
 export async function logout(): Promise<void> {
+  if (isDemoAuthMode()) {
+    await logoutDemo();
+    return;
+  }
   try {
     await camartesFetch("/api/auth/logout", { method: "POST" }, { requireAuth: false });
   } catch {
     /* still clear the local session */
   }
-  await setAuthToken(null);
-  await AsyncStorage.removeItem(PROFILE_KEY);
+  await clearLocalSession();
 }
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Camartes password reset is email-OTP only (`POST /api/auth/send-password-reset-otp`). */
 export function parsePasswordResetEmail(value: string): string {
@@ -180,6 +248,9 @@ export function parsePasswordResetOtp(value: string): string {
 }
 
 export async function requestPasswordReset(emailOrPhone: string): Promise<{ message: string; sent: boolean }> {
+  if (isDemoAuthMode()) {
+    rejectDemoPasswordReset();
+  }
   const email = parsePasswordResetEmail(emailOrPhone);
   const payload = await camartesFetch<{ message?: unknown; sent?: unknown }>(
     "/api/auth/send-password-reset-otp",
@@ -201,6 +272,9 @@ export async function confirmPasswordReset(input: {
   otp: string;
   newPassword: string;
 }): Promise<{ message: string }> {
+  if (isDemoAuthMode()) {
+    rejectDemoPasswordReset();
+  }
   const email = parsePasswordResetEmail(input.email);
   const otp = parsePasswordResetOtp(input.otp);
   const newPassword = input.newPassword;

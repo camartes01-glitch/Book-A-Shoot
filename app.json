@@ -66,7 +66,8 @@
           "locationWhenInUsePermission": "Camartes uses your location to find your event address and match nearby photographers and videographers."
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

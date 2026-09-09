@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { CheckCircle2 } from "lucide-react-native";
 import { Badge, Button, Card, Muted, Title } from "@/src/components/ui";
 import type { PackageOption } from "@/src/types/booking";
-import { formatInrRange } from "@/src/utils/format";
+import { formatInrRange, formatPackageOverallLabel } from "@/src/utils/format";
 import { colors, spacing } from "@/src/constants/theme";
 import { selectionFeedback } from "@/src/utils/haptics";
 
@@ -41,15 +41,17 @@ export function PackageTierCard({
         disabled={!selectable}
         accessibilityRole={selectable ? "button" : undefined}
         accessibilityState={{ selected: !!selected }}
-        accessibilityLabel={`${pkg.label} package`}
+        accessibilityLabel={`${formatPackageOverallLabel(pkg.label, pkg.minPrice, pkg.maxPrice)} package`}
       >
         <View style={styles.titleRow}>
-          <Title>{pkg.label}</Title>
+          <Title style={styles.packageName}>{formatPackageOverallLabel(pkg.label, pkg.minPrice, pkg.maxPrice)}</Title>
           {prominent ? <Badge label="Most chosen" /> : null}
           {pkg.recommended ? <Badge label="Closest to your budget" tone="green" /> : null}
           {selected ? <Badge label="Selected" tone="green" /> : null}
         </View>
-        <Text style={styles.price}>{pkg.maxPrice > 0 ? formatInrRange(pkg.minPrice, pkg.maxPrice) : "Select coverage to see rates"}</Text>
+        <Text style={styles.price}>
+          {pkg.maxPrice > 0 ? formatInrRange(pkg.minPrice, pkg.maxPrice) : "Select coverage to see rates"}
+        </Text>
         <Muted>{pkg.headline}</Muted>
       </Pressable>
       <View style={{ gap: 6 }}>
@@ -85,7 +87,15 @@ export function PackageTierCard({
 }
 
 const styles = StyleSheet.create({
-  titleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  price: { fontSize: 20, fontWeight: "800", color: colors.primaryDark, marginTop: spacing.xs },
+  titleRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, flexWrap: "wrap" },
+  packageName: { flexGrow: 1, flexShrink: 1, minWidth: 0 },
+  price: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: colors.primaryDark,
+    marginTop: spacing.xs,
+    flexShrink: 1,
+    flexWrap: "wrap",
+  },
   line: { flexDirection: "row", alignItems: "flex-start", gap: 6 },
 });

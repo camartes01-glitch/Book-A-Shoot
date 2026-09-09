@@ -1,8 +1,10 @@
 /**
  * Authenticated HTTP client for the live Camartes Vendor Platform.
  * Tokens are stored on-device and never logged.
+ * DEMO auth sessions are local-only and are never attached as Bearer tokens.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { isDemoAuthMode } from "@/src/config/authMode";
 
 export const CAMARTES_API = "https://camartes-backend.onrender.com";
 const TOKEN_KEY = "camartes-customer:auth-token:v1";
@@ -32,15 +34,26 @@ export async function setAuthToken(token: string | null): Promise<void> {
   await AsyncStorage.setItem(TOKEN_KEY, token);
 }
 
+function tokenFrom(value: unknown): string | null {
+  if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  return null;
+}
+
+/** Login returns `session_token`; signup returns `session.access_token`. */
 export function extractAccessToken(payload: unknown): string | null {
   if (!payload || typeof payload !== "object") return null;
   const row = payload as Record<string, unknown>;
-  const direct = row.access_token ?? row.accessToken ?? row.token;
-  if (typeof direct === "string" && direct.length > 0) return direct;
+  const direct =
+    tokenFrom(row.access_token) ??
+    tokenFrom(row.accessToken) ??
+    tokenFrom(row.session_token) ??
+    tokenFrom(row.sessionToken) ??
+    tokenFrom(row.token);
+  if (direct) return direct;
   const session = row.session;
   if (session && typeof session === "object") {
-    const nested = (session as Record<string, unknown>).access_token;
-    if (typeof nested === "string" && nested.length > 0) return nested;
+    const nested = extractAccessToken(session);
+    if (nested) return nested;
   }
   const data = row.data;
   if (data && typeof data === "object") return extractAccessToken(data);
@@ -64,8 +77,12 @@ function friendlyDetail(detail: string): string {
       /* keep original */
     }
   }
-  if (trimmed.toLowerCase().includes("invalid email/phone or password")) {
+  const lower = trimmed.toLowerCase();
+  if (lower.includes("invalid email/phone or password") || lower.includes("invalid login credentials")) {
     return "Invalid email, phone, or password.";
+  }
+  if (lower.includes("invalid phone number or password")) {
+    return "Invalid phone number or password.";
   }
   return trimmed;
 }
@@ -111,7 +128,7 @@ export async function camartesFetch<T>(
   const headers = new Headers(init.headers);
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const needsAuth = opts.auth !== false;
-  const token = needsAuth ? await getAuthToken() : null;
+  const token = isDemoAuthMode() ? null : needsAuth ? await getAuthToken() : null;
   if (opts.requireAuth && !token) {
     throw new CamartesApiError("Sign in to your Camartes account to continue.", 401);
   }
@@ -137,8 +154,16 @@ export async function camartesFetch<T>(
   if (!res.ok) {
     const fallback =
       res.status === 401
-        ? "Sign in to your Camartes account to continue."
-        : `Camartes request failed (${res.status}).`;
+        ? path.includes("/api/auth/login")
+          ? "Invalid email, phone, or password."
+          : path.includes("/api/auth/google")
+            ? "Google sign-in was rejected by Camartes."
+            : "Sign in to your Camartes account to continue."
+        : res.status === 403
+          ? "Camartes denied this request."
+          : res.status === 404 && path.includes("/api/auth/google")
+            ? "Camartes Google sign-in is not available."
+            : `Camartes request failed (${res.status}).`;
     throw new CamartesApiError(detailMessage(parsed, fallback), res.status);
   }
 

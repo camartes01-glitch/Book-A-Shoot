@@ -339,9 +339,11 @@ export async function submitBudget(
 export async function selectPackage(bookingId: string, tier: PackageTierId): Promise<Booking> {
   const booking = await getBooking(bookingId);
   if (!booking) throw new Error("Booking not found");
+  const packageOptions = generatePackageOptions(booking, booking.budget ?? 0);
   return saveBooking({
     ...booking,
     selectedPackage: tier,
+    packageOptions,
     status: "MATCHING",
     ...invalidateMatches(booking),
   });

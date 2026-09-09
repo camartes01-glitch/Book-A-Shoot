@@ -130,7 +130,37 @@ export function approvedRange(id: ApprovedServiceId, tier: PackageTierId): Price
   return approvedServiceById(id).ranges[tier];
 }
 
-/** Peak selected quantities across event days. Not multiplied by number of days. */
+/** Selected quantities for one event day. Traditional Videographer is per schedule, not per hour. */
+export function selectedServiceQuantitiesForDay(day: EventDay): Record<ApprovedServiceId, number> {
+  const qty: Record<ApprovedServiceId, number> = {
+    traditional_photographer: 0,
+    traditional_videographer: 0,
+    candid_photographer: 0,
+    candid_videographer: 0,
+    drone_operators: 0,
+    web_live_link: 0,
+    led_wall: 0,
+  };
+  if (day.photography.traditional) {
+    qty.traditional_photographer = Math.max(1, day.photography.traditionalCount);
+  }
+  if (day.photography.candid) {
+    qty.candid_photographer = Math.max(1, day.photography.candidCount);
+  }
+  if (day.videography.traditional) {
+    qty.traditional_videographer = Math.max(1, day.videography.traditionalCount);
+  }
+  if (day.videography.candid) {
+    qty.candid_videographer = Math.max(1, day.videography.candidCount);
+  }
+  const drones = day.aerial.photographyDrones + day.aerial.videographyDrones;
+  if (drones > 0) qty.drone_operators = drones;
+  if (day.webLive.enabled) qty.web_live_link = 1;
+  if (day.ledWall.enabled) qty.led_wall = Math.max(1, day.ledWall.screenCount);
+  return qty;
+}
+
+/** Selected quantities summed independently across event days. */
 export function selectedServiceQuantities(days: EventDay[]): Record<ApprovedServiceId, number> {
   const qty: Record<ApprovedServiceId, number> = {
     traditional_photographer: 0,
@@ -142,22 +172,10 @@ export function selectedServiceQuantities(days: EventDay[]): Record<ApprovedServ
     led_wall: 0,
   };
   for (const day of days) {
-    if (day.photography.traditional) {
-      qty.traditional_photographer = Math.max(qty.traditional_photographer, Math.max(1, day.photography.traditionalCount));
-    }
-    if (day.photography.candid) {
-      qty.candid_photographer = Math.max(qty.candid_photographer, Math.max(1, day.photography.candidCount));
-    }
-    if (day.videography.traditional) {
-      qty.traditional_videographer = Math.max(qty.traditional_videographer, Math.max(1, day.videography.traditionalCount));
-    }
-    if (day.videography.candid) {
-      qty.candid_videographer = Math.max(qty.candid_videographer, Math.max(1, day.videography.candidCount));
-    }
-    const drones = day.aerial.photographyDrones + day.aerial.videographyDrones;
-    if (drones > 0) qty.drone_operators = Math.max(qty.drone_operators, drones);
-    if (day.webLive.enabled) qty.web_live_link = Math.max(qty.web_live_link, 1);
-    if (day.ledWall.enabled) qty.led_wall = Math.max(qty.led_wall, Math.max(1, day.ledWall.screenCount));
+    const dayQty = selectedServiceQuantitiesForDay(day);
+    (Object.keys(qty) as ApprovedServiceId[]).forEach((id) => {
+      qty[id] += dayQty[id];
+    });
   }
   return qty;
 }
@@ -171,8 +189,10 @@ export type ApprovedServiceLine = {
   note?: string;
 };
 
-export function approvedServiceLines(days: EventDay[], tier: PackageTierId): ApprovedServiceLine[] {
-  const qty = selectedServiceQuantities(days);
+export function approvedServiceLinesFromQty(
+  qty: Record<ApprovedServiceId, number>,
+  tier: PackageTierId,
+): ApprovedServiceLine[] {
   return APPROVED_SERVICES.flatMap((service) => {
     const quantity = qty[service.id];
     if (quantity <= 0) return [];
@@ -190,6 +210,39 @@ export function approvedServiceLines(days: EventDay[], tier: PackageTierId): App
   });
 }
 
+export function approvedServiceLinesForDay(day: EventDay, tier: PackageTierId): ApprovedServiceLine[] {
+  return approvedServiceLinesFromQty(selectedServiceQuantitiesForDay(day), tier);
+}
+
+/** Combined lines for the complete booking: each event day is priced, then totals are summed. */
+export function approvedServiceLines(days: EventDay[], tier: PackageTierId): ApprovedServiceLine[] {
+  const combined = new Map<ApprovedServiceId, ApprovedServiceLine>();
+  for (const day of days) {
+    for (const line of approvedServiceLinesForDay(day, tier)) {
+      const previous = combined.get(line.serviceId);
+      if (!previous) {
+        combined.set(line.serviceId, { ...line });
+        continue;
+      }
+      combined.set(line.serviceId, {
+        ...previous,
+        quantity: previous.quantity + line.quantity,
+        minPrice: previous.minPrice + line.minPrice,
+        maxPrice: previous.maxPrice + line.maxPrice,
+      });
+    }
+  }
+  return APPROVED_SERVICES.flatMap((service) => {
+    const line = combined.get(service.id);
+    return line ? [line] : [];
+  });
+}
+
 export function sumRange(lines: ApprovedServiceLine[]): PriceRange {
   return lines.reduce((acc, line) => ({ min: acc.min + line.minPrice, max: acc.max + line.maxPrice }), { min: 0, max: 0 });
+}
+
+/** Overall Essential / Signature / Elite range for every selected service on every event day. */
+export function overallApprovedRange(days: EventDay[], tier: PackageTierId): PriceRange {
+  return sumRange(approvedServiceLines(days, tier));
 }

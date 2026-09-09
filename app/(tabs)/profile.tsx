@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
+import { Alert, Platform, StyleSheet, View } from "react-native";
 import { router } from "expo-router";
 import { LogOut, MapPin, Mail, Phone } from "lucide-react-native";
 import { ScreenContainer } from "@/src/components/ScreenContainer";
@@ -17,15 +17,24 @@ export default function ProfileScreen() {
     setEditing(false);
   };
 
+  const performLogout = async () => {
+    await logout();
+    router.replace("/(auth)/login");
+  };
+
   const onLogout = () => {
+    if (Platform.OS === "web") {
+      const confirmed = typeof window !== "undefined" && window.confirm("Log out? You can sign back in anytime.");
+      if (confirmed) void performLogout();
+      return;
+    }
     Alert.alert("Log out?", "You can sign back in anytime.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Log out",
         style: "destructive",
-        onPress: async () => {
-          await logout();
-          router.replace("/(auth)/login");
+        onPress: () => {
+          void performLogout();
         },
       },
     ]);
