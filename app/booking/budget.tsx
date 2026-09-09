@@ -85,7 +85,7 @@ export default function BudgetScreen() {
       onBack={() => {
         const first = activeDraft?.days?.[0];
         if (first) {
-          router.push({ pathname: "/booking/day/[dayId]", params: { dayId: first.dayId, step: "services", back: "1" } });
+          router.push({ pathname: "/booking/day/[dayId]", params: { dayId: first.dayId, step: "addons", back: "1" } });
         } else {
           router.back();
         }

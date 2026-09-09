@@ -159,6 +159,7 @@ export function createEmptyBooking(customerId: string): Booking {
     budget: null,
     selectedPackage: null,
     packageOptions: null,
+    providerLocationPreference: null,
     matches: null,
     selectedVendorId: null,
     estimatedAmount: null,

@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import type { AppNotification, Booking, EventDay, PackageTierId } from "@/src/types/booking";
+import type { AppNotification, Booking, EventDay, PackageTierId, ProviderLocationPreference } from "@/src/types/booking";
 import type { CustomerProfile } from "@/src/types/booking";
 import * as authApi from "@/src/services/authApi";
 import * as bookingApi from "@/src/services/bookingApi";
@@ -34,6 +34,7 @@ type AppContextValue = {
   updateExpectedDelivery: (date: string) => Promise<void>;
   submitBudget: (budget: number) => Promise<BudgetFeasibilityResult>;
   selectPackage: (tier: PackageTierId) => Promise<void>;
+  setProviderLocationPreference: (pref: ProviderLocationPreference) => Promise<void>;
   loadVendorMatches: () => Promise<void>;
   selectVendor: (vendorId: string) => Promise<void>;
   submitVendorRequest: () => Promise<Booking>;
@@ -298,6 +299,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [withDraft],
   );
 
+  const setProviderLocationPreference = useCallback(
+    async (pref: ProviderLocationPreference) => {
+      await withDraft((id) => bookingApi.updateProviderLocationPreference(id, pref));
+    },
+    [withDraft],
+  );
+
   const loadVendorMatches = useCallback(async () => {
     await withDraft((id) => bookingApi.getVendorMatches(id));
   }, [withDraft]);
@@ -404,6 +412,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateExpectedDelivery,
       submitBudget,
       selectPackage,
+      setProviderLocationPreference,
       loadVendorMatches,
       selectVendor,
       submitVendorRequest,
@@ -442,6 +451,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateExpectedDelivery,
       submitBudget,
       selectPackage,
+      setProviderLocationPreference,
       loadVendorMatches,
       selectVendor,
       submitVendorRequest,

@@ -61,7 +61,7 @@ export default function VendorMatchesScreen() {
     <WizardScreen
       title="Choose your photographer or videographer"
       step="providers"
-      onBack={() => router.push("/booking/packages")}
+      onBack={() => router.push("/booking/location-preference")}
     >
       {loading ? (
         <View style={{ paddingVertical: spacing.xl, alignItems: "center", gap: spacing.sm }}>

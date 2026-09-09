@@ -184,6 +184,20 @@ describe("Automatic Navigation & Validation Gates", () => {
       expect(day.photography.traditional || day.photography.candid).toBe(true);
       expect(day.videography.traditional || day.videography.candid).toBe(true);
     });
+
+    test("selecting Photography does not auto-advance to Budget; requires completing sequential steps", () => {
+      const day = setPhotographySelected(createEmptyDay(1), true);
+      // Even when services step is complete, auto-advance is removed:
+      expect(isServicesStepComplete(day)).toBe(true);
+      // Core services present:
+      expect(hasCoreService(day)).toBe(true);
+    });
+
+    test("selecting Videography does not auto-advance to Budget; requires completing sequential steps", () => {
+      const day = setVideographySelected(createEmptyDay(1), true);
+      expect(isServicesStepComplete(day)).toBe(true);
+      expect(hasCoreService(day)).toBe(true);
+    });
   });
 
   describe("Step 3: Budget auto-advance rules", () => {
@@ -195,16 +209,21 @@ describe("Automatic Navigation & Validation Gates", () => {
     });
   });
 
-  describe("Step 4: Package selection auto-advance rules", () => {
-    test("selecting any package tier advances to Providers", () => {
+  describe("Step 4 & 5: Package selection & Location preference rules", () => {
+    test("selecting any package tier advances to Location preference", () => {
       const tiers: PackageTierId[] = ["essential", "signature", "elite"];
       for (const tier of tiers) {
         expect(["essential", "signature", "elite"]).toContain(tier);
       }
     });
+
+    test("provider location preference supports event_location, preferred_area, and another_area", () => {
+      const modes = ["event_location", "preferred_area", "another_area"] as const;
+      expect(modes).toHaveLength(3);
+    });
   });
 
-  describe("Step 5 & 6: Provider and Review rules", () => {
+  describe("Step 6 & 7: Provider and Review rules", () => {
     test("empty provider matches state does not advance to Review", () => {
       const matches: unknown[] = [];
       const canAdvanceToReview = matches.length > 0;

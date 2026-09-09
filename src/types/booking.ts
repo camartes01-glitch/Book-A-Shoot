@@ -176,6 +176,12 @@ export type VendorMatchResult = {
   serviceCategory?: string;
 };
 
+export type ProviderLocationPreference = {
+  mode: "event_location" | "preferred_area" | "another_area";
+  city?: string;
+  formattedAddress?: string;
+};
+
 export type Booking = {
   bookingId: string;
   customerId: string;
@@ -188,6 +194,7 @@ export type Booking = {
   budget: number | null;
   selectedPackage: PackageTierId | null;
   packageOptions: PackageOption[] | null;
+  providerLocationPreference?: ProviderLocationPreference | null;
   matches: VendorMatchResult[] | null;
   selectedVendorId: string | null;
   estimatedAmount: number | null;

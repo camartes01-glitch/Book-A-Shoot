@@ -7,7 +7,7 @@
  * a client-side accept/reject simulator.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { Booking, BookingStatus, CounterOffer, EventDay, PackageTierId } from "@/src/types/booking";
+import type { Booking, BookingStatus, CounterOffer, EventDay, PackageTierId, ProviderLocationPreference } from "@/src/types/booking";
 import { createEmptyBooking, createEmptyDay, duplicateDay, mergeEventDayPatch } from "@/src/domain/defaults";
 import { normalizeRouteParam } from "@/src/utils/routeParam";
 import {
@@ -98,6 +98,7 @@ function remoteOnlyBooking(customerId: string, remote: ReturnType<typeof parseRe
     budget,
     selectedPackage: null,
     packageOptions: null,
+    providerLocationPreference: null,
     matches: null,
     selectedVendorId: remote.providerId,
     estimatedAmount: null,
@@ -367,6 +368,19 @@ export async function selectPackage(bookingId: string, tier: PackageTierId): Pro
   });
 }
 
+export async function updateProviderLocationPreference(
+  bookingId: string,
+  pref: ProviderLocationPreference,
+): Promise<Booking> {
+  const booking = await getBooking(bookingId);
+  if (!booking) throw new Error("Booking not found");
+  return saveBooking({
+    ...booking,
+    providerLocationPreference: pref,
+    ...invalidateMatches(booking),
+  });
+}
+
 export async function getVendorMatches(bookingId: string): Promise<Booking> {
   let booking = await getBooking(bookingId);
   if (!booking) throw new Error("Booking not found");
@@ -381,8 +395,9 @@ export async function getVendorMatches(bookingId: string): Promise<Booking> {
   if (!booking.selectedPackage) throw new Error("Select a package before matching vendors.");
 
   const first = [...booking.days].sort((a, b) => a.order - b.order)[0];
+  const queryCity = booking.providerLocationPreference?.city || first?.location.city || null;
   const { vendors } = await fetchVendorCatalog({
-    city: first?.location.city || null,
+    city: queryCity,
     eventDate: first?.eventDate || null,
     serviceTypes: catalogServiceTypes(booking.days),
     latitude: first?.location.latitude,

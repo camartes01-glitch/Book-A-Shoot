@@ -43,21 +43,28 @@ import { colors, radius, spacing } from "@/src/constants/theme";
 
 const GROUPS = ["wedding", "pooja", "personal", "commercial"] as const;
 
+export type DaySubStep = "event" | "photography" | "videography" | "addons";
+
+function mapRawStep(step?: string): DaySubStep {
+  if (step === "photography" || step === "services") return "photography";
+  if (step === "videography") return "videography";
+  if (step === "addons") return "addons";
+  return "event";
+}
+
 export default function DayEditorScreen() {
   const params = useLocalSearchParams<{ dayId: string | string[]; step?: string; back?: string }>();
   const dayId = normalizeRouteParam(params.dayId);
   const rawStep = Array.isArray(params.step) ? params.step[0] : params.step;
-  const [screenStep, setScreenStep] = useState<"event" | "services">(rawStep === "services" ? "services" : "event");
+  const [screenStep, setScreenStep] = useState<DaySubStep>(mapRawStep(rawStep));
   const { activeDraft, updateDay, loadDraft } = useAppStore();
   const [day, setDay] = useState<EventDay | null>(null);
   const [showMoreTypes, setShowMoreTypes] = useState(false);
   const [saveAttempted, setSaveAttempted] = useState(false);
 
   useEffect(() => {
-    if (rawStep === "services") {
-      setScreenStep("services");
-    } else if (rawStep === "event") {
-      setScreenStep("event");
+    if (rawStep) {
+      setScreenStep(mapRawStep(rawStep));
     }
   }, [rawStep]);
 
@@ -74,7 +81,6 @@ export default function DayEditorScreen() {
 
   const userNavigatedBackRef = useRef(false);
   const eventTransitionLockRef = useRef(false);
-  const servicesDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const servicesTransitionLockRef = useRef(false);
 
   useEffect(() => {
@@ -127,22 +133,7 @@ export default function DayEditorScreen() {
   const syncFromStore = useCallback(() => {
     const found = activeDraftRef.current?.days.find((d) => d.dayId === dayId) ?? null;
     if (found) {
-      const prevLoc = dayRef.current?.location.formattedAddress;
       applyFoundDay(found);
-      if (
-        screenStep === "event" &&
-        !userNavigatedBackRef.current &&
-        found.location.formattedAddress &&
-        prevLoc !== found.location.formattedAddress &&
-        isEventStepComplete(found) &&
-        !eventTransitionLockRef.current
-      ) {
-        eventTransitionLockRef.current = true;
-        setTimeout(() => {
-          setScreenStep("services");
-          eventTransitionLockRef.current = false;
-        }, 200);
-      }
       return;
     }
     void bookingApi.getBookingContainingDay(dayId).then(async (booking) => {
@@ -151,17 +142,13 @@ export default function DayEditorScreen() {
       const day = booking.days.find((d) => d.dayId === dayId);
       if (day) applyFoundDay(day);
     });
-  }, [applyFoundDay, dayId, screenStep]);
+  }, [applyFoundDay, dayId]);
 
   useFocusEffect(
     useCallback(() => {
       servicesTransitionLockRef.current = false;
       syncFromStore();
       return () => {
-        if (servicesDebounceTimerRef.current) {
-          clearTimeout(servicesDebounceTimerRef.current);
-          servicesDebounceTimerRef.current = null;
-        }
         const snapshot = dayRef.current;
         if (!snapshot || snapshot.dayId !== dayId) return;
         persistChainRef.current = persistChainRef.current.then(
@@ -181,7 +168,7 @@ export default function DayEditorScreen() {
     );
   }
 
-  const applyDay = (updater: (prev: EventDay) => EventDay, stepContext?: "event" | "services") => {
+  const applyDay = (updater: (prev: EventDay) => EventDay, stepContext?: DaySubStep | "services") => {
     const prev = dayRef.current;
     if (!prev) return;
     const next = sanitizeEventDay({ ...updater(prev), dayId: prev.dayId, order: prev.order, dayRevision: (prev.dayRevision ?? 0) + 1 });
@@ -195,19 +182,10 @@ export default function DayEditorScreen() {
       if (isEventStepComplete(next) && !eventTransitionLockRef.current) {
         eventTransitionLockRef.current = true;
         setTimeout(() => {
-          setScreenStep("services");
+          setScreenStep("photography");
+          router.setParams({ step: "photography" });
           eventTransitionLockRef.current = false;
         }, 150);
-      }
-    } else if (context === "services") {
-      if (servicesDebounceTimerRef.current) {
-        clearTimeout(servicesDebounceTimerRef.current);
-        servicesDebounceTimerRef.current = null;
-      }
-      if (isServicesStepComplete(next)) {
-        servicesDebounceTimerRef.current = setTimeout(() => {
-          void onContinueToBudget();
-        }, 1200);
       }
     }
   };
@@ -270,7 +248,7 @@ export default function DayEditorScreen() {
 
   const canContinueToServices = isEventStepComplete(day);
 
-  const onContinueToServices = () => {
+  const onContinueToPhotography = () => {
     setSaveAttempted(true);
     if (!canContinueToServices) {
       if (!day.eventTypeIds.length) {
@@ -287,15 +265,23 @@ export default function DayEditorScreen() {
       return;
     }
     userNavigatedBackRef.current = false;
-    setScreenStep("services");
-    router.setParams({ step: "services" });
+    setScreenStep("photography");
+    router.setParams({ step: "photography" });
+  };
+
+  const onContinueToVideography = () => {
+    userNavigatedBackRef.current = false;
+    setScreenStep("videography");
+    router.setParams({ step: "videography" });
+  };
+
+  const onContinueToAddons = () => {
+    userNavigatedBackRef.current = false;
+    setScreenStep("addons");
+    router.setParams({ step: "addons" });
   };
 
   const onContinueToBudget = async () => {
-    if (servicesDebounceTimerRef.current) {
-      clearTimeout(servicesDebounceTimerRef.current);
-      servicesDebounceTimerRef.current = null;
-    }
     setSaveAttempted(true);
     const currentDay = dayRef.current ?? day;
     if (!currentDay || !hasCoreService(currentDay)) {
@@ -304,13 +290,13 @@ export default function DayEditorScreen() {
     }
     if (servicesTransitionLockRef.current) return;
     servicesTransitionLockRef.current = true;
-    router.setParams({ step: "services" });
+    router.setParams({ step: "addons" });
     await flushPersist();
     router.push("/booking/budget");
   };
 
-  const togglePhotography = () => applyDay((prev) => setPhotographySelected(prev, !isPhotographySelected(prev)), "services");
-  const toggleVideography = () => applyDay((prev) => setVideographySelected(prev, !isVideographySelected(prev)), "services");
+  const togglePhotography = () => applyDay((prev) => setPhotographySelected(prev, !isPhotographySelected(prev)), "photography");
+  const toggleVideography = () => applyDay((prev) => setVideographySelected(prev, !isVideographySelected(prev)), "videography");
 
   if (screenStep === "event") {
     return (
@@ -320,8 +306,8 @@ export default function DayEditorScreen() {
         onBack={() => router.back()}
         footer={
           <Button
-            label="Continue to services"
-            onPress={onContinueToServices}
+            label="Continue to photography"
+            onPress={onContinueToPhotography}
             disabled={!canContinueToServices}
             flex={1}
           />
@@ -439,18 +425,164 @@ export default function DayEditorScreen() {
     );
   }
 
+  if (screenStep === "photography") {
+    return (
+      <WizardScreen
+        title="Photography coverage"
+        step="photography"
+        onBack={() => {
+          userNavigatedBackRef.current = true;
+          setScreenStep("event");
+          router.setParams({ step: "event" });
+        }}
+        footer={
+          <Button
+            label="Continue to videography"
+            onPress={onContinueToVideography}
+            flex={1}
+          />
+        }
+      >
+        <View style={{ gap: 4 }}>
+          <SectionTitle>Photography coverage</SectionTitle>
+          <Muted>Select traditional posed coverage, candid photography, or both. You can customize the photographer team count below.</Muted>
+        </View>
+
+        <ServiceSelectCard
+          title="Photography"
+          subtitle="Traditional and candid coverage"
+          icon={<Camera size={20} color={colors.primaryDark} />}
+          selected={photoOn}
+          summary={photoSummary}
+          onPress={togglePhotography}
+        >
+          <>
+            <StyleRow
+              label="Traditional"
+              description="Classic, posed coverage"
+              enabled={day.photography.traditional}
+              count={day.photography.traditionalCount}
+              min={ADMIN_LIMITS.minPhotographers}
+              max={ADMIN_LIMITS.maxPhotographersPerType}
+              countLabel="Photographers"
+              onToggle={(v) =>
+                applyDay(
+                  (prev) => applyAerialGate({ ...prev, photography: { ...prev.photography, traditional: v } }),
+                  "photography",
+                )
+              }
+              onCountChange={(n) => applyDay((prev) => ({ ...prev, photography: { ...prev.photography, traditionalCount: n } }), "photography")}
+            />
+            <StyleRow
+              label="Candid"
+              description="Natural, unposed moments"
+              enabled={day.photography.candid}
+              count={day.photography.candidCount}
+              min={ADMIN_LIMITS.minPhotographers}
+              max={ADMIN_LIMITS.maxPhotographersPerType}
+              countLabel="Photographers"
+              onToggle={(v) =>
+                applyDay(
+                  (prev) => applyAerialGate({ ...prev, photography: { ...prev.photography, candid: v } }),
+                  "photography",
+                )
+              }
+              onCountChange={(n) => applyDay((prev) => ({ ...prev, photography: { ...prev.photography, candidCount: n } }), "photography")}
+            />
+          </>
+        </ServiceSelectCard>
+
+        <Muted style={{ marginTop: 8 }}>
+          Next step: Videography coverage. You can select either service or both.
+        </Muted>
+      </WizardScreen>
+    );
+  }
+
+  if (screenStep === "videography") {
+    return (
+      <WizardScreen
+        title="Videography coverage"
+        step="videography"
+        onBack={() => {
+          userNavigatedBackRef.current = true;
+          setScreenStep("photography");
+          router.setParams({ step: "photography" });
+        }}
+        footer={
+          <Button
+            label="Continue to add-ons"
+            onPress={onContinueToAddons}
+            flex={1}
+          />
+        }
+      >
+        <View style={{ gap: 4 }}>
+          <SectionTitle>Videography coverage</SectionTitle>
+          <Muted>Select traditional ceremony filming, cinematic storytelling, or both. You can customize the videographer team count below.</Muted>
+        </View>
+
+        <ServiceSelectCard
+          title="Videography"
+          subtitle="Ceremony films and cinematic stories"
+          icon={<Video size={20} color={colors.primaryDark} />}
+          selected={videoOn}
+          summary={videoSummary}
+          onPress={toggleVideography}
+        >
+          <>
+            <StyleRow
+              label="Traditional"
+              description="Classic ceremony filming"
+              enabled={day.videography.traditional}
+              count={day.videography.traditionalCount}
+              min={ADMIN_LIMITS.minVideographers}
+              max={ADMIN_LIMITS.maxVideographersPerType}
+              countLabel="Videographers"
+              onToggle={(v) =>
+                applyDay(
+                  (prev) => applyAerialGate({ ...prev, videography: { ...prev.videography, traditional: v } }),
+                  "videography",
+                )
+              }
+              onCountChange={(n) => applyDay((prev) => ({ ...prev, videography: { ...prev.videography, traditionalCount: n } }), "videography")}
+            />
+            <StyleRow
+              label="Candid"
+              description="Cinematic storytelling"
+              enabled={day.videography.candid}
+              count={day.videography.candidCount}
+              min={ADMIN_LIMITS.minVideographers}
+              max={ADMIN_LIMITS.maxVideographersPerType}
+              countLabel="Videographers"
+              onToggle={(v) =>
+                applyDay(
+                  (prev) => applyAerialGate({ ...prev, videography: { ...prev.videography, candid: v } }),
+                  "videography",
+                )
+              }
+              onCountChange={(n) => applyDay((prev) => ({ ...prev, videography: { ...prev.videography, candidCount: n } }), "videography")}
+            />
+          </>
+        </ServiceSelectCard>
+
+        {!hasCoreService(day) ? (
+          <Muted style={{ marginTop: 8, color: colors.muted }}>
+            Note: You haven't selected photography or videography yet. At least one core service is required to proceed to budget.
+          </Muted>
+        ) : null}
+      </WizardScreen>
+    );
+  }
+
   return (
     <WizardScreen
-      title="What services do you need?"
-      step="services"
+      title="Optional add-ons"
+      step="addons"
       onBack={() => {
-        if (servicesDebounceTimerRef.current) {
-          clearTimeout(servicesDebounceTimerRef.current);
-          servicesDebounceTimerRef.current = null;
-        }
         userNavigatedBackRef.current = true;
-        setScreenStep("event");
-        router.setParams({ step: "event" });
+        setScreenStep("videography");
+        router.setParams({ step: "videography" });
       }}
       footer={
         <Button
@@ -462,98 +594,16 @@ export default function DayEditorScreen() {
       }
     >
       <View style={{ gap: 4 }}>
-        <SectionTitle>What services do you need?</SectionTitle>
-        <Muted>Photography or videography is required. You can choose both, then customize your team size and add-ons.</Muted>
+        <SectionTitle>Optional add-ons</SectionTitle>
+        <Muted>Add drone coverage, LED walls, or live web streaming to complete your shoot requirements.</Muted>
       </View>
 
-      <ServiceSelectCard
-        title="Photography"
-        subtitle="Traditional and candid coverage"
-        icon={<Camera size={20} color={colors.primaryDark} />}
-        selected={photoOn}
-        summary={photoSummary}
-        onPress={togglePhotography}
-      >
-        <>
-          <StyleRow
-            label="Traditional"
-            description="Classic, posed coverage"
-            enabled={day.photography.traditional}
-            count={day.photography.traditionalCount}
-            min={ADMIN_LIMITS.minPhotographers}
-            max={ADMIN_LIMITS.maxPhotographersPerType}
-            countLabel="Photographers"
-            onToggle={(v) =>
-              applyDay((prev) =>
-                applyAerialGate({ ...prev, photography: { ...prev.photography, traditional: v } }),
-              )
-            }
-            onCountChange={(n) => applyDay((prev) => ({ ...prev, photography: { ...prev.photography, traditionalCount: n } }))}
-          />
-          <StyleRow
-            label="Candid"
-            description="Natural, unposed moments"
-            enabled={day.photography.candid}
-            count={day.photography.candidCount}
-            min={ADMIN_LIMITS.minPhotographers}
-            max={ADMIN_LIMITS.maxPhotographersPerType}
-            countLabel="Photographers"
-            onToggle={(v) =>
-              applyDay((prev) => applyAerialGate({ ...prev, photography: { ...prev.photography, candid: v } }))
-            }
-            onCountChange={(n) => applyDay((prev) => ({ ...prev, photography: { ...prev.photography, candidCount: n } }))}
-          />
-        </>
-      </ServiceSelectCard>
-
-      <ServiceSelectCard
-        title="Videography"
-        subtitle="Ceremony films and cinematic stories"
-        icon={<Video size={20} color={colors.primaryDark} />}
-        selected={videoOn}
-        summary={videoSummary}
-        onPress={toggleVideography}
-      >
-        <>
-          <StyleRow
-            label="Traditional"
-            description="Classic ceremony filming"
-            enabled={day.videography.traditional}
-            count={day.videography.traditionalCount}
-            min={ADMIN_LIMITS.minVideographers}
-            max={ADMIN_LIMITS.maxVideographersPerType}
-            countLabel="Videographers"
-            onToggle={(v) =>
-              applyDay((prev) =>
-                applyAerialGate({ ...prev, videography: { ...prev.videography, traditional: v } }),
-              )
-            }
-            onCountChange={(n) => applyDay((prev) => ({ ...prev, videography: { ...prev.videography, traditionalCount: n } }))}
-          />
-          <StyleRow
-            label="Candid"
-            description="Cinematic storytelling"
-            enabled={day.videography.candid}
-            count={day.videography.candidCount}
-            min={ADMIN_LIMITS.minVideographers}
-            max={ADMIN_LIMITS.maxVideographersPerType}
-            countLabel="Videographers"
-            onToggle={(v) =>
-              applyDay((prev) => applyAerialGate({ ...prev, videography: { ...prev.videography, candid: v } }))
-            }
-            onCountChange={(n) => applyDay((prev) => ({ ...prev, videography: { ...prev.videography, candidCount: n } }))}
-          />
-        </>
-      </ServiceSelectCard>
-
-      {showCoreError ? (
+      {!hasCoreService(day) || showCoreError ? (
         <Card style={{ borderColor: colors.danger }}>
           <Badge label="Action needed" tone="red" />
           <Muted style={{ color: colors.danger, fontWeight: "600" }}>{CORE_SERVICE_REQUIRED_MESSAGE}</Muted>
         </Card>
       ) : null}
-
-      <SectionTitle style={{ marginTop: 4 }}>Add-ons</SectionTitle>
 
       <AddOnCard
         title="Drone / Aerial"
@@ -568,21 +618,21 @@ export default function DayEditorScreen() {
         ]
           .filter(Boolean)
           .join(" · ")}
-        onToggle={(v) => applyDay((prev) => setAerialEnabled(prev, v))}
+        onToggle={(v) => applyDay((prev) => setAerialEnabled(prev, v), "addons")}
       >
         <Stepper
           label="Photo drones"
           value={day.aerial.photographyDrones}
           min={0}
           max={ADMIN_LIMITS.maxDronesPerType}
-          onChange={(n) => applyDay((prev) => ({ ...prev, aerial: { ...prev.aerial, photographyDrones: n } }))}
+          onChange={(n) => applyDay((prev) => ({ ...prev, aerial: { ...prev.aerial, photographyDrones: n } }), "addons")}
         />
         <Stepper
           label="Video drones"
           value={day.aerial.videographyDrones}
           min={0}
           max={ADMIN_LIMITS.maxDronesPerType}
-          onChange={(n) => applyDay((prev) => ({ ...prev, aerial: { ...prev.aerial, videographyDrones: n } }))}
+          onChange={(n) => applyDay((prev) => ({ ...prev, aerial: { ...prev.aerial, videographyDrones: n } }), "addons")}
         />
       </AddOnCard>
 
@@ -596,13 +646,13 @@ export default function DayEditorScreen() {
           applyDay((prev) => ({
             ...prev,
             ledWall: v ? { ...prev.ledWall, enabled: true } : { enabled: false, size: "8 x 12", screenCount: 1 },
-          }))
+          }), "addons")
         }
       >
         <Muted style={{ fontWeight: "700", color: colors.ink }}>Size</Muted>
         <ChipGroup>
           {LED_WALL_SIZES.map((size) => (
-            <Chip key={size} label={size} selected={day.ledWall.size === size} onPress={() => applyDay((prev) => ({ ...prev, ledWall: { ...prev.ledWall, size } }))} />
+            <Chip key={size} label={size} selected={day.ledWall.size === size} onPress={() => applyDay((prev) => ({ ...prev, ledWall: { ...prev.ledWall, size } }), "addons")} />
           ))}
         </ChipGroup>
         <Stepper
@@ -610,7 +660,7 @@ export default function DayEditorScreen() {
           value={day.ledWall.screenCount}
           min={1}
           max={ADMIN_LIMITS.maxLedScreens}
-          onChange={(n) => applyDay((prev) => ({ ...prev, ledWall: { ...prev.ledWall, screenCount: n } }))}
+          onChange={(n) => applyDay((prev) => ({ ...prev, ledWall: { ...prev.ledWall, screenCount: n } }), "addons")}
         />
       </AddOnCard>
 
@@ -626,13 +676,13 @@ export default function DayEditorScreen() {
             webLive: v
               ? { ...prev.webLive, enabled: true }
               : { enabled: false, quality: "HD", cameraCount: 1, streamingPlatform: "", accessType: "private" },
-          }))
+          }), "addons")
         }
       >
         <Muted style={{ fontWeight: "700", color: colors.ink }}>Quality</Muted>
         <ChipGroup>
           {WEB_LIVE_QUALITIES.map((q) => (
-            <Chip key={q} label={q} selected={day.webLive.quality === q} onPress={() => applyDay((prev) => ({ ...prev, webLive: { ...prev.webLive, quality: q } }))} />
+            <Chip key={q} label={q} selected={day.webLive.quality === q} onPress={() => applyDay((prev) => ({ ...prev, webLive: { ...prev.webLive, quality: q } }), "addons")} />
           ))}
         </ChipGroup>
         <Stepper
@@ -640,11 +690,11 @@ export default function DayEditorScreen() {
           value={day.webLive.cameraCount}
           min={1}
           max={6}
-          onChange={(n) => applyDay((prev) => ({ ...prev, webLive: { ...prev.webLive, cameraCount: n } }))}
+          onChange={(n) => applyDay((prev) => ({ ...prev, webLive: { ...prev.webLive, cameraCount: n } }), "addons")}
         />
         <ChipGroup>
-          <Chip label="Private link" selected={day.webLive.accessType === "private"} onPress={() => applyDay((prev) => ({ ...prev, webLive: { ...prev.webLive, accessType: "private" } }))} />
-          <Chip label="Public link" selected={day.webLive.accessType === "public"} onPress={() => applyDay((prev) => ({ ...prev, webLive: { ...prev.webLive, accessType: "public" } }))} />
+          <Chip label="Private link" selected={day.webLive.accessType === "private"} onPress={() => applyDay((prev) => ({ ...prev, webLive: { ...prev.webLive, accessType: "private" } }), "addons")} />
+          <Chip label="Public link" selected={day.webLive.accessType === "public"} onPress={() => applyDay((prev) => ({ ...prev, webLive: { ...prev.webLive, accessType: "public" } }), "addons")} />
         </ChipGroup>
       </AddOnCard>
     </WizardScreen>

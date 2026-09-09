@@ -59,9 +59,19 @@ function makeOutdoorDay(eventId: string = "pre_wedding", patch: Partial<EventDay
 }
 
 describe("1. Customer Flow Progress Steps", () => {
-  test("progress bar contains exactly the 6 required steps in order", () => {
+  test("progress bar contains exactly the 9 required sequential wizard steps in order", () => {
     const labels = WIZARD_STEPS.map((s) => s.label);
-    expect(labels).toEqual(["Event", "Services", "Budget", "Packages", "Providers", "Review"]);
+    expect(labels).toEqual([
+      "Event",
+      "Photography",
+      "Videography",
+      "Add-ons",
+      "Budget",
+      "Packages",
+      "Location",
+      "Providers",
+      "Review",
+    ]);
   });
 
   test("package tiers correctly map BASIC, MEDIUM, HIGH to Essential, Signature, Elite", () => {

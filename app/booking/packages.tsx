@@ -30,7 +30,7 @@ export default function PackagesScreen() {
     setLoading(true);
     try {
       await selectPackage(tier);
-      router.push("/booking/matches");
+      router.push("/booking/location-preference");
     } finally {
       setLoading(false);
       setTimeout(() => {
@@ -45,7 +45,7 @@ export default function PackagesScreen() {
     setLoading(true);
     try {
       await selectPackage(selected);
-      router.push("/booking/matches");
+      router.push("/booking/location-preference");
     } finally {
       setLoading(false);
       setTimeout(() => {
@@ -59,7 +59,7 @@ export default function PackagesScreen() {
       title="Choose your package"
       step="packages"
       onBack={() => router.push("/booking/budget")}
-      footer={<Button label="Find providers" onPress={onContinue} disabled={!selected} loading={loading} flex={1} />}
+      footer={<Button label="Continue to location" onPress={onContinue} disabled={!selected} loading={loading} flex={1} />}
     >
       <Muted>
         Essential is BASIC, Signature is MEDIUM, Elite is HIGH. Each overall price is the combined approved range for every service and add-on you selected, across every event day. It is not your budget and not a provider quote.

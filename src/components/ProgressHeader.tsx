@@ -39,7 +39,7 @@ export function ProgressHeader({
         </Text>
         <View style={{ width: 34 }} />
       </View>
-      <View style={styles.stepsRow} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 5, now: activeIndex }}>
+      <View style={styles.stepsRow} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: WIZARD_STEPS.length - 1, now: activeIndex }}>
         {WIZARD_STEPS.map((s, i) => {
           const done = i <= activeIndex;
           return (
