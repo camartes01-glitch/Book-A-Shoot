@@ -4,8 +4,9 @@ import { WizardScreen } from "@/src/components/WizardScreen";
 import { Button, Card, Divider, Muted, SectionTitle, Title } from "@/src/components/ui";
 import { useAppStore } from "@/src/state/AppProvider";
 import { DEFAULT_EVENT_CATEGORIES } from "@/src/constants/eventCategories";
-import { formatDateLong, formatTime12h } from "@/src/utils/format";
+import { formatDateLong, formatInr, formatPackageOverallLabel, formatTime12h } from "@/src/utils/format";
 import { colors } from "@/src/constants/theme";
+import { selectedPackageQuote } from "@/src/engine/pricing";
 import type { EventDay } from "@/src/types/booking";
 
 function categoryLabel(id: string) {
@@ -66,9 +67,22 @@ export default function BookingSummaryScreen() {
   const { photo, video } = activeDraft.deliverables;
   const editedPhotos = photo.editedPhotosOption === "custom" ? photo.editedPhotosCustomCount ?? 0 : photo.editedPhotosOption;
   const albumPages = photo.albumPagesOption === "custom" ? photo.albumPagesCustomCount ?? 0 : photo.albumPagesOption ?? "20";
+  const pkgQuote = selectedPackageQuote(activeDraft);
+
+  const hasBudgetAndPackage = Boolean(activeDraft.budget && activeDraft.selectedPackage);
 
   return (
-    <WizardScreen title="Your requirements" step="services" footer={<Button label="Continue to budget" onPress={() => router.push("/booking/budget")} flex={1} />}>
+    <WizardScreen
+      title="Your requirements"
+      step="services"
+      footer={
+        <Button
+          label={hasBudgetAndPackage ? "Continue to review" : "Continue to budget"}
+          onPress={() => router.push(hasBudgetAndPackage ? "/booking/confirm" : "/booking/budget")}
+          flex={1}
+        />
+      }
+    >
       <SectionTitle>
         {days.length} event day{days.length === 1 ? "" : "s"}
       </SectionTitle>
@@ -103,6 +117,32 @@ export default function BookingSummaryScreen() {
         </View>
         <Muted>{formatDateLong(activeDraft.expectedDeliveryDate)}</Muted>
       </Card>
+
+      {activeDraft.budget ? (
+        <Card>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <SectionTitle>Budget</SectionTitle>
+            <Pressable onPress={() => router.push("/booking/budget")} hitSlop={8} accessibilityLabel="Edit budget">
+              <Muted style={{ color: colors.primaryDark, fontWeight: "800" }}>Edit</Muted>
+            </Pressable>
+          </View>
+          <Muted style={{ fontWeight: "700", color: colors.ink }}>{formatInr(activeDraft.budget)}</Muted>
+        </Card>
+      ) : null}
+
+      {pkgQuote ? (
+        <Card>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <SectionTitle>Package</SectionTitle>
+            <Pressable onPress={() => router.push("/booking/packages")} hitSlop={8} accessibilityLabel="Edit package">
+              <Muted style={{ color: colors.primaryDark, fontWeight: "800" }}>Edit</Muted>
+            </Pressable>
+          </View>
+          <Muted style={{ fontWeight: "700", color: colors.ink }}>
+            {formatPackageOverallLabel(pkgQuote.label, pkgQuote.minPrice, pkgQuote.maxPrice)}
+          </Muted>
+        </Card>
+      ) : null}
     </WizardScreen>
   );
 }

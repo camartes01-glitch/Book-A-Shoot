@@ -53,13 +53,14 @@ export function DateField({
   onChange: (iso: string) => void;
   minimumDate?: Date;
 }) {
+  const formattedDate = value ? (value.includes("T") ? value.split("T")[0] : value.substring(0, 10)) : "";
   return (
     <View style={{ gap: 6 }}>
       <Text style={styles.label}>{label}</Text>
       <View style={fieldStyle as object}>
         {React.createElement("input", {
           type: "date",
-          value: value ?? "",
+          value: formattedDate,
           min: minimumDate ? toIso(minimumDate) : undefined,
           onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
             if (e.target.value) onChange(e.target.value);
@@ -83,13 +84,15 @@ export function TimeField({
   onChange: (hhmm: string) => void;
   placeholder?: string;
 }) {
+  const timeMatch = value ? value.match(/^(\d{1,2}:\d{2})/) : null;
+  const formattedTime = timeMatch ? timeMatch[1] : (value ?? "");
   return (
     <View style={{ gap: 6, flex: 1 }}>
       <Text style={styles.label}>{label}</Text>
       <View style={fieldStyle as object}>
         {React.createElement("input", {
           type: "time",
-          value: value ?? "",
+          value: formattedTime,
           placeholder: placeholder ?? "Select start time",
           onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
             if (e.target.value) onChange(e.target.value);

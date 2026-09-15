@@ -10,11 +10,16 @@ export default function Splash() {
   const { ready, profile } = useAppStore();
 
   useEffect(() => {
-    if (!ready) return;
-    const timer = setTimeout(() => {
+    if (ready) {
+      const timer = setTimeout(() => {
+        router.replace(profile ? "/(tabs)" : "/(auth)/login");
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+    const hardFallback = setTimeout(() => {
       router.replace(profile ? "/(tabs)" : "/(auth)/login");
-    }, 500);
-    return () => clearTimeout(timer);
+    }, 2000);
+    return () => clearTimeout(hardFallback);
   }, [ready, profile]);
 
   return (

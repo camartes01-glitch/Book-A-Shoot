@@ -1,5 +1,5 @@
 import { Image, StyleSheet, Text, View } from "react-native";
-import { Award, CheckCircle2, MapPin } from "lucide-react-native";
+import { Award, CheckCircle2, Lock, MapPin } from "lucide-react-native";
 import type { VendorMatchResult } from "@/src/types/booking";
 import { RatingStars } from "@/src/components/RatingStars";
 import { Button } from "@/src/components/ui";
@@ -45,7 +45,14 @@ export function ProviderCard({
           <Text style={styles.name} numberOfLines={1}>
             {match.studioName}
           </Text>
-          {match.serviceCategory ? <Text style={styles.category}>{match.serviceCategory}</Text> : null}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            {match.isStudio ? (
+              <View style={styles.studioBadge}>
+                <Text style={styles.studioBadgeText}>Photo Studio</Text>
+              </View>
+            ) : null}
+            {match.serviceCategory ? <Text style={styles.category}>{match.serviceCategory}</Text> : null}
+          </View>
           {location ? (
             <View style={styles.metaRow}>
               <MapPin size={13} color={colors.muted} />
@@ -74,6 +81,12 @@ export function ProviderCard({
         <View style={styles.metaRow}>
           <Award size={13} color={colors.muted} />
           <Text style={styles.metaText}>{match.experienceYears} years experience</Text>
+        </View>
+      ) : null}
+      {match.contactMasked ? (
+        <View style={styles.contactMaskedBadge}>
+          <Lock size={12} color={colors.primaryDark} />
+          <Text style={styles.contactMaskedText}>Contact locked until accepted</Text>
         </View>
       ) : null}
       {packageLabel ? <Text style={styles.pkg}>Package: {packageLabel}</Text> : null}
@@ -122,6 +135,18 @@ const styles = StyleSheet.create({
   avatarText: { fontWeight: "800", color: colors.primaryDark },
   name: { fontSize: 16, fontWeight: "800", color: colors.ink },
   category: { fontSize: 12, fontWeight: "700", color: colors.primaryDark },
+  studioBadge: {
+    backgroundColor: colors.peach,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    alignSelf: "flex-start",
+  },
+  studioBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.primaryDark,
+  },
   availableBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -146,5 +171,21 @@ const styles = StyleSheet.create({
   },
   priceLabel: { fontSize: 12, color: colors.muted, fontWeight: "600" },
   price: { fontSize: 17, fontWeight: "800", color: colors.primaryDark },
+  contactMaskedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: colors.peach,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+    marginTop: 2,
+  },
+  contactMaskedText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.primaryDark,
+  },
   actions: { flexDirection: "row", gap: 8, marginTop: 4 },
 });

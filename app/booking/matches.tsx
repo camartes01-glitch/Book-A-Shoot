@@ -57,16 +57,39 @@ export default function VendorMatchesScreen() {
   const quoted = activeDraft ? selectedPackageQuote(activeDraft) : undefined;
   const pkgLabel = quoted?.label;
 
+  const onContinueWithAll = async () => {
+    if (!matches.length || transitionLockRef.current) return;
+    transitionLockRef.current = true;
+    try {
+      const topId = activeDraft?.selectedVendorId || matches[0].vendorId;
+      await selectVendor(topId);
+      router.push("/booking/confirm");
+    } finally {
+      setTimeout(() => {
+        transitionLockRef.current = false;
+      }, 500);
+    }
+  };
+
   return (
     <WizardScreen
-      title="Choose your photographer or videographer"
+      title="Assigned Providers"
       step="providers"
       onBack={() => router.push("/booking/location-preference")}
+      footer={
+        matches.length > 0 ? (
+          <Button
+            label={matches.length === 1 ? "Dispatch request to this provider" : `Dispatch request to these ${matches.length} providers`}
+            onPress={onContinueWithAll}
+            flex={1}
+          />
+        ) : undefined
+      }
     >
       {loading ? (
         <View style={{ paddingVertical: spacing.xl, alignItems: "center", gap: spacing.sm }}>
           <ActivityIndicator color={colors.primary} size="large" />
-          <Muted>Looking for professionals who can cover your event…</Muted>
+          <Muted>Matching top verified photographers & studios in your preferred location…</Muted>
         </View>
       ) : error ? (
         <EmptyState icon={<SearchX size={40} color={colors.danger} />} title="Couldn't load service providers" body={error} actionLabel="Try again" onAction={runMatching} />
@@ -85,10 +108,16 @@ export default function VendorMatchesScreen() {
         </Card>
       ) : (
         <>
-          <SectionTitle>
-            {matches.length === 1 ? "1 professional matches your event" : `${matches.length} professionals match your event`}
-          </SectionTitle>
-          {pkgLabel ? <Muted>Showing availability for {pkgLabel}</Muted> : null}
+          <View style={{ gap: 4 }}>
+            <SectionTitle>
+              {matches.length === 1 ? "1 verified provider matched" : `${matches.length} verified photographers & studios matched`}
+            </SectionTitle>
+            <Muted>
+              Your request will be sent to these {matches.length} qualified professionals (freelance photographers & studios). For privacy, phone and email remain masked until a provider accepts.
+            </Muted>
+            {pkgLabel ? <Muted style={{ fontWeight: "700", color: colors.primaryDark }}>Tier: {pkgLabel}</Muted> : null}
+          </View>
+
           {matches.map((m) => (
             <ProviderCard
               key={m.vendorId}
@@ -99,8 +128,9 @@ export default function VendorMatchesScreen() {
               selected={selecting === m.vendorId || activeDraft?.selectedVendorId === m.vendorId}
             />
           ))}
+
           {matches.length < MAX_MATCHES ? (
-            <View style={{ gap: spacing.sm }}>
+            <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
               <Muted>Want more options?</Muted>
               <Button label="Change date or time" variant="outline" onPress={() => router.push("/booking/new")} />
               <Button label="Adjust requirements" variant="outline" onPress={() => router.push("/booking/summary")} />

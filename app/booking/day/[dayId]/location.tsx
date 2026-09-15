@@ -27,8 +27,18 @@ export default function LocationPickerScreen() {
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [searching, setSearching] = useState(false);
   const [locating, setLocating] = useState(false);
-  const [selected, setSelected] = useState<EventLocation | null>(day?.location.formattedAddress ? day.location : null);
+  const [selected, setSelected] = useState<EventLocation | null>(
+    day?.location.formattedAddress || day?.location.city ? day.location : null,
+  );
   const [locationError, setLocationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (day?.location && !selected) {
+      if (day.location.formattedAddress || day.location.city) {
+        setSelected(day.location);
+      }
+    }
+  }, [day?.location]);
 
   useEffect(() => {
     if (!query.trim()) {

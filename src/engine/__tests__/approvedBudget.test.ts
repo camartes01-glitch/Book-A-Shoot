@@ -227,6 +227,7 @@ describe("booking state and payload", () => {
     expect(body.provider_id).toBe("user_16eeb421bc07");
     expect(Object.keys(body).sort()).toEqual(
       [
+        "assigned_provider_ids",
         "budget",
         "client_email",
         "client_name",
@@ -235,10 +236,15 @@ describe("booking state and payload", () => {
         "end_date",
         "event_date",
         "event_time",
+        "event_type",
+        "lead_broadcast",
+        "lead_details",
+        "location_preference",
         "message",
         "provider_id",
         "provider_profile_id",
         "service_type",
+        "venue_address",
       ].sort(),
     );
     expect(body.message).toContain("Package: signature");
@@ -279,6 +285,28 @@ describe("budget feasibility uses the Essential range floor", () => {
     const result = checkBudgetFeasibility({ days: [setPhotographySelected(day(), true)], deliverables: emptyDeliverables() }, 1000);
     expect(result.isBelowEstimate).toBe(true);
     expect(result.estimatedCost).toBe(3000);
+  });
+});
+
+declare const __dirname: string;
+
+describe("custom budget processing and Enter key support", () => {
+  test("budget.tsx supports Enter key submission and has an Enter action button", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const budgetSource = fs.readFileSync(path.resolve(__dirname, "../../../app/booking/budget.tsx"), "utf8");
+    expect(budgetSource).toContain('returnKeyType="done"');
+    expect(budgetSource).toContain("onSubmitEditing");
+    expect(budgetSource).toContain('onKeyDown');
+    expect(budgetSource).toContain('label="Enter"');
+  });
+
+  test("ui.tsx Field component supports rightElement slot", () => {
+    const fs = require("fs");
+    const path = require("path");
+    const uiSource = fs.readFileSync(path.resolve(__dirname, "../../../src/components/ui.tsx"), "utf8");
+    expect(uiSource).toContain("rightElement?: React.ReactNode");
+    expect(uiSource).toContain("rightElement");
   });
 });
 

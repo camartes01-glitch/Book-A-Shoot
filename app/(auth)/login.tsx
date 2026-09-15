@@ -1,72 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import * as Google from "expo-auth-session/providers/google";
+import { ArrowLeft } from "lucide-react-native";
 import { ScreenContainer } from "@/src/components/ScreenContainer";
 import { BookAShootLogo } from "@/src/components/BookAShootLogo";
 import { Button, Divider, Field, Muted } from "@/src/components/ui";
+import { GoogleSignInButton } from "@/src/components/GoogleSignInButton";
+import { GoogleSetupModal } from "@/src/components/GoogleSetupModal";
 import { useAppStore } from "@/src/state/AppProvider";
 import { isDemoAuthMode } from "@/src/config/authMode";
+import { getDraftResumeRoute } from "@/src/domain/bookingRequest";
 import { CamartesApiError } from "@/src/services/camartesClient";
-import { DEMO_GOOGLE_UNAVAILABLE_MESSAGE } from "@/src/services/demoAuth";
-import {
-  extractGoogleIdToken,
-  googleAuthRequestConfig,
-  googleSignInMissingConfigMessage,
-  GoogleSignInCancelledError,
-  isGoogleSignInConfigured,
-} from "@/src/services/googleSignIn";
+import { GoogleSignInCancelledError } from "@/src/services/googleSignIn";
 import { colors, spacing, touchTarget } from "@/src/constants/theme";
+import { isSupabaseConfigured } from "@/src/services/supabaseClient";
+import { checkWebSupabaseSession, signInWithGoogleViaSupabase } from "@/src/services/supabaseAuth";
 
 WebBrowser.maybeCompleteAuthSession();
 
-function ConfiguredGoogleButton({
-  disabled,
-  onAuthenticated,
-  onError,
-}: {
-  disabled: boolean;
-  onAuthenticated: () => void;
-  onError: (message: string) => void;
-}) {
-  const { loginWithGoogle } = useAppStore();
-  const inFlight = useRef(false);
-  const [busy, setBusy] = useState(false);
-  const [googleRequest, , promptGoogleAsync] = Google.useIdTokenAuthRequest(googleAuthRequestConfig());
-
-  const onGoogle = async () => {
-    if (inFlight.current || disabled || busy) return;
-    inFlight.current = true;
-    setBusy(true);
-    onError("");
-    try {
-      const result = await promptGoogleAsync();
-      const idToken = extractGoogleIdToken(result);
-      await loginWithGoogle(idToken);
-      onAuthenticated();
-    } catch (e) {
-      if (e instanceof GoogleSignInCancelledError) return;
-      onError(e instanceof CamartesApiError || e instanceof Error ? e.message : "Could not sign in with Google.");
-    } finally {
-      inFlight.current = false;
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Button
-      label="Continue with Google"
-      variant="ghost"
-      onPress={onGoogle}
-      loading={busy}
-      disabled={disabled || busy || !googleRequest}
-    />
-  );
-}
-
 export default function LoginScreen() {
-  const { login, signup, ready, profile } = useAppStore();
+  const { login, signup, ready, profile, activeDraft, loginWithGoogle } = useAppStore();
+  const params = useLocalSearchParams<{ returnTo?: string; reauth?: string }>();
+  const explicitReturn = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
+  const isReauth = (Array.isArray(params.reauth) ? params.reauth[0] : params.reauth) === "1";
+  const returnTarget = explicitReturn || (activeDraft ? getDraftResumeRoute(activeDraft) : "/(tabs)");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [emailOrPhone, setEmailOrPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -75,15 +33,86 @@ export default function LoginScreen() {
   const [phone, setPhone] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const [error, setError] = useState("");
+  const [setupModalVisible, setSetupModalVisible] = useState(false);
   const signInInFlight = useRef(false);
   const signupInFlight = useRef(false);
+  const googleInFlight = useRef(false);
 
   useEffect(() => {
-    if (ready && profile) {
-      router.replace("/(tabs)");
+    if (ready && profile && !isReauth) {
+      router.replace(returnTarget as any);
     }
-  }, [ready, profile]);
+  }, [ready, profile, returnTarget, isReauth]);
+
+  // Check for Web Supabase OAuth callback when returning from Google OAuth redirect
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    let active = true;
+
+    const checkWebOAuth = async () => {
+      try {
+        const userInfo = await checkWebSupabaseSession();
+        if (userInfo && active) {
+          setGoogleBusy(true);
+          await loginWithGoogle(userInfo);
+          if (active) {
+            router.replace(returnTarget as any);
+          }
+        }
+      } catch (e) {
+        if (active) {
+          setError(
+            e instanceof CamartesApiError || e instanceof Error
+              ? e.message
+              : "Could not complete Google sign-in.",
+          );
+        }
+      } finally {
+        if (active) setGoogleBusy(false);
+      }
+    };
+
+    void checkWebOAuth();
+
+    return () => {
+      active = false;
+    };
+  }, [returnTarget, loginWithGoogle]);
+
+  const onGoogleSignIn = async () => {
+    if (googleInFlight.current || googleBusy || loading) return;
+    googleInFlight.current = true;
+    setGoogleBusy(true);
+    setError("");
+
+    try {
+      if (isSupabaseConfigured()) {
+        const userInfo = await signInWithGoogleViaSupabase();
+        if (userInfo) {
+          // Native deep link sign-in succeeded
+          await loginWithGoogle(userInfo);
+          router.replace(returnTarget as any);
+        }
+        // If web, the browser has redirected to Google OAuth
+        return;
+      }
+
+      // If Supabase is not configured, show guidance modal
+      setSetupModalVisible(true);
+    } catch (e) {
+      if (e instanceof GoogleSignInCancelledError) return;
+      setError(
+        e instanceof CamartesApiError || e instanceof Error
+          ? e.message
+          : "Could not sign in with Google.",
+      );
+    } finally {
+      googleInFlight.current = false;
+      setGoogleBusy(false);
+    }
+  };
 
   const onSignIn = async () => {
     if (signInInFlight.current || loading) return;
@@ -92,7 +121,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await login(emailOrPhone, password);
-      router.replace("/(tabs)");
+      router.replace(returnTarget as any);
     } catch (e) {
       setError(e instanceof CamartesApiError || e instanceof Error ? e.message : "Could not sign in.");
     } finally {
@@ -108,7 +137,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signup({ name, email, phone, password: signupPassword });
-      router.replace("/(tabs)");
+      router.replace(returnTarget as any);
     } catch (e) {
       setError(e instanceof CamartesApiError || e instanceof Error ? e.message : "Could not create the account.");
     } finally {
@@ -125,12 +154,26 @@ export default function LoginScreen() {
     Alert.alert(title, message);
   };
 
-  const onUnconfiguredGoogle = () => {
-    setError(googleSignInMissingConfigMessage());
-  };
-
-  const onDemoGoogle = () => {
-    setError(DEMO_GOOGLE_UNAVAILABLE_MESSAGE);
+  const onSandboxGoogle = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await loginWithGoogle({
+        google_id: "google_sandbox_user_01",
+        email: "google.user@example.com",
+        name: "Google Customer",
+        picture: null,
+      });
+      router.replace(returnTarget as any);
+    } catch (e) {
+      setError(
+        e instanceof CamartesApiError || e instanceof Error
+          ? e.message
+          : "Could not sign in with Google sandbox account.",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const onApple = () => {
@@ -153,6 +196,18 @@ export default function LoginScreen() {
 
   return (
     <ScreenContainer keyboardAvoiding includeBottomSafeArea>
+      {params.returnTo ? (
+        <Pressable
+          onPress={() => router.push(returnTarget as any)}
+          style={styles.backLink}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Back to booking review"
+        >
+          <ArrowLeft size={18} color={colors.primaryDark} />
+          <Text style={styles.backLinkText}>Back to booking review</Text>
+        </Pressable>
+      ) : null}
       <View style={styles.brandRow}>
         <BookAShootLogo maxWidth={320} widthFraction={0.84} />
         <Muted style={styles.tagline}>Find photographers and videographers for your event.</Muted>
@@ -171,7 +226,7 @@ export default function LoginScreen() {
           />
           <Field
             label="Password"
-            placeholder="Your Camartes password"
+            placeholder="Your password"
             secureTextEntry
             value={password}
             onChangeText={setPassword}
@@ -253,27 +308,40 @@ export default function LoginScreen() {
           setMode((current) => (current === "signin" ? "signup" : "signin"));
         }}
       />
-      {isDemoAuthMode() ? (
-        <Button label="Continue with Google" variant="ghost" onPress={onDemoGoogle} disabled={loading} />
-      ) : isGoogleSignInConfigured(Platform.OS) ? (
-        <ConfiguredGoogleButton
-          disabled={loading}
-          onAuthenticated={() => router.replace("/(tabs)")}
-          onError={setError}
-        />
-      ) : (
-        <Button label="Continue with Google" variant="ghost" onPress={onUnconfiguredGoogle} disabled={loading} />
-      )}
+      <GoogleSignInButton
+        disabled={loading || googleBusy}
+        loading={googleBusy}
+        onPress={onGoogleSignIn}
+      />
       <Button label="Continue with Apple" variant="ghost" onPress={onApple} />
 
+      <GoogleSetupModal
+        visible={setupModalVisible}
+        onClose={() => setSetupModalVisible(false)}
+        onTestSandboxAccount={onSandboxGoogle}
+      />
+
       <Muted style={{ textAlign: "center", marginTop: spacing.md }}>
-        By continuing you agree to Camartes' Terms of Service and Privacy Policy.
+        By continuing you agree to the Terms of Service and Privacy Policy.
       </Muted>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  backLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: spacing.xs,
+    marginBottom: spacing.xs,
+    alignSelf: "flex-start",
+  },
+  backLinkText: {
+    color: colors.primaryDark,
+    fontSize: 14,
+    fontWeight: "700",
+  },
   brandRow: { alignItems: "center", gap: spacing.sm, marginBottom: spacing.md, marginTop: spacing.sm },
   tagline: { textAlign: "center", paddingHorizontal: spacing.md },
   demoBadge: { textAlign: "center", fontSize: 12, fontWeight: "700", color: colors.muted },

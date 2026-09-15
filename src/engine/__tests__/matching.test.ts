@@ -118,13 +118,13 @@ describe("checkVendorAvailability (rule 11 / multi-day)", () => {
     expect(result.available).toBe(true);
   });
 
-  test("catalog listedAvailable=false excludes a vendor even if capabilities match", () => {
+  test("calendar blocks or listedAvailable=false do NOT exclude a vendor from receiving leads", () => {
     const day = eventDay();
     const req = aggregateRequirement([day]);
     const result = checkVendorAvailability(vendor({ listedAvailable: false }), [day], req);
-    expect(result.available).toBe(false);
+    expect(result.available).toBe(true);
     const matches = matchVendors({ days: [day], deliverables: emptyDeliverables() }, [vendor({ listedAvailable: false })], "signature", 150000);
-    expect(matches).toHaveLength(0);
+    expect(matches).toHaveLength(1);
   });
 
   test("does not invent calendar unavailability when the catalog lists the vendor as available", () => {
@@ -134,3 +134,138 @@ describe("checkVendorAvailability (rule 11 / multi-day)", () => {
     expect(results).toHaveLength(2);
   });
 });
+
+describe("photography firm exclusivity & 3-tier budget matching", () => {
+  test("excludes solo freelancers, videographers, and fly_cam operators", () => {
+    const day = eventDay();
+    const vendors = [
+      vendor({ vendorId: "solo-1", serviceType: "photographer", studioName: "Solo Photographer" }),
+      vendor({ vendorId: "solo-2", serviceType: "videographer", studioName: "Solo Videographer" }),
+      vendor({ vendorId: "solo-3", serviceType: "fly_cam", studioName: "Drone Pilot" }),
+      vendor({ vendorId: "firm-1", serviceType: "photography_firm", studioName: "Epic Firm" }),
+    ];
+    const results = matchVendors({ days: [day], deliverables: emptyDeliverables() }, vendors, "signature", 150000);
+    expect(results).toHaveLength(1);
+    expect(results[0].vendorId).toBe("firm-1");
+  });
+
+  test("budget < 2L prioritizes basic tier firms", () => {
+    const day = eventDay();
+    const vendors = [
+      vendor({ vendorId: "elite-firm", serviceType: "photography_firm", budgetPreference: ["elite"], rating: 5.0 }),
+      vendor({ vendorId: "basic-firm", serviceType: "photography_firm", budgetPreference: ["basic"], rating: 4.2 }),
+    ];
+    const results = matchVendors({ days: [day], deliverables: emptyDeliverables() }, vendors, "signature", 150000);
+    expect(results).toHaveLength(2);
+    expect(results[0].vendorId).toBe("basic-firm");
+  });
+
+  test("budget between 2L and 5L prioritizes medium tier firms", () => {
+    const day = eventDay();
+    const vendors = [
+      vendor({ vendorId: "basic-firm", serviceType: "photography_firm", budgetPreference: ["basic"], rating: 5.0 }),
+      vendor({ vendorId: "medium-firm", serviceType: "photography_firm", budgetPreference: ["medium"], rating: 4.2 }),
+    ];
+    const results = matchVendors({ days: [day], deliverables: emptyDeliverables() }, vendors, "signature", 350000);
+    expect(results).toHaveLength(2);
+    expect(results[0].vendorId).toBe("medium-firm");
+  });
+
+  test("budget > 5L prioritizes elite tier firms", () => {
+    const day = eventDay();
+    const vendors = [
+      vendor({ vendorId: "basic-firm", serviceType: "photography_firm", budgetPreference: ["basic"], rating: 5.0 }),
+      vendor({ vendorId: "elite-firm", serviceType: "photography_firm", budgetPreference: ["elite"], rating: 4.2 }),
+    ];
+    const results = matchVendors({ days: [day], deliverables: emptyDeliverables() }, vendors, "signature", 650000);
+    expect(results).toHaveLength(2);
+    expect(results[0].vendorId).toBe("elite-firm");
+  });
+
+  test("multi-tier firms qualify for their configured tiers", () => {
+    const day = eventDay();
+    const multiTierFirm = vendor({
+      vendorId: "multi-firm",
+      serviceType: "photography_firm",
+      budgetPreference: ["basic", "medium"],
+      rating: 4.5,
+    });
+    const eliteFirm = vendor({
+      vendorId: "elite-firm",
+      serviceType: "photography_firm",
+      budgetPreference: ["elite"],
+      rating: 4.9,
+    });
+
+    const basicResults = matchVendors({ days: [day], deliverables: emptyDeliverables() }, [eliteFirm, multiTierFirm], "signature", 100000);
+    expect(basicResults[0].vendorId).toBe("multi-firm");
+
+    const mediumResults = matchVendors({ days: [day], deliverables: emptyDeliverables() }, [eliteFirm, multiTierFirm], "signature", 250000);
+    expect(mediumResults[0].vendorId).toBe("multi-firm");
+  });
+
+  describe("add-ons, wallet balance & location filtering for photography firms", () => {
+    test("never filters out a photography firm based on add-ons (LED wall, drones, web live)", () => {
+      const day = eventDay();
+      day.ledWall = { enabled: true, size: "12 x 16", screenCount: 2 };
+      day.aerial = { photographyDrones: 2, videographyDrones: 1 };
+      day.webLive = { enabled: true, quality: "HD", cameraCount: 2, streamingPlatform: "YouTube", accessType: "private" };
+
+      const firmWithoutAddonEquipment = vendor({
+        vendorId: "firm-production",
+        serviceType: "photography_firm",
+        ledWall: { available: false, sizes: [], maxScreens: 0 },
+        aerial: { photography: false, videography: false, maxDrones: 0 },
+        webLive: { available: false, qualities: [] },
+        walletBalance: 12000,
+      });
+
+      const results = matchVendors({ days: [day], deliverables: emptyDeliverables() }, [firmWithoutAddonEquipment], "signature", 250000);
+      expect(results).toHaveLength(1);
+      expect(results[0].vendorId).toBe("firm-production");
+      expect(results[0].available).toBe(true);
+    });
+
+    test("filters out photography firms with insufficient wallet balance (< 500)", () => {
+      const day = eventDay();
+      const firmLowBalance = vendor({
+        vendorId: "firm-broke",
+        serviceType: "photography_firm",
+        walletBalance: 200,
+      });
+      const firmGoodBalance = vendor({
+        vendorId: "firm-good",
+        serviceType: "photography_firm",
+        walletBalance: 2500,
+      });
+
+      const results = matchVendors({ days: [day], deliverables: emptyDeliverables() }, [firmLowBalance, firmGoodBalance], "signature", 250000);
+      expect(results).toHaveLength(1);
+      expect(results[0].vendorId).toBe("firm-good");
+    });
+
+    test("filters photography firms based on location preference", () => {
+      const day = eventDay();
+      day.location = { ...day.location, city: "Hyderabad" };
+      const firmHyd = vendor({
+        vendorId: "firm-hyd",
+        serviceType: "photography_firm",
+        city: "Hyderabad",
+        serviceAreas: ["Hyderabad"],
+        walletBalance: 1000,
+      });
+      const firmBlr = vendor({
+        vendorId: "firm-blr",
+        serviceType: "photography_firm",
+        city: "Bengaluru",
+        serviceAreas: ["Bengaluru"],
+        walletBalance: 1000,
+      });
+
+      const results = matchVendors({ days: [day], deliverables: emptyDeliverables() }, [firmHyd, firmBlr], "signature", 250000);
+      expect(results).toHaveLength(1);
+      expect(results[0].vendorId).toBe("firm-hyd");
+    });
+  });
+});
+

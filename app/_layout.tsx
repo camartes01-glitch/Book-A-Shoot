@@ -12,7 +12,14 @@ SplashScreen.setOptions({ duration: 400, fade: true });
 function HideSplashWhenReady() {
   const { ready } = useAppStore();
   useEffect(() => {
-    if (ready) void SplashScreen.hideAsync();
+    if (ready) {
+      void SplashScreen.hideAsync();
+      return;
+    }
+    const timer = setTimeout(() => {
+      void SplashScreen.hideAsync();
+    }, 1500);
+    return () => clearTimeout(timer);
   }, [ready]);
   return null;
 }
@@ -29,6 +36,8 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="booking" />
           <Stack.Screen name="bookings" />
+          <Stack.Screen name="chat" />
+          <Stack.Screen name="events" />
         </Stack>
       </AppProvider>
     </SafeAreaProvider>

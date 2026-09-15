@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { router } from "expo-router";
 import { WizardScreen } from "@/src/components/WizardScreen";
@@ -12,6 +12,12 @@ import { latestDate } from "@/src/utils/dateTime";
 export default function DeliveryDateScreen() {
   const { activeDraft, updateExpectedDelivery } = useAppStore();
   const [date, setDate] = useState<string | null>(activeDraft?.expectedDeliveryDate ?? null);
+
+  useEffect(() => {
+    if (activeDraft?.expectedDeliveryDate) {
+      setDate(activeDraft.expectedDeliveryDate);
+    }
+  }, [activeDraft?.expectedDeliveryDate]);
 
   if (!activeDraft) return null;
   const finalEventDate = latestDate(activeDraft.days.map((d) => d.eventDate ?? ""));

@@ -48,6 +48,11 @@ export type CustomerVendor = {
   contactMaskedUntilAccepted: boolean;
   phone?: string;
   email?: string;
+  isStudio?: boolean;
+  isFirm?: boolean;
+  serviceType?: string;
+  budgetPreference?: Array<"basic" | "medium" | "elite">;
+  walletBalance?: number;
 };
 
 export type VendorAvailabilityCheck = {

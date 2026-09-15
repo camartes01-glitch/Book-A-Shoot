@@ -210,7 +210,14 @@ export async function restoreDemoSession(): Promise<CustomerProfile | null> {
   return persistDemoSession(account);
 }
 
+import { signOutSupabase } from "@/src/services/supabaseAuth";
+
 export async function logoutDemo(): Promise<void> {
+  try {
+    await signOutSupabase();
+  } catch {
+    /* ignore */
+  }
   await setAuthToken(null);
   await AsyncStorage.removeItem(DEMO_SESSION_KEY);
   await AsyncStorage.removeItem(DEMO_PROFILE_KEY);

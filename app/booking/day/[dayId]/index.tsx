@@ -45,6 +45,8 @@ const GROUPS = ["wedding", "pooja", "personal", "commercial"] as const;
 
 export type DaySubStep = "event" | "photography" | "videography" | "addons";
 
+const FEATURED_EVENT_IDS = ["wedding", "pre_wedding", "birthday", "baby_shoot", "maternity_shoot", "corporate_event"];
+
 function mapRawStep(step?: string): DaySubStep {
   if (step === "photography" || step === "services") return "photography";
   if (step === "videography") return "videography";
@@ -119,6 +121,9 @@ export default function DayEditorScreen() {
       const next = hydrateEditorDay(found, local);
       setDay(next);
       dayRef.current = next;
+      if (next.eventTypeIds.some((id) => !FEATURED_EVENT_IDS.includes(id))) {
+        setShowMoreTypes(true);
+      }
       const storedIncomplete =
         (!found.eventTypeIds.length && next.eventTypeIds.length > 0) ||
         (!found.eventDate && !!next.eventDate) ||
@@ -143,6 +148,10 @@ export default function DayEditorScreen() {
       if (day) applyFoundDay(day);
     });
   }, [applyFoundDay, dayId]);
+
+  useEffect(() => {
+    syncFromStore();
+  }, [activeDraft, dayId, syncFromStore]);
 
   useFocusEffect(
     useCallback(() => {
@@ -413,7 +422,7 @@ export default function DayEditorScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.locationLabel}>Where is your event?</Text>
               <Text style={styles.locationText} numberOfLines={2}>
-                {day.location.formattedAddress || "Search area, city or venue"}
+                {day.location.formattedAddress || day.location.city || "Search area, city or venue"}
               </Text>
             </View>
           </Pressable>

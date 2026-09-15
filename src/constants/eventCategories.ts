@@ -74,11 +74,26 @@ export function getEnabledCategories(categories: EventCategory[] = DEFAULT_EVENT
 }
 
 export function eventTypeLabel(id: string, categories: EventCategory[] = DEFAULT_EVENT_CATEGORIES): string {
-  return categories.find((c) => c.id === id)?.label ?? id;
+  if (!id) return "";
+  const trimmed = id.trim();
+  const matched = categories.find(
+    (c) => c.id.toLowerCase() === trimmed.toLowerCase() || c.label.toLowerCase() === trimmed.toLowerCase()
+  );
+  if (matched) return matched.label;
+  if (trimmed.includes("_")) {
+    return trimmed
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
+  }
+  if (trimmed.length > 0) {
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+  }
+  return trimmed;
 }
 
 export function eventTypeLabels(ids: string[], categories: EventCategory[] = DEFAULT_EVENT_CATEGORIES): string {
-  return ids.map((id) => eventTypeLabel(id, categories)).join(", ");
+  return ids.map((id) => eventTypeLabel(id, categories)).filter(Boolean).join(", ");
 }
 
 /** Existing home/search matching, plus Pooja group discovery for queries like "Pooja" / "puja". */
@@ -105,7 +120,6 @@ export const HOME_QUICK_PICKS = [
   "product_shoot",
 ];
 
-/** Visual event cards shown first in the day editor. Remaining types sit behind More. */
 export const FEATURED_EVENT_TYPE_IDS = [
   "wedding",
   "engagement",
@@ -122,3 +136,60 @@ export const FEATURED_EVENT_TYPE_IDS = [
   "corporate_event",
   "product_shoot",
 ];
+
+export const REAL_CELEBRATION_ITEMS: Array<{
+  id: string;
+  label: string;
+  tagline: string;
+  group: "real_celebrations";
+}> = [
+  { id: "mehndi", label: "Mehndi & Traditions", tagline: "Real candid henna celebrations & traditional rituals", group: "real_celebrations" },
+  { id: "drone", label: "Aerial & Drone Coverage", tagline: "4K cinematic drone footage & grand venue perspectives", group: "real_celebrations" },
+  { id: "led_wall", label: "Live Stage & LED Wall", tagline: "Concerts, sangeet performances & grand live stages", group: "real_celebrations" },
+];
+
+export const EVENT_TAGLINES: Record<string, string> = {
+  wedding: "Timeless moments & sacred rituals",
+  pre_wedding: "Romantic stories & scenic portraits",
+  engagement: "Rings, love & eternal beginnings",
+  post_wedding: "Intimate portraits post celebration",
+  haldi: "Vibrant colors, joy & festive laughter",
+  mehendi: "Intricate henna artistry & dance",
+  reception: "Grand evening, elegance & toast",
+  birthday: "Milestone birthdays & celebrations",
+  baby_shoot: "Precious smiles & tiny footprints",
+  maternity_shoot: "Motherhood elegance & glowing grace",
+  anniversary: "Decades of love celebrated together",
+  naming_ceremony: "Welcoming little stars to the family",
+  housewarming: "New beginnings & cherished spaces",
+  get_together: "Reunions, friends & family bonding",
+  personal_other: "Tailored private celebrations",
+  product_shoot: "Crisp studio e-commerce visuals",
+  corporate_event: "Conferences, summits & galas",
+  brand_event: "Brand activations & launches",
+  fashion_shoot: "High-fashion editorials & lookbooks",
+  advertising_shoot: "Commercial campaign visuals",
+  real_estate_shoot: "Architectural & property showcases",
+  food_photography: "Culinary delights & menu styling",
+  commercial_other: "Specialized commercial media",
+  pooja: "Auspicious poojas & sacred ceremonies",
+  ganesh_pooja: "Blessings for prosperous beginnings",
+  satyanarayan_pooja: "Devotion, katha & divine grace",
+  gruha_pravesh_pooja: "Blessing your new sanctuary",
+  lakshmi_pooja: "Wealth, prosperity & divine light",
+  saraswati_pooja: "Knowledge, music & arts blessings",
+  navratri_pooja: "Festive devotion, garba & energy",
+  diwali_pooja: "Festival of lights & prosperity",
+  durga_pooja: "Power, grace & grand pandals",
+  varalakshmi_vratham: "Sacred prayers for family wellness",
+  naming_ceremony_pooja: "Vedic mantras for your little one",
+  wedding_pooja: "Sacred vows & auspicious rituals",
+  other_pooja: "Custom temple & family rituals",
+  mehndi: "Real candid henna celebrations & traditional rituals",
+  drone: "4K cinematic drone footage & grand venue perspectives",
+  led_wall: "Concerts, sangeet performances & grand live stages",
+};
+
+export function getEventTagline(id: string): string {
+  return EVENT_TAGLINES[id] ?? "Professional photo & video coverage";
+}

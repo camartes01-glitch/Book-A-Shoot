@@ -152,28 +152,56 @@ export async function signup(input: { name: string; email: string; phone: string
   return signupInFlight;
 }
 
-export async function loginWithGoogle(idToken: string): Promise<CustomerProfile> {
+export async function loginWithGoogle(
+  idTokenOrUserInfo: string | { google_id: string; email: string; name: string; picture?: string | null },
+): Promise<CustomerProfile> {
   if (isDemoAuthMode()) {
     rejectDemoGoogleSignIn();
   }
-  const token = idToken.trim();
-  if (!token) {
-    throw new CamartesApiError("A valid Google ID token is required.", 400);
+
+  let payload: unknown;
+  let fallback: Partial<CustomerProfile> = {};
+
+  if (typeof idTokenOrUserInfo === "string") {
+    const token = idTokenOrUserInfo.trim();
+    if (!token) {
+      throw new CamartesApiError("A valid Google ID token is required.", 400);
+    }
+    payload = await camartesFetch<unknown>(
+      "/api/auth/google",
+      {
+        method: "POST",
+        body: JSON.stringify({ id_token: token }),
+      },
+      { auth: false, requireAuth: false },
+    );
+  } else {
+    fallback = {
+      name: idTokenOrUserInfo.name,
+      email: idTokenOrUserInfo.email,
+    };
+    payload = await camartesFetch<unknown>(
+      "/api/auth/google-userinfo",
+      {
+        method: "POST",
+        body: JSON.stringify(idTokenOrUserInfo),
+      },
+      { auth: false, requireAuth: false },
+    );
   }
-  const response = await camartesFetch<{ access_token: string; expires_at: string }>(
-    "/api/auth/google",
-    {
-      method: "POST",
-      body: JSON.stringify({ id_token: token }),
-    },
-    { requireAuth: false },
-  );
-  if (!response?.access_token) {
+
+  const sessionToken = extractAccessToken(payload);
+  if (!sessionToken) {
     throw new CamartesApiError("Camartes did not return a session token for Google sign-in.", 502);
   }
-  await setAuthToken(response.access_token);
-  const me = await camartesFetch<unknown>("/api/auth/me", {}, { requireAuth: true });
-  return persistProfile(profileFromCamartesUser(me, {}));
+  await setAuthToken(sessionToken);
+
+  try {
+    const me = await camartesFetch<unknown>("/api/auth/me", {}, { auth: true, requireAuth: true });
+    return persistProfile(profileFromCamartesUser(me, fallback));
+  } catch {
+    return persistProfile(profileFromCamartesUser(payload, fallback));
+  }
 }
 
 export async function restoreSession(): Promise<CustomerProfile | null> {
@@ -206,7 +234,15 @@ export async function updateProfile(patch: Partial<CustomerProfile>): Promise<Cu
   return persistProfile(next);
 }
 
+import { signOutSupabase } from "@/src/services/supabaseAuth";
+
 export async function logout(): Promise<void> {
+  try {
+    await signOutSupabase();
+  } catch {
+    /* ignore */
+  }
+
   if (isDemoAuthMode()) {
     await logoutDemo();
     return;

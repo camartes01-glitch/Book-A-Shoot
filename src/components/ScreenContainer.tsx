@@ -1,4 +1,4 @@
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { KeyboardAvoidingView, Platform, RefreshControlProps, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, spacing } from "@/src/constants/theme";
 
@@ -9,6 +9,7 @@ export function ScreenContainer({
   contentStyle,
   keyboardAvoiding = false,
   includeBottomSafeArea = false,
+  refreshControl,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
@@ -16,6 +17,7 @@ export function ScreenContainer({
   contentStyle?: object;
   keyboardAvoiding?: boolean;
   includeBottomSafeArea?: boolean;
+  refreshControl?: React.ReactElement<RefreshControlProps>;
 }) {
   const insets = useSafeAreaInsets();
   const Content = scroll ? (
@@ -24,6 +26,7 @@ export function ScreenContainer({
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       showsVerticalScrollIndicator={false}
+      refreshControl={refreshControl}
     >
       {children}
     </ScrollView>

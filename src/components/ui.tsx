@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View, ActivityIndicator, type TextInputProps } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View, ActivityIndicator, type TextInputProps, type StyleProp, type ViewStyle } from "react-native";
 import { colors, elevation, radius, radiusSm, spacing, touchTarget } from "@/src/constants/theme";
 
 export function Card({ children, accent = false, style }: { children: React.ReactNode; accent?: boolean; style?: object }) {
@@ -43,6 +43,7 @@ export function Button({
   flex,
   compact,
   icon,
+  style,
 }: {
   label: string;
   onPress: () => void;
@@ -52,6 +53,7 @@ export function Button({
   flex?: number;
   compact?: boolean;
   icon?: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
 }) {
   const inactive = !!disabled || !!loading;
   return (
@@ -71,6 +73,7 @@ export function Button({
         variant === "primary" && inactive && styles.btnPrimaryDisabled,
         variant !== "primary" && inactive && styles.btnMutedDisabled,
         pressed && !inactive && styles.btnPressed,
+        style,
       ]}
     >
       {loading ? (
@@ -100,26 +103,49 @@ export function Field({
   hint,
   error,
   nativeID,
+  rightElement,
   ...props
-}: TextInputProps & { label: string; hint?: string; error?: string }) {
+}: TextInputProps & {
+  label?: string;
+  hint?: string;
+  error?: string;
+  rightElement?: React.ReactNode;
+}) {
   const generatedId = useId();
   const inputId = nativeID ?? generatedId;
   const labelId = `${inputId}-label`;
 
   return (
     <View style={{ gap: 6 }}>
-      <Text nativeID={labelId} style={styles.label} maxFontSizeMultiplier={1.35}>
-        {label}
-      </Text>
-      <TextInput
-        nativeID={inputId}
-        accessibilityLabel={label}
-        accessibilityLabelledBy={labelId}
-        placeholderTextColor={colors.muted}
-        maxFontSizeMultiplier={1.35}
-        style={[styles.input, error && { borderColor: colors.danger }]}
-        {...props}
-      />
+      {label ? (
+        <Text nativeID={labelId} style={styles.label} maxFontSizeMultiplier={1.35}>
+          {label}
+        </Text>
+      ) : null}
+      {rightElement ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <TextInput
+            nativeID={inputId}
+            accessibilityLabel={label || props.accessibilityLabel}
+            accessibilityLabelledBy={label ? labelId : undefined}
+            placeholderTextColor={colors.muted}
+            maxFontSizeMultiplier={1.35}
+            style={[styles.input, { flex: 1 }, error && { borderColor: colors.danger }, props.style]}
+            {...props}
+          />
+          {rightElement}
+        </View>
+      ) : (
+        <TextInput
+          nativeID={inputId}
+          accessibilityLabel={label || props.accessibilityLabel}
+          accessibilityLabelledBy={label ? labelId : undefined}
+          placeholderTextColor={colors.muted}
+          maxFontSizeMultiplier={1.35}
+          style={[styles.input, error && { borderColor: colors.danger }, props.style]}
+          {...props}
+        />
+      )}
       {hint ? <Muted>{hint}</Muted> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
     </View>

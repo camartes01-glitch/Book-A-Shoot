@@ -174,12 +174,40 @@ export type VendorMatchResult = {
   area?: string;
   /** Photography / Videography labels derived from the vendor's real capabilities. */
   serviceCategory?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  contactMasked?: boolean;
+  isStudio?: boolean;
+  isFirm?: boolean;
+  budgetPreference?: Array<"basic" | "medium" | "elite">;
 };
 
 export type ProviderLocationPreference = {
   mode: "event_location" | "preferred_area" | "another_area";
   city?: string;
   formattedAddress?: string;
+};
+
+export type LeadDistributionState = {
+  totalAssigned: number;
+  assignedAt: string;
+  acceptedByVendorId?: string | null;
+};
+
+export type AssignedPhotographer = {
+  id: string;
+  provider_id: string;
+  name: string;
+  rating: number;
+  city: string;
+  profile_image?: string | null;
+  has_accepted: boolean;
+  is_confirmed: boolean;
+  can_confirm: boolean;
+  contact_unlocked: boolean;
+  contact_phone?: string;
+  contact_email?: string;
+  contact_whatsapp?: string;
 };
 
 export type Booking = {
@@ -197,6 +225,14 @@ export type Booking = {
   providerLocationPreference?: ProviderLocationPreference | null;
   matches: VendorMatchResult[] | null;
   selectedVendorId: string | null;
+  assignedProviderIds?: string[];
+  leadDistribution?: LeadDistributionState | null;
+  acceptedVendorContact?: {
+    phone?: string;
+    email?: string;
+    studioName?: string;
+  } | null;
+  contactMasked?: boolean;
   estimatedAmount: number | null;
   counterOffer: CounterOffer | null;
   draftCompletionPct: number;
@@ -204,6 +240,13 @@ export type Booking = {
   remoteBookingId?: string | null;
   /** Raw Camartes status string, when the backend returned one. */
   remoteStatus?: string | null;
+  firms_status_message?: string | null;
+  assigned_count?: number;
+  confirmed_provider_id?: string | null;
+  assigned_photographers?: AssignedPhotographer[];
+  eventType?: string | null;
+  eventName?: string | null;
+  replacedBookingId?: string | null;
 };
 
 export type CustomerProfile = {
@@ -222,4 +265,8 @@ export type AppNotification = {
   createdAt: string;
   read: boolean;
   bookingId?: string;
+  userId?: string;
+  firmId?: string;
+  firmName?: string;
+  type?: "message" | "booking" | "system";
 };

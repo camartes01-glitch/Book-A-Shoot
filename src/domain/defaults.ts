@@ -93,6 +93,9 @@ export function mergeEventDayPatch(current: EventDay, patch: Partial<EventDay>):
  * that have not finished persisting yet. */
 export function hydrateEditorDay(stored: EventDay, local: EventDay | null | undefined): EventDay {
   if (!local || local.dayId !== stored.dayId) return stored;
+  if (stored.location?.formattedAddress && stored.location.formattedAddress !== local.location?.formattedAddress) {
+    return { ...mergeEventDayPatch(stored, local), location: stored.location };
+  }
   return mergeEventDayPatch(stored, local);
 }
 

@@ -87,6 +87,19 @@ export function selectedCoreServiceLabels(day: EventDay): string[] {
   return labels;
 }
 
+export function selectedDetailedServiceLabels(day: EventDay): string[] {
+  const labels: string[] = [];
+  if (day.photography.candid) labels.push("Candid Photography");
+  if (day.photography.traditional) labels.push("Traditional Photography");
+  if (day.videography.candid) labels.push("Cinematic Videography");
+  if (day.videography.traditional) labels.push("Traditional Videography");
+  if (!labels.length) {
+    if (day.photography.traditional || day.photography.candid) labels.push("Photography");
+    if (day.videography.traditional || day.videography.candid) labels.push("Videography");
+  }
+  return labels;
+}
+
 export function selectedAddOnLabels(day: EventDay): string[] {
   const labels: string[] = [];
   if (isAerialEnabled(day)) labels.push("Drone / Aerial");

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Alert, Pressable, View } from "react-native";
 import { router } from "expo-router";
-import { Pencil } from "lucide-react-native";
+import { Lock, Pencil, ShieldCheck } from "lucide-react-native";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { Button, Card, Muted, SectionTitle } from "@/src/components/ui";
+import { BookingSuccessModal } from "@/src/components/BookingSuccessModal";
 import { useAppStore } from "@/src/state/AppProvider";
 import { selectedPackageQuote } from "@/src/engine/pricing";
 import { formatDateLong, formatInr, formatInrRange, formatPackageOverallLabel, formatTime12h } from "@/src/utils/format";
@@ -36,19 +37,28 @@ function SectionHead({ title, onEdit }: { title: string; onEdit: () => void }) {
 import { detectDayOvertime, getBookingPricingModel } from "@/src/config/approvedBudget";
 
 export default function ConfirmBookingScreen() {
-  const { activeDraft, submitVendorRequest, clearActiveDraft } = useAppStore();
+  const { activeDraft, submitVendorRequest, clearActiveDraft, profile } = useAppStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successData, setSuccessData] = useState<{
+    bookingId: string;
+    statusMessage?: string | null;
+    eventName?: string;
+    dateLabel?: string;
+  } | null>(null);
 
-  if (!activeDraft || !activeDraft.selectedVendorId) {
+  const matches = activeDraft?.matches ?? [];
+  const primaryVendorId = activeDraft?.selectedVendorId || matches[0]?.vendorId;
+
+  if (!activeDraft || (!primaryVendorId && matches.length === 0)) {
     return (
       <WizardScreen title="Review your booking" step="review">
-        <Muted>Select a provider before sending a booking request.</Muted>
+        <Muted>Match providers before sending a booking request.</Muted>
         <Button label="Find providers" onPress={() => router.replace("/booking/matches")} />
       </WizardScreen>
     );
   }
-  const match = activeDraft.matches?.find((m) => m.vendorId === activeDraft.selectedVendorId);
+  const match = matches.find((m) => m.vendorId === primaryVendorId) || matches[0];
   const pkg = selectedPackageQuote(activeDraft);
   const days = [...activeDraft.days].sort((a, b) => a.order - b.order);
   const firstDay = days[0];
@@ -70,17 +80,34 @@ export default function ConfirmBookingScreen() {
   const teaserMins = activeDraft.deliverables.video?.teaserDurationMinutes ?? 1;
 
   const onSubmit = async () => {
+    if (!profile) {
+      router.push({ pathname: "/(auth)/login", params: { returnTo: "/booking/confirm" } });
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const submitted = await submitVendorRequest();
-      clearActiveDraft();
-      router.replace(`/bookings/${submitted.bookingId}`);
+      setSuccessData({
+        bookingId: submitted.bookingId,
+        statusMessage:
+          submitted.firms_status_message ||
+          "Dispatched to verified photography partners. You will be notified as partners accept.",
+        eventName: eventLabel || "Photography Booking",
+        dateLabel: firstDay?.eventDate ? formatDateLong(firstDay.eventDate) : undefined,
+      });
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not send the booking request.";
       setError(message);
       if (e instanceof CamartesApiError && e.status === 401) {
-        Alert.alert("Sign in required", message, [{ text: "Sign in", onPress: () => router.push("/(auth)/login") }]);
+        Alert.alert("Sign in required", message, [{ text: "Sign in", onPress: () => router.push({ pathname: "/(auth)/login", params: { returnTo: "/booking/confirm", reauth: "1" } }) }]);
+      } else if (
+        message.toLowerCase().includes("no photography firms with active balance") ||
+        message.toLowerCase().includes("no suitable firms with active balance")
+      ) {
+        const cleanMsg = "No photography firms with active balance and availability found in your area right now. Please check back shortly.";
+        setError(cleanMsg);
+        Alert.alert("No Available Firms", cleanMsg);
       } else {
         Alert.alert("Request not sent", message);
       }
@@ -97,11 +124,30 @@ export default function ConfirmBookingScreen() {
       footer={<Button label="Send booking request" onPress={onSubmit} loading={loading} flex={1} />}
     >
       <SectionTitle>You're almost booked</SectionTitle>
-      {error ? <Muted style={{ color: colors.danger, fontWeight: "700" }}>{error}</Muted> : null}
-      <Muted>Sending this request creates a real booking on Camartes. It is not confirmed until the provider and Camartes say so.</Muted>
+      {profile ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginVertical: 4 }}>
+          <ShieldCheck size={16} color={colors.primary} />
+          <Muted style={{ color: colors.ink, fontWeight: "600" }}>
+            Signed in as {profile.name} ({profile.mobile ? `+91 ${profile.mobile}` : profile.email})
+          </Muted>
+        </View>
+      ) : null}
+      {error ? (
+        <View style={{ gap: 8, marginVertical: 8 }}>
+          <Muted style={{ color: colors.danger, fontWeight: "700" }}>{error}</Muted>
+          {error.toLowerCase().includes("sign in") ? (
+            <Button
+              label="Sign In or Register"
+              variant="outline"
+              onPress={() => router.push({ pathname: "/(auth)/login", params: { returnTo: "/booking/confirm", reauth: "1" } })}
+            />
+          ) : null}
+        </View>
+      ) : null}
+      <Muted>Sending this request dispatches your shoot to verified photography partners. It is not confirmed until a partner accepts and confirms.</Muted>
 
       <Card>
-        <SectionHead title="Event" onEdit={() => router.push("/booking/new")} />
+        <SectionHead title="Event" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}?step=event` : "/booking/new")} />
         <Muted style={{ fontWeight: "800", color: colors.ink }}>{eventLabel || "Event"}</Muted>
         <Muted>
           {days.length} day{days.length === 1 ? "" : "s"} of coverage
@@ -109,7 +155,7 @@ export default function ConfirmBookingScreen() {
       </Card>
 
       <Card>
-        <SectionHead title="Date and time" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}` : "/booking/new")} />
+        <SectionHead title="Date and time" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}?step=event` : "/booking/new")} />
         {days.map((day) => {
           const minutes =
             day.startTime && day.endTime ? durationMinutes(day.startTime, day.endTime, day.overnight) : null;
@@ -141,12 +187,12 @@ export default function ConfirmBookingScreen() {
       </Card>
 
       <Card>
-        <SectionHead title="Services" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}` : "/booking/new")} />
+        <SectionHead title="Services" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}?step=photography` : "/booking/new")} />
         <Muted style={{ fontWeight: "800", color: colors.ink }}>{services.join(" · ") || "Add coverage"}</Muted>
       </Card>
 
       <Card>
-        <SectionHead title="Add-ons" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}` : "/booking/new")} />
+        <SectionHead title="Add-ons" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}?step=addons` : "/booking/new")} />
         <Muted style={{ fontWeight: "700", color: colors.ink }}>{addOns.length ? addOns.join(" · ") : "None"}</Muted>
       </Card>
 
@@ -189,11 +235,39 @@ export default function ConfirmBookingScreen() {
       </Card>
 
       <Card>
-        <SectionHead title="Provider" onEdit={() => router.push("/booking/matches")} />
-        <Muted style={{ fontSize: 16, fontWeight: "800", color: colors.ink }}>{match?.studioName}</Muted>
-        <Muted>{[match?.area, match?.city].filter(Boolean).join(", ")}</Muted>
-        {match?.serviceCategory ? <Muted>{match.serviceCategory}</Muted> : null}
+        <SectionHead title="Lead Dispatch & Assigned Providers" onEdit={() => router.push("/booking/matches")} />
+        <Muted style={{ fontSize: 16, fontWeight: "800", color: colors.ink }}>
+          {matches.length > 1 ? `Dispatched to ${matches.length} Verified Photographers` : (match?.studioName || "Verified Photographer")}
+        </Muted>
+        <Muted>
+          Preferred location: {activeDraft.providerLocationPreference?.city || firstDay?.location.city || "Near event"}
+        </Muted>
+        <View style={{ marginTop: 8, padding: 10, backgroundColor: colors.peach, borderRadius: 8, gap: 4 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Lock size={14} color={colors.primaryDark} />
+            <Muted style={{ fontWeight: "800", color: colors.primaryDark }}>Mutual Contact Privacy</Muted>
+          </View>
+          <Muted style={{ fontSize: 12 }}>
+            Your contact details (phone & email) will NOT appear to photographers until one accepts your request. Photographers' direct contacts will likewise unlock upon acceptance.
+          </Muted>
+        </View>
       </Card>
+
+      {successData ? (
+        <BookingSuccessModal
+          visible={!!successData}
+          bookingId={successData.bookingId}
+          statusMessage={successData.statusMessage}
+          eventName={successData.eventName}
+          dateLabel={successData.dateLabel}
+          onComplete={() => {
+            const targetId = successData.bookingId;
+            clearActiveDraft();
+            setSuccessData(null);
+            router.replace(`/bookings/${targetId}`);
+          }}
+        />
+      ) : null}
     </WizardScreen>
   );
 }

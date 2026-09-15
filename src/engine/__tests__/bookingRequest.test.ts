@@ -48,18 +48,18 @@ describe("toCamartesBookingRequest", () => {
       { customerId: "cust-1", name: "Asha", mobile: "9876543210", email: "asha@example.com", avatarInitials: "A", savedAddresses: [] },
     );
     expect(body.provider_id).toBe("user_16eeb421bc07");
-    expect(body.service_type).toBe("photographer");
+    expect(body.service_type).toBe("photography_firm");
     expect(body.event_date).toBe("2099-10-12");
-    expect(body.event_time).toBe("10:00");
+    expect(body.event_time).toBe("10:00 AM");
     expect(body.budget).toBe("80000");
     expect(body.client_name).toBe("Asha");
     expect(body.message).toContain("Photography");
     expect(body.message).not.toContain("Aerial: ");
   });
 
-  test("Videography only posts videographer", () => {
+  test("Videography only posts photography_firm for shoot bookings", () => {
     const body = toCamartesBookingRequest(bookingWith([setVideographySelected(completeDay(1), true)]), null);
-    expect(body.service_type).toBe("videographer");
+    expect(body.service_type).toBe("photography_firm");
     expect(body.message).toContain("Videography");
   });
 
@@ -74,14 +74,14 @@ describe("toCamartesBookingRequest", () => {
     const body = toCamartesBookingRequest(bookingWith([day]), null);
     expect(body.message).toContain("Aerial:");
     expect(body.message).toContain("photo drone");
-    expect(catalogServiceTypes([day])).toEqual(expect.arrayContaining(["photographer", "fly_cam"]));
+    expect(catalogServiceTypes([day])).toEqual(["photography_firm"]);
   });
 
   test("Videography + Drone/Aerial serializes video drones", () => {
     const day = setAerialEnabled(setVideographySelected(completeDay(1), true), true);
     const body = toCamartesBookingRequest(bookingWith([day]), null);
     expect(body.message).toContain("video drone");
-    expect(catalogServiceTypes([day])).toEqual(expect.arrayContaining(["videographer", "fly_cam"]));
+    expect(catalogServiceTypes([day])).toEqual(["photography_firm"]);
   });
 
   test("Photography + LED Wall serializes the LED add-on", () => {
@@ -91,7 +91,7 @@ describe("toCamartesBookingRequest", () => {
     };
     const body = toCamartesBookingRequest(bookingWith([day]), null);
     expect(body.message).toContain("LED Wall: 8 x 12 × 2");
-    expect(catalogServiceTypes([day])).toEqual(expect.arrayContaining(["photographer", "led_wall"]));
+    expect(catalogServiceTypes([day])).toEqual(["photography_firm"]);
   });
 
   test("Photography + Web Live serializes the Web Live add-on", () => {
@@ -101,7 +101,7 @@ describe("toCamartesBookingRequest", () => {
     };
     const body = toCamartesBookingRequest(bookingWith([day]), null);
     expect(body.message).toContain("Web Live: HD × 1");
-    expect(catalogServiceTypes([day])).toEqual(expect.arrayContaining(["photographer", "web_live_services"]));
+    expect(catalogServiceTypes([day])).toEqual(["photography_firm"]);
   });
 
   test("Photography + Drone/Aerial + LED Wall + Web Live keeps the real provider id", () => {
@@ -113,10 +113,11 @@ describe("toCamartesBookingRequest", () => {
     };
     const body = toCamartesBookingRequest(bookingWith([day], { selectedVendorId: "user_25493cf5103e" }), null);
     expect(body.provider_id).toBe("user_25493cf5103e");
+    expect(body.service_type).toBe("photography_firm");
     expect(body.message).toContain("Aerial:");
     expect(body.message).toContain("LED Wall");
     expect(body.message).toContain("Web Live");
-    expect(catalogServiceTypes([day]).sort()).toEqual(["fly_cam", "led_wall", "photographer", "web_live_services"]);
+    expect(catalogServiceTypes([day])).toEqual(["photography_firm"]);
   });
 
   test("overnight 20:00-02:00 is 6 hours and notes the next day", () => {

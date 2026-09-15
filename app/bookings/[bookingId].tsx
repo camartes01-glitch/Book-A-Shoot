@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, View } from "react-native";
+import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { CheckCircle2, Mail, Phone, XCircle } from "lucide-react-native";
+import { CheckCircle2, Lock, Mail, Phone, XCircle } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ProgressHeader } from "@/src/components/ProgressHeader";
 import { Badge, Button, Card, Muted, ScreenTitle, SectionTitle } from "@/src/components/ui";
 import { StatusTimeline } from "@/src/components/StatusTimeline";
+import { CandidateFirmCard } from "@/src/components/CandidateFirmCard";
 import * as bookingApi from "@/src/services/bookingApi";
 import * as paymentApi from "@/src/services/paymentApi";
-import type { Booking } from "@/src/types/booking";
+import type { AssignedPhotographer, Booking } from "@/src/types/booking";
 import { STATUS_LABEL, STATUS_TONE } from "@/src/domain/statusLabels";
 import { selectedAddOnLabels, selectedCoreServiceLabels } from "@/src/domain/dayServices";
 import { eventTypeLabels } from "@/src/constants/eventCategories";
+import { canSearchAgain, getBookingEventTitle, getEffectiveBookingStatus, isCompletedBooking } from "@/src/domain/bookingFilters";
 import { selectedPackageQuote } from "@/src/engine/pricing";
 import { formatDateLong, formatInr, formatInrRange, formatPackageOverallLabel } from "@/src/utils/format";
 import { colors, spacing } from "@/src/constants/theme";
@@ -19,21 +21,23 @@ import { useAppStore } from "@/src/state/AppProvider";
 import { normalizeRouteParam } from "@/src/utils/routeParam";
 
 import { ConfirmDialog } from "@/src/components/ConfirmDialog";
-import { isLocalWizardBooking } from "@/src/domain/bookingRequest";
+import { isLocalWizardBooking, getDraftResumeRoute } from "@/src/domain/bookingRequest";
 
 const TERMINAL_ALTERNATE = new Set(["VENDOR_REJECTED", "CUSTOMER_CANCELLED", "VENDOR_CANCELLED", "EXPIRED"]);
-const CANCELLABLE = new Set(["SUBMITTED", "MATCHING", "VENDOR_SELECTED", "REQUEST_SENT", "VENDOR_ACCEPTED", "CUSTOMER_CONFIRMED"]);
 const CONTACT_UNLOCKED = new Set(["VENDOR_ACCEPTED", "CUSTOMER_CONFIRMED", "PAYMENT_PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED"]);
 
 export default function BookingDetailScreen() {
   const { bookingId: bookingIdParam } = useLocalSearchParams<{ bookingId: string | string[] }>();
   const bookingId = normalizeRouteParam(bookingIdParam);
-  const { reopenForMatching, refreshBookings, deleteBooking } = useAppStore();
+  const { refreshBookings, deleteBooking, confirmPhotographer, loadDraft, searchAgainBooking } = useAppStore();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
-  const [confirmMode, setConfirmMode] = useState<"delete" | "cancel" | null>(null);
+  const [confirmMode, setConfirmMode] = useState<"delete" | null>(null);
+  const [firmToConfirm, setFirmToConfirm] = useState<AssignedPhotographer | null>(null);
+  const [confirmingFirmId, setConfirmingFirmId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -69,6 +73,15 @@ export default function BookingDetailScreen() {
     return () => clearInterval(interval);
   }, [booking?.status, booking?.remoteBookingId, load]);
 
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load]);
+
   if (missing && !booking) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top", "left", "right", "bottom"]}>
@@ -89,12 +102,35 @@ export default function BookingDetailScreen() {
     );
   }
 
-  const match = booking.matches?.find((m) => m.vendorId === booking.selectedVendorId);
+  const match = booking.matches?.find((m) => m.vendorId === (booking.confirmed_provider_id || booking.selectedVendorId));
   const contactUnlocked = CONTACT_UNLOCKED.has(booking.status);
   const displayId = booking.remoteBookingId || booking.bookingId;
   const services = Array.from(new Set(booking.days.flatMap((day) => selectedCoreServiceLabels(day))));
   const addOns = Array.from(new Set(booking.days.flatMap((day) => selectedAddOnLabels(day))));
   const quoted = selectedPackageQuote(booking);
+
+  const assignedFirms: AssignedPhotographer[] = booking.assigned_photographers?.length
+    ? booking.assigned_photographers
+    : (booking.matches?.slice(0, 6).map((m) => {
+        const isAccepted = booking.status === "VENDOR_ACCEPTED" || booking.status === "CONFIRMED" || booking.status === "CUSTOMER_CONFIRMED";
+        const isThisConfirmed = (booking.status === "CONFIRMED" || booking.status === "CUSTOMER_CONFIRMED") && (m.vendorId === (booking.confirmed_provider_id || booking.selectedVendorId));
+        const firmAccepted = isAccepted && (m.vendorId === (booking.confirmed_provider_id || booking.selectedVendorId));
+        return {
+          id: m.vendorId,
+          provider_id: m.vendorId,
+          name: m.studioName,
+          rating: m.rating,
+          city: m.city,
+          profile_image: m.imageUrl,
+          has_accepted: firmAccepted,
+          is_confirmed: isThisConfirmed,
+          can_confirm: firmAccepted && !booking.confirmed_provider_id && booking.status !== "CONFIRMED",
+          contact_unlocked: firmAccepted || isThisConfirmed,
+          contact_phone: m.contactPhone,
+          contact_email: m.contactEmail,
+          contact_whatsapp: m.contactPhone,
+        };
+      }) ?? []);
 
   const run = async (fn: () => Promise<Booking>) => {
     setBusy(true);
@@ -108,6 +144,25 @@ export default function BookingDetailScreen() {
       Alert.alert("Update not saved", message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleConfirmFirm = async (firm: AssignedPhotographer) => {
+    setBusy(true);
+    setConfirmingFirmId(firm.provider_id);
+    setError(null);
+    try {
+      const updated = await confirmPhotographer(booking.bookingId, firm.provider_id);
+      setBooking(updated);
+      setFirmToConfirm(null);
+      Alert.alert("Photography Partner Confirmed!", `${firm.name} is now locked as your official photography partner.`);
+    } catch (err: any) {
+      const msg = err.message || "Failed to confirm photography partner.";
+      setError(msg);
+      Alert.alert("Confirmation Failed", msg);
+    } finally {
+      setBusy(false);
+      setConfirmingFirmId(null);
     }
   };
 
@@ -173,68 +228,118 @@ export default function BookingDetailScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top", "left", "right", "bottom"]}>
       <ProgressHeader title="Booking details" step="providers" onBack={() => router.replace("/(tabs)/bookings")} />
-      <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}>
-        <Card>
-          <ScreenTitle>{displayId}</ScreenTitle>
-          <Badge label={STATUS_LABEL[booking.status]} tone={STATUS_TONE[booking.status]} />
+      <ScrollView
+        contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
+        <Card style={styles.topCard}>
+          {booking.firms_status_message ? (
+            <View
+              style={styles.firmsStatusPill}
+              testID="firms-status-badge"
+            >
+              <Text style={styles.firmsStatusText}>
+                {booking.firms_status_message}
+              </Text>
+            </View>
+          ) : null}
+          <ScreenTitle>{getBookingEventTitle(booking)}</ScreenTitle>
+          <Muted style={{ fontSize: 12, marginTop: -2, marginBottom: 4 }}>ID: {displayId}</Muted>
+          <Badge label={STATUS_LABEL[getEffectiveBookingStatus(booking)]} tone={STATUS_TONE[getEffectiveBookingStatus(booking)]} />
           {booking.remoteStatus ? <Muted>Camartes status: {booking.remoteStatus}</Muted> : null}
         </Card>
 
         {error ? <Muted style={{ color: colors.danger, fontWeight: "700" }}>{error}</Muted> : null}
 
-        {TERMINAL_ALTERNATE.has(booking.status) ? (
-          <Card style={{ borderColor: colors.danger }}>
+        {TERMINAL_ALTERNATE.has(booking.status) || canSearchAgain(booking) ? (
+          <Card style={{ borderColor: canSearchAgain(booking) ? colors.primary : colors.danger }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <XCircle size={18} color={colors.danger} />
-              <SectionTitle>{STATUS_LABEL[booking.status]}</SectionTitle>
+              <XCircle size={18} color={canSearchAgain(booking) ? colors.primaryDark : colors.danger} />
+              <SectionTitle>{STATUS_LABEL[getEffectiveBookingStatus(booking)]}</SectionTitle>
             </View>
-            {booking.status === "VENDOR_REJECTED" ? (
-              <>
-                <Muted>Your selected vendor could not take this booking. You can choose another matched provider without re-entering your requirements.</Muted>
+            <Muted style={{ marginTop: 4 }}>
+              {booking.firms_status_message || (TERMINAL_ALTERNATE.has(booking.status) ? "This booking is no longer active." : "No photography firms were available or accepted for this request.")}
+            </Muted>
+            {canSearchAgain(booking) ? (
+              <View style={{ marginTop: 12 }}>
                 <Button
-                  label="Choose another provider"
+                  label="Search Again"
+                  variant="primary"
                   onPress={async () => {
                     setBusy(true);
                     try {
-                      await reopenForMatching(booking.bookingId);
-                      router.push("/booking/matches");
+                      await searchAgainBooking(booking);
+                      router.push("/booking/confirm");
                     } catch (e) {
-                      Alert.alert("Could not reopen matching", e instanceof Error ? e.message : "Try again.");
+                      const msg = e instanceof Error ? e.message : "Could not prepare booking for retry.";
+                      Alert.alert("Search again", msg);
                     } finally {
                       setBusy(false);
                     }
                   }}
+                  disabled={busy}
+                  loading={busy}
                 />
-              </>
-            ) : (
-              <Muted>This booking is no longer active.</Muted>
-            )}
+              </View>
+            ) : null}
           </Card>
         ) : (
           <Card>
             <SectionTitle>Status</SectionTitle>
-            <StatusTimeline status={booking.status} />
+            <StatusTimeline status={getEffectiveBookingStatus(booking)} booking={booking} />
           </Card>
         )}
 
-        {booking.status === "REQUEST_SENT" ? (
-          <Card>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <ActivityIndicator color={colors.primary} />
-              <Muted>Your request is with Camartes. This screen updates when the provider responds — it will not invent an acceptance.</Muted>
+        {/* Candidate Photography Firms List with Swiggy-like Clean Design */}
+        {assignedFirms.length > 0 ? (
+          <View style={{ gap: 10 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <SectionTitle>Candidate Photography Firms ({assignedFirms.length})</SectionTitle>
+              <Muted style={{ fontSize: 11, color: colors.muted }}>Pull down to refresh</Muted>
             </View>
-          </Card>
-        ) : null}
-
-        {booking.status === "VENDOR_ACCEPTED" && !booking.counterOffer ? (
-          <Card>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <CheckCircle2 size={18} color={colors.success} />
-              <SectionTitle>Vendor accepted your request</SectionTitle>
+            <View style={{ gap: 8 }}>
+              {assignedFirms.map((firm) => (
+                <CandidateFirmCard
+                  key={firm.provider_id || firm.id}
+                  firm={firm}
+                  onConfirm={(f) => setFirmToConfirm(f)}
+                  confirmLoading={busy && confirmingFirmId === firm.provider_id}
+                  onChat={(f) => {
+                    const pid = f.provider_id || f.id;
+                    if (!pid) {
+                      router.push("/(tabs)/messages");
+                      return;
+                    }
+                    if (!f.has_accepted) {
+                      Alert.alert(
+                        "Request Pending",
+                        `${f.name} hasn't accepted your request yet. Chat will unlock as soon as they accept your booking request.`,
+                        [{ text: "Got it" }]
+                      );
+                      return;
+                    }
+                    router.push({
+                      pathname: "/chat/[userId]",
+                      params: {
+                        userId: pid,
+                        name: f.name,
+                        picture: f.profile_image || "",
+                        phone: f.contact_phone || "",
+                        accepted: "true",
+                      },
+                    });
+                  }}
+                />
+              ))}
             </View>
-            <Muted>Confirming asks Camartes to record that status. It is not marked confirmed until the backend accepts the update.</Muted>
-            <Button label="Confirm booking" onPress={() => run(() => bookingApi.confirmBooking(booking.bookingId))} loading={busy} />
-          </Card>
+          </View>
         ) : null}
 
         {booking.status === "CUSTOMER_CONFIRMED" || booking.status === "PAYMENT_PENDING" ? (
@@ -254,33 +359,6 @@ export default function BookingDetailScreen() {
               disabled={busy}
               loading={busy}
             />
-          </Card>
-        ) : null}
-
-        {match ? (
-          <Card>
-            <SectionTitle>Vendor</SectionTitle>
-            <Muted style={{ fontWeight: "800", color: colors.ink, fontSize: 15 }}>{match.studioName}</Muted>
-            <Muted>{match.city}</Muted>
-            {contactUnlocked ? (
-              <View style={{ gap: 4 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                  <Phone size={14} color={colors.primaryDark} />
-                  <Muted>The provider accepted on Camartes. Direct numbers stay in Camartes until that platform shows them.</Muted>
-                </View>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                  <Mail size={14} color={colors.primaryDark} />
-                  <Muted>Booking updates also come from Camartes.</Muted>
-                </View>
-              </View>
-            ) : (
-              <Muted>Contact details unlock once the vendor accepts on Camartes.</Muted>
-            )}
-          </Card>
-        ) : booking.selectedVendorId ? (
-          <Card>
-            <SectionTitle>Vendor</SectionTitle>
-            <Muted>Provider ID {booking.selectedVendorId}</Muted>
           </Card>
         ) : null}
 
@@ -336,32 +414,63 @@ export default function BookingDetailScreen() {
           </View>
         </Card>
 
-        {isLocalWizardBooking(booking) || (!booking.remoteBookingId && booking.status === "DRAFT") ? (
-          <Button
-            label="Delete booking"
-            variant="danger"
-            onPress={() => setConfirmMode("delete")}
-            disabled={busy}
-          />
-        ) : CANCELLABLE.has(booking.status) ? (
-          <Button
-            label="Cancel booking"
-            variant="danger"
-            onPress={() => setConfirmMode("cancel")}
-            disabled={busy}
-          />
+        {!isCompletedBooking(booking) ? (
+          <View style={{ gap: spacing.sm, marginVertical: spacing.md }}>
+            {canSearchAgain(booking) ? (
+              <Button
+                label="Search Again"
+                variant="primary"
+                onPress={async () => {
+                  setBusy(true);
+                  try {
+                    await searchAgainBooking(booking);
+                    router.push("/booking/confirm");
+                  } catch (e) {
+                    const msg = e instanceof Error ? e.message : "Could not prepare booking for retry.";
+                    Alert.alert("Search again", msg);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                disabled={busy}
+                loading={busy}
+              />
+            ) : null}
+
+            <Button
+              label="Edit event details"
+              variant="outline"
+              onPress={async () => {
+                try {
+                  const loaded = await loadDraft(booking.bookingId);
+                  const active = loaded ?? booking;
+                  const target = getDraftResumeRoute(active);
+                  router.push(target as any);
+                } catch (e) {
+                  const msg = e instanceof Error ? e.message : "Could not load booking.";
+                  Alert.alert("Edit booking", msg);
+                }
+              }}
+              disabled={busy}
+            />
+
+            {(isLocalWizardBooking(booking) || (!booking.remoteBookingId && booking.status === "DRAFT")) ? (
+              <Button
+                label="Delete draft"
+                variant="danger"
+                onPress={() => setConfirmMode("delete")}
+                disabled={busy}
+              />
+            ) : null}
+          </View>
         ) : null}
       </ScrollView>
 
       <ConfirmDialog
         visible={confirmMode !== null}
-        title={confirmMode === "delete" ? "Delete booking?" : "Cancel booking?"}
-        message={
-          confirmMode === "delete"
-            ? "This will remove the entire booking and all of its event days. This action cannot be undone."
-            : "This will cancel your booking request with Camartes. This action cannot be undone."
-        }
-        confirmLabel={confirmMode === "delete" ? "Delete booking" : "Cancel booking"}
+        title="Delete draft booking?"
+        message="This will remove the draft booking and all of its event days. This action cannot be undone."
+        confirmLabel="Delete draft"
         cancelLabel="Cancel"
         confirmVariant="danger"
         loading={busy}
@@ -378,9 +487,6 @@ export default function BookingDetailScreen() {
             } finally {
               setBusy(false);
             }
-          } else if (confirmMode === "cancel") {
-            await run(() => bookingApi.cancelBooking(booking.bookingId));
-            setConfirmMode(null);
           }
         }}
         onCancel={() => {
@@ -388,6 +494,58 @@ export default function BookingDetailScreen() {
         }}
         testID="booking-detail-confirm-dialog"
       />
+
+      <ConfirmDialog
+        visible={firmToConfirm !== null}
+        title="Confirm Photographer"
+        message={`Confirm ${firmToConfirm?.name} as your photography partner? This will lock your booking with this partner.`}
+        confirmLabel="Confirm Photographer"
+        cancelLabel="Cancel"
+        confirmVariant="primary"
+        loading={busy && confirmingFirmId !== null}
+        onConfirm={() => {
+          if (firmToConfirm) void handleConfirmFirm(firmToConfirm);
+        }}
+        onCancel={() => {
+          if (!busy) setFirmToConfirm(null);
+        }}
+        testID="confirm-photographer-dialog"
+      />
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  topCard: {
+    gap: 8,
+  },
+  firmsStatusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    alignSelf: "flex-start",
+    backgroundColor: "#FFF7ED",
+    borderColor: "#FED7AA",
+  },
+  firmsStatusIndigo: {
+    backgroundColor: "#FFF7ED",
+    borderColor: "#FED7AA",
+  },
+  firmsStatusPurple: {
+    backgroundColor: "#FFF7ED",
+    borderColor: "#FED7AA",
+  },
+  firmsStatusText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.primaryDark,
+  },
+  firmsStatusTextIndigo: {
+    color: colors.primaryDark,
+  },
+  firmsStatusTextPurple: {
+    color: colors.primaryDark,
+  },
+});
+

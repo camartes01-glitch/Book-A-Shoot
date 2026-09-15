@@ -307,4 +307,70 @@ describe("REAL Camartes authentication remains the existing implementation", () 
     expect(googleErr).toBeDefined();
     expect(googleErr?.status).not.toBe(501);
   });
+
+  test("submitting a booking in DEMO mode succeeds without requiring a remote token", async () => {
+    setAuthModeForTests("DEMO");
+    globalThis.fetch = forbidCamartes();
+
+    const profile = await authApi.login(DEMO_CREDENTIALS.email, DEMO_CREDENTIALS.password);
+    expect(profile.email).toBe(DEMO_CREDENTIALS.email.toLowerCase());
+    expect(await getAuthToken()).toBeNull();
+
+    const { createBooking, updateDay, updateExpectedDelivery, submitBudget, selectPackage, saveBooking, submitVendorRequest } =
+      await import("@/src/services/bookingApi");
+    const { createEmptyDay, sanitizeEventDay } = await import("@/src/domain/defaults");
+    const { setPhotographySelected } = await import("@/src/domain/dayServices");
+
+    const created = await createBooking(profile.customerId);
+    const day = setPhotographySelected(
+      sanitizeEventDay({
+        ...createEmptyDay(1),
+        eventDate: "2099-10-12",
+        eventTypeIds: ["wedding"],
+        location: {
+          ...createEmptyDay(1).location,
+          formattedAddress: "Banjara Hills, Hyderabad",
+          city: "Hyderabad",
+        },
+        startTime: "10:00",
+        endTime: "16:00",
+      }),
+      true,
+    );
+    const withDay = await updateDay(created.bookingId, created.days[0].dayId, day);
+    await updateExpectedDelivery(created.bookingId, "2099-11-01");
+    await submitBudget(created.bookingId, 80000);
+    await selectPackage(created.bookingId, "signature");
+    await saveBooking({
+      ...withDay,
+      expectedDeliveryDate: "2099-11-01",
+      budget: 80000,
+      selectedPackage: "signature",
+      matches: [
+        {
+          vendorId: "firm_mock_1",
+          studioName: "Mock Firm",
+          city: "Hyderabad",
+          rating: 4.8,
+          experienceYears: 5,
+          completedBookings: 20,
+          available: true,
+          matchScore: 90,
+          estimatedPrice: 65000,
+          isStudio: true,
+          isFirm: true,
+        },
+      ],
+      assignedProviderIds: ["firm_mock_1"],
+      selectedVendorId: "firm_mock_1",
+      status: "VENDOR_SELECTED",
+    });
+
+    const submitted = await submitVendorRequest(created.bookingId);
+    expect(submitted.status).toBe("REQUEST_SENT");
+    expect(submitted.remoteStatus).toBe("request_sent");
+    expect(submitted.bookingId.startsWith("bk_demo_")).toBe(true);
+    expect(submitted.contactMasked).toBe(true);
+  });
 });
+

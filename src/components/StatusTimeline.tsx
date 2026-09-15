@@ -1,12 +1,11 @@
 import { StyleSheet, Text, View } from "react-native";
 import { Check } from "lucide-react-native";
-import type { BookingStatus } from "@/src/types/booking";
+import type { Booking, BookingStatus } from "@/src/types/booking";
 import { STATUS_LABEL } from "@/src/domain/statusLabels";
+import { getEffectiveBookingStatus } from "@/src/domain/bookingFilters";
 import { colors } from "@/src/constants/theme";
 
-/** The "happy path" state machine (spec section 32). Alternate/terminal
- * states (VENDOR_REJECTED, *_CANCELLED, EXPIRED) are shown separately by the
- * caller rather than plotted on this linear timeline. */
+/** Linear status progression. Alternate/terminal states are shown separately. */
 export const HAPPY_PATH: BookingStatus[] = [
   "SUBMITTED",
   "MATCHING",
@@ -14,14 +13,18 @@ export const HAPPY_PATH: BookingStatus[] = [
   "REQUEST_SENT",
   "VENDOR_ACCEPTED",
   "CUSTOMER_CONFIRMED",
-  "PAYMENT_PENDING",
-  "CONFIRMED",
   "IN_PROGRESS",
   "COMPLETED",
 ];
 
-export function StatusTimeline({ status }: { status: BookingStatus }) {
-  const activeIndex = HAPPY_PATH.indexOf(status);
+export function StatusTimeline({ status, booking }: { status: BookingStatus; booking?: Booking }) {
+  const effectiveStatus: BookingStatus = booking
+    ? getEffectiveBookingStatus(booking)
+    : status === "PAYMENT_PENDING" || status === "CONFIRMED"
+      ? "CUSTOMER_CONFIRMED"
+      : status;
+
+  const activeIndex = HAPPY_PATH.indexOf(effectiveStatus);
 
   return (
     <View style={styles.wrap}>
@@ -54,9 +57,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  dotDone: { backgroundColor: colors.success },
+  dotDone: { backgroundColor: colors.primary },
   line: { width: 2, flex: 1, minHeight: 18, backgroundColor: colors.peach },
-  lineDone: { backgroundColor: colors.success },
+  lineDone: { backgroundColor: colors.primary },
   label: { fontSize: 13, color: colors.muted, fontWeight: "600", paddingBottom: 14, paddingTop: 2 },
   labelDone: { color: colors.ink, fontWeight: "800" },
 });

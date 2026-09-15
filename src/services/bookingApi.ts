@@ -9,18 +9,21 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Booking, BookingStatus, CounterOffer, EventDay, PackageTierId, ProviderLocationPreference } from "@/src/types/booking";
 import { createEmptyBooking, createEmptyDay, duplicateDay, mergeEventDayPatch } from "@/src/domain/defaults";
+import { DEFAULT_EVENT_CATEGORIES } from "@/src/constants/eventCategories";
 import { normalizeRouteParam } from "@/src/utils/routeParam";
 import {
   applyRemoteSnapshot,
   catalogServiceTypes,
   isLocalWizardBooking,
   parseRemoteBookingList,
+  parseRemoteBookingRow,
   remoteBookingIdOf,
   remoteStatusOf,
   selectActiveWizardDraft,
   toCamartesBookingRequest,
   mapCamartesBookingStatus,
 } from "@/src/domain/bookingRequest";
+import { isCompletedBooking } from "@/src/domain/bookingFilters";
 import { checkBudgetFeasibility, generatePackageOptions } from "@/src/engine/pricing";
 import { matchVendors } from "@/src/engine/matching";
 import { defaultExpectedDeliveryDate, validateBooking, validateBudget } from "@/src/engine/validation";
@@ -29,6 +32,7 @@ import { camartesFetch, CamartesApiError, getAuthToken } from "@/src/services/ca
 import { getStoredProfile } from "@/src/services/authApi";
 import { makeId } from "@/src/utils/id";
 import { addNotification } from "@/src/services/notificationsStore";
+import { isDemoAuthMode } from "@/src/config/authMode";
 
 const BOOKINGS_KEY = "camartes-customer:bookings:v1";
 
@@ -65,7 +69,7 @@ function sortBookings(bookings: Booking[]): Booking[] {
   return [...bookings].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
 }
 
-async function saveBooking(booking: Booking): Promise<Booking> {
+export async function saveBooking(booking: Booking): Promise<Booking> {
   const next = touch({ ...booking, draftCompletionPct: computeCompletionPct(booking) });
   const all = await readAllBookings();
   const idx = all.findIndex((b) => b.bookingId === next.bookingId || (next.remoteBookingId && b.remoteBookingId === next.remoteBookingId));
@@ -84,7 +88,24 @@ function remoteOnlyBooking(customerId: string, remote: ReturnType<typeof parseRe
   const now = new Date().toISOString();
   const day = createEmptyDay(1);
   if (remote.eventDate) day.eventDate = remote.eventDate;
-  if (remote.eventTime) day.startTime = remote.eventTime;
+  if (remote.eventTime) {
+    day.startTime = remote.eventTime;
+    if (!day.endTime) {
+      day.endTime = "18:00";
+    }
+  }
+  if (remote.city && day.location) day.location.city = remote.city;
+  if (remote.venueAddress && day.location) day.location.formattedAddress = remote.venueAddress;
+  if (remote.eventType) {
+    const cat = DEFAULT_EVENT_CATEGORIES.find(
+      (c) => c.id.toLowerCase() === remote.eventType!.toLowerCase() || c.label.toLowerCase() === remote.eventType!.toLowerCase()
+    );
+    day.eventTypeIds = [cat ? cat.id : remote.eventType];
+  }
+  if (!day.photography.traditional && !day.photography.candid && !day.videography.traditional && !day.videography.candid) {
+    day.photography.traditional = true;
+    day.photography.traditionalCount = 1;
+  }
   const budget = remote.budget && !Number.isNaN(Number(remote.budget)) ? Number(remote.budget) : null;
   return {
     bookingId: remote.id,
@@ -100,12 +121,18 @@ function remoteOnlyBooking(customerId: string, remote: ReturnType<typeof parseRe
     packageOptions: null,
     providerLocationPreference: null,
     matches: null,
-    selectedVendorId: remote.providerId,
+    selectedVendorId: remote.confirmedProviderId || remote.providerId,
     estimatedAmount: null,
     counterOffer: null,
     draftCompletionPct: 100,
     remoteBookingId: remote.id,
     remoteStatus: remote.status,
+    firms_status_message: remote.firmsStatusMessage ?? null,
+    assigned_count: remote.assignedCount,
+    confirmed_provider_id: remote.confirmedProviderId ?? null,
+    assigned_photographers: remote.assignedPhotographers,
+    eventType: remote.eventType,
+    eventName: remote.eventType,
   };
 }
 
@@ -175,7 +202,7 @@ export async function getBooking(bookingId: string): Promise<Booking | null> {
 
 export async function refreshRemoteBookingStatus(bookingId: string): Promise<Booking | null> {
   const booking = await getBooking(bookingId);
-  if (!booking?.remoteBookingId) return booking;
+  if (!booking?.remoteBookingId || isDemoAuthMode()) return booking;
   const token = await getAuthToken();
   if (!token) return booking;
   const remote = await camartesFetch<unknown>("/api/bookings/my-bookings", {}, { requireAuth: true });
@@ -343,13 +370,14 @@ export async function submitBudget(
 
   const feasibility = checkBudgetFeasibility(booking, budget);
   const packageOptions = generatePackageOptions(booking, budget);
-  const defaultDelivery = !booking.expectedDeliveryDate ? defaultExpectedDeliveryDate(booking.days) : null;
+  const sameBudget = booking.budget === budget;
+  const keepMatches = sameBudget && !!booking.selectedVendorId;
   const saved = await saveBooking({
     ...booking,
-    expectedDeliveryDate: booking.expectedDeliveryDate ?? defaultDelivery,
+    expectedDeliveryDate: booking.expectedDeliveryDate,
     budget,
     packageOptions,
-    ...invalidateMatches(booking),
+    ...(keepMatches ? {} : invalidateMatches(booking)),
     status: booking.status === "DRAFT" || booking.status === "SUBMITTED" ? "SUBMITTED" : booking.status,
   });
   return { booking: saved, feasibility };
@@ -395,16 +423,24 @@ export async function getVendorMatches(bookingId: string): Promise<Booking> {
   if (!booking.selectedPackage) throw new Error("Select a package before matching vendors.");
 
   const first = [...booking.days].sort((a, b) => a.order - b.order)[0];
-  const queryCity = booking.providerLocationPreference?.city || first?.location.city || null;
+  const queryCity = booking.providerLocationPreference?.city || first?.location?.city || null;
   const { vendors } = await fetchVendorCatalog({
     city: queryCity,
     eventDate: first?.eventDate || null,
     serviceTypes: catalogServiceTypes(booking.days),
-    latitude: first?.location.latitude,
-    longitude: first?.location.longitude,
+    latitude: first?.location?.latitude,
+    longitude: first?.location?.longitude,
   });
   const matches = matchVendors(booking, vendors, booking.selectedPackage, booking.budget ?? 0);
-  return saveBooking({ ...booking, matches, status: "MATCHING" });
+  const assigned = matches.slice(0, 6).map((m) => m.vendorId);
+  return saveBooking({
+    ...booking,
+    matches,
+    assignedProviderIds: assigned,
+    selectedVendorId: booking.selectedVendorId || assigned[0] || null,
+    contactMasked: true,
+    status: "MATCHING",
+  });
 }
 
 export async function getVendorProfile(vendorId: string) {
@@ -435,15 +471,79 @@ export async function submitVendorRequest(bookingId: string): Promise<Booking> {
   }
   const issues = validateBooking(booking);
   if (issues.length) throw new Error(issues[0].message);
+
+  const assigned = booking.assignedProviderIds?.length
+    ? booking.assignedProviderIds
+    : (booking.matches?.slice(0, 6).map((m) => m.vendorId) ?? []);
+
+  if (!booking.selectedVendorId && assigned.length > 0) {
+    booking.selectedVendorId = assigned[0];
+  }
   if (!booking.selectedVendorId) throw new Error("Select a service provider first.");
   if (!booking.selectedPackage) throw new Error("Select a package before sending a request.");
 
-  const token = await getAuthToken();
-  if (!token) {
-    throw new CamartesApiError("Sign in to your Camartes account to send this booking request.", 401);
+  const profile = await getStoredProfile();
+
+  if (isDemoAuthMode()) {
+    if (!profile) {
+      throw new CamartesApiError("Sign in to your Book A Shoot account to send this booking request.", 401);
+    }
+    const demoId = `bk_demo_${makeId("req")}`;
+    const assignedCount = assigned.length;
+    const firmsStatusMessage =
+      assignedCount > 0
+        ? `${assignedCount} verified photography partner${assignedCount > 1 ? "s" : ""} assigned`
+        : null;
+
+    const previousId = booking.bookingId;
+    const replacedId = booking.replacedBookingId;
+    const submitted = await saveBooking({
+      ...booking,
+      bookingId: demoId,
+      remoteBookingId: demoId,
+      remoteStatus: "request_sent",
+      status: "REQUEST_SENT",
+      assignedProviderIds: assigned,
+      firms_status_message: firmsStatusMessage,
+      assigned_count: assignedCount,
+      leadDistribution: {
+        totalAssigned: assignedCount,
+        assignedAt: new Date().toISOString(),
+      },
+      contactMasked: true,
+    });
+
+    const remaining = (await readAllBookings()).filter(
+      (b) =>
+        b.bookingId !== previousId &&
+        b.bookingId !== submitted.bookingId &&
+        (!replacedId || (b.bookingId !== replacedId && b.remoteBookingId !== replacedId))
+    );
+    await writeAllBookings(remaining);
+    await saveBooking(submitted);
+
+    const assignedCountText = assignedCount > 0 ? `${assignedCount} verified photography firms` : "Camartes";
+    const notificationBody = firmsStatusMessage
+      ? `${firmsStatusMessage} Contact details remain masked until a firm accepts.`
+      : `Your request ${submitted.bookingId} was dispatched to ${assignedCountText}. Contact details remain masked until accepted.`;
+
+    await addNotification({
+      id: makeId("ntf"),
+      title: "Lead request dispatched",
+      body: notificationBody,
+      createdAt: new Date().toISOString(),
+      read: false,
+      bookingId: submitted.bookingId,
+    });
+
+    return submitted;
   }
 
-  const profile = await getStoredProfile();
+  const token = await getAuthToken();
+  if (!token) {
+    throw new CamartesApiError("Sign in to your Book A Shoot account to send this booking request.", 401);
+  }
+
   const body = toCamartesBookingRequest(booking, profile);
   const response = await camartesFetch<unknown>(
     "/api/bookings",
@@ -451,6 +551,7 @@ export async function submitVendorRequest(bookingId: string): Promise<Booking> {
     { requireAuth: true },
   );
 
+  const parsedSnapshot = parseRemoteBookingRow(response);
   const remoteId = remoteBookingIdOf(response);
   if (!remoteId) {
     throw new Error("Camartes did not return a booking identifier. The request was not treated as confirmed.");
@@ -459,25 +560,52 @@ export async function submitVendorRequest(bookingId: string): Promise<Booking> {
   const remoteStatus = remoteStatusOf(response);
   const mapped = mapCamartesBookingStatus(remoteStatus) ?? "REQUEST_SENT";
 
+  const rawResp = response as Record<string, unknown> | null;
+  const firmsStatusMessage =
+    parsedSnapshot?.firmsStatusMessage ??
+    (typeof rawResp?.firms_status_message === "string" ? rawResp.firms_status_message : null);
+  const assignedCount =
+    parsedSnapshot?.assignedCount ??
+    (typeof rawResp?.assigned_count === "number" ? rawResp.assigned_count : assigned.length);
+  const assignedPhotographers = parsedSnapshot?.assignedPhotographers;
+
   const previousId = booking.bookingId;
+  const replacedId = booking.replacedBookingId;
   const submitted = await saveBooking({
     ...booking,
     bookingId: remoteId,
     remoteBookingId: remoteId,
     remoteStatus,
     status: mapped,
+    assignedProviderIds: assigned,
+    firms_status_message: firmsStatusMessage,
+    assigned_count: assignedCount,
+    assigned_photographers: assignedPhotographers,
+    leadDistribution: {
+      totalAssigned: assignedCount || assigned.length,
+      assignedAt: new Date().toISOString(),
+    },
+    contactMasked: true,
   });
 
-  if (previousId !== submitted.bookingId) {
-    const remaining = (await readAllBookings()).filter((b) => b.bookingId !== previousId);
-    await writeAllBookings(remaining);
-    await saveBooking(submitted);
-  }
+  const remaining = (await readAllBookings()).filter(
+    (b) =>
+      b.bookingId !== previousId &&
+      b.bookingId !== submitted.bookingId &&
+      (!replacedId || (b.bookingId !== replacedId && b.remoteBookingId !== replacedId))
+  );
+  await writeAllBookings(remaining);
+  await saveBooking(submitted);
+
+  const assignedCountText = (assignedCount ?? assigned.length) > 0 ? `${assignedCount ?? assigned.length} verified photography firms` : "Camartes";
+  const notificationBody = firmsStatusMessage
+    ? `${firmsStatusMessage} Contact details remain masked until a firm accepts.`
+    : `Your request ${submitted.bookingId} was dispatched to ${assignedCountText}. Contact details remain masked until accepted.`;
 
   await addNotification({
     id: makeId("ntf"),
-    title: "Booking request sent",
-    body: `Your request ${submitted.bookingId} was sent to Camartes.`,
+    title: "Lead request dispatched",
+    body: notificationBody,
     createdAt: new Date().toISOString(),
     read: false,
     bookingId: submitted.bookingId,
@@ -492,7 +620,7 @@ export async function respondToCounterOffer(bookingId: string, action: "accept" 
   const counterOffer: CounterOffer = { ...booking.counterOffer, status: action === "accept" ? "accepted" : "declined" };
   const estimatedAmount = action === "accept" ? counterOffer.amount : booking.estimatedAmount;
   const status: BookingStatus = action === "accept" ? "CUSTOMER_CONFIRMED" : "CUSTOMER_CANCELLED";
-  if (booking.remoteBookingId) {
+  if (booking.remoteBookingId && !isDemoAuthMode()) {
     const response = await camartesFetch<unknown>(
       `/api/bookings/${encodeURIComponent(booking.remoteBookingId)}/status`,
       { method: "PUT", body: JSON.stringify({ status: action === "accept" ? "confirmed" : "cancelled" }) },
@@ -513,6 +641,9 @@ export async function respondToCounterOffer(bookingId: string, action: "accept" 
 export async function confirmBooking(bookingId: string): Promise<Booking> {
   const booking = await getBooking(bookingId);
   if (!booking) throw new Error("Booking not found");
+  if (isDemoAuthMode()) {
+    return saveBooking({ ...booking, status: "CONFIRMED", remoteStatus: "confirmed" });
+  }
   if (!booking.remoteBookingId) {
     throw new Error("This booking has not been submitted to Camartes yet.");
   }
@@ -526,6 +657,68 @@ export async function confirmBooking(bookingId: string): Promise<Booking> {
     throw new Error("Camartes did not confirm this booking. Status was left unchanged.");
   }
   return saveBooking({ ...booking, status: mapped, remoteStatus: remoteStatusOf(response) });
+}
+
+export async function confirmPhotographer(bookingId: string, providerId: string): Promise<Booking> {
+  const booking = await getBooking(bookingId);
+  if (!booking) throw new Error("Booking not found");
+  const targetId = booking.remoteBookingId || booking.bookingId;
+  if (!booking.remoteBookingId && !isDemoAuthMode()) {
+    throw new Error("This booking has not been submitted to Camartes yet.");
+  }
+
+  if (!isDemoAuthMode()) {
+    await camartesFetch<{ status?: string; message?: string }>(
+      `/api/bookings/${encodeURIComponent(targetId)}/confirm`,
+      { method: "POST", body: JSON.stringify({ provider_id: providerId }) },
+      { requireAuth: true },
+    );
+  }
+
+  const updatedPhotographers = booking.assigned_photographers?.map((firm) => {
+    const isThisFirm = firm.provider_id === providerId || firm.id === providerId;
+    return {
+      ...firm,
+      is_confirmed: isThisFirm,
+      can_confirm: false,
+      has_accepted: isThisFirm ? true : firm.has_accepted,
+      contact_unlocked: isThisFirm ? true : firm.contact_unlocked,
+    };
+  });
+
+  const selectedFirm = booking.assigned_photographers?.find(
+    (f) => f.provider_id === providerId || f.id === providerId,
+  );
+
+  const updated = await saveBooking({
+    ...booking,
+    status: "CONFIRMED",
+    remoteStatus: "confirmed",
+    confirmed_provider_id: providerId,
+    selectedVendorId: providerId,
+    assigned_photographers: updatedPhotographers,
+    contactMasked: false,
+    acceptedVendorContact: selectedFirm
+      ? {
+          phone: selectedFirm.contact_phone,
+          email: selectedFirm.contact_email,
+          studioName: selectedFirm.name,
+        }
+      : booking.acceptedVendorContact,
+  });
+
+  await addNotification({
+    id: makeId("ntf"),
+    title: "Photography partner confirmed",
+    body: selectedFirm?.name
+      ? `You confirmed ${selectedFirm.name} as your official photography partner!`
+      : `Your photography partner has been confirmed for booking ${targetId}.`,
+    createdAt: new Date().toISOString(),
+    read: false,
+    bookingId: targetId,
+  });
+
+  return updated;
 }
 
 export async function markPaymentComplete(_bookingId: string): Promise<Booking> {
@@ -569,6 +762,9 @@ export async function deleteBooking(
 ): Promise<{ deleted: boolean; cancelled: boolean; booking?: Booking }> {
   const booking = await getBooking(bookingId);
   if (!booking) throw new Error("Booking not found");
+  if (isCompletedBooking(booking)) {
+    throw new Error("Already finished bookings cannot be deleted.");
+  }
   if (isLocalWizardBooking(booking) || (!booking.remoteBookingId && booking.status === "DRAFT")) {
     await deleteDraft(booking.bookingId);
     return { deleted: true, cancelled: false };
@@ -576,3 +772,32 @@ export async function deleteBooking(
   const updated = await cancelBooking(booking.bookingId);
   return { deleted: false, cancelled: true, booking: updated };
 }
+
+export async function cloneBookingForSearchAgain(booking: Booking): Promise<Booking> {
+  const newDraftId = `draft_${Date.now()}`;
+  const defaultPkg = booking.selectedPackage || "signature";
+  const replacedId = booking.remoteBookingId || booking.bookingId;
+  let cloned: Booking = {
+    ...booking,
+    bookingId: newDraftId,
+    remoteBookingId: undefined,
+    replacedBookingId: replacedId,
+    selectedPackage: defaultPkg,
+    status: "DRAFT",
+    remoteStatus: "draft",
+    firms_status_message: null,
+    assigned_photographers: [],
+    assignedProviderIds: [],
+    selectedVendorId: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  cloned = await saveBooking(cloned);
+  try {
+    const matched = await getVendorMatches(cloned.bookingId);
+    return matched;
+  } catch (e) {
+    return cloned;
+  }
+}
+

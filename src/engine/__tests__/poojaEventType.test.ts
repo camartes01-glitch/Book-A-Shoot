@@ -43,6 +43,7 @@ const POOJA_LABELS = [
 ] as const;
 
 const BOOKING_REQUEST_KEYS = [
+  "assigned_provider_ids",
   "budget",
   "client_email",
   "client_name",
@@ -51,10 +52,15 @@ const BOOKING_REQUEST_KEYS = [
   "end_date",
   "event_date",
   "event_time",
+  "event_type",
+  "lead_broadcast",
+  "lead_details",
+  "location_preference",
   "message",
   "provider_id",
   "provider_profile_id",
   "service_type",
+  "venue_address",
 ];
 
 function completeDay(patch: Partial<EventDay> = {}): EventDay {
@@ -303,10 +309,10 @@ describe("Pooja summary, search, and booking payload", () => {
       { customerId: "cust-1", name: "Asha", mobile: "9876543210", email: "asha@example.com", avatarInitials: "A", savedAddresses: [] },
     );
     expect(Object.keys(body).sort()).toEqual([...BOOKING_REQUEST_KEYS].sort());
-    expect(body).not.toHaveProperty("event_type");
+    expect(body.event_type).toBe("Ganesh Pooja");
     expect(body).not.toHaveProperty("event_types");
     expect(body.provider_id).toBe("user_16eeb421bc07");
-    expect(body.service_type).toBe("photographer");
+    expect(body.service_type).toBe("photography_firm");
     expect(body.budget).toBe("80000");
     expect(body.message).toContain("Event type: Ganesh Pooja");
     expect(body.message).not.toContain("Personal Event");

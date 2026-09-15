@@ -5,6 +5,7 @@ import * as authApi from "@/src/services/authApi";
 import * as bookingApi from "@/src/services/bookingApi";
 import { getNotifications, markAllRead, subscribeNotifications } from "@/src/services/notificationsStore";
 import { isLocalWizardBooking, selectActiveWizardDraft } from "@/src/domain/bookingRequest";
+import { isCompletedBooking } from "@/src/domain/bookingFilters";
 import type { BudgetFeasibilityResult } from "@/src/engine/pricing";
 import { normalizeRouteParam } from "@/src/utils/routeParam";
 
@@ -13,7 +14,9 @@ type AppContextValue = {
   profile: CustomerProfile | null;
   login: (emailOrPhone: string, password: string) => Promise<void>;
   signup: (input: { name: string; email: string; phone: string; password: string }) => Promise<void>;
-  loginWithGoogle: (idToken: string) => Promise<void>;
+  loginWithGoogle: (
+    idTokenOrUserInfo: string | { google_id: string; email: string; name: string; picture?: string | null },
+  ) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (patch: Partial<CustomerProfile>) => Promise<void>;
 
@@ -40,11 +43,13 @@ type AppContextValue = {
   submitVendorRequest: () => Promise<Booking>;
   respondToCounterOffer: (action: "accept" | "decline") => Promise<void>;
   confirmBooking: () => Promise<void>;
+  confirmPhotographer: (bookingId: string, providerId: string) => Promise<Booking>;
   markPaymentComplete: () => Promise<void>;
   cancelBooking: (bookingId: string) => Promise<void>;
   deleteBooking: (bookingId: string) => Promise<void>;
   deleteDraft: (bookingId: string) => Promise<void>;
   reopenForMatching: (bookingId: string) => Promise<void>;
+  searchAgainBooking: (booking: Booking) => Promise<Booking>;
 
   notifications: AppNotification[];
   refreshNotifications: () => Promise<void>;
@@ -60,9 +65,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [activeDraft, setActiveDraft] = useState<Booking | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const activeDraftRef = useRef<Booking | null>(null);
+  const bookingsRef = useRef<Booking[]>(bookings);
   useEffect(() => {
     activeDraftRef.current = activeDraft;
   }, [activeDraft]);
+  useEffect(() => {
+    bookingsRef.current = bookings;
+  }, [bookings]);
 
   const upsertLocalBooking = useCallback((updated: Booking) => {
     setActiveDraft((prev) => {
@@ -129,21 +138,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    const fallbackTimer = setTimeout(() => {
+      if (!cancelled) setReady(true);
+    }, 1500);
+
     (async () => {
       try {
-        const stored = await authApi.restoreSession();
+        const stored = await Promise.race([
+          authApi.restoreSession(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+        ]);
         if (cancelled) return;
         setProfile(stored);
         if (stored) {
           await adoptAuthenticatedBookings(stored.customerId);
         }
         if (!cancelled) setNotifications(await getNotifications());
+      } catch {
+        /* Ignore network startup errors so app boots cleanly */
       } finally {
+        clearTimeout(fallbackTimer);
         if (!cancelled) setReady(true);
       }
     })();
     return () => {
       cancelled = true;
+      clearTimeout(fallbackTimer);
     };
   }, [adoptAuthenticatedBookings]);
 
@@ -168,8 +188,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const loginWithGoogle = useCallback(
-    async (idToken: string) => {
-      const result = await authApi.loginWithGoogle(idToken);
+    async (idTokenOrUserInfo: string | { google_id: string; email: string; name: string; picture?: string | null }) => {
+      const result = await authApi.loginWithGoogle(idTokenOrUserInfo);
       setProfile(result);
       await adoptAuthenticatedBookings(result.customerId);
     },
@@ -203,9 +223,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [profile]);
 
   const loadDraft = useCallback(async (bookingId: string) => {
-    const booking = await bookingApi.getBooking(bookingId);
-    setActiveDraft(booking);
-    return booking;
+    let booking = await bookingApi.getBooking(bookingId);
+    if (!booking) {
+      booking = bookingsRef.current.find((b) => b.bookingId === bookingId || b.remoteBookingId === bookingId) ?? null;
+      if (booking) {
+        await bookingApi.saveBooking(booking);
+      }
+    }
+    if (booking) {
+      activeDraftRef.current = booking;
+      setActiveDraft(booking);
+      return booking;
+    }
+    // If not found, do not wipe an existing active draft with the same id
+    if (activeDraftRef.current?.bookingId === bookingId || activeDraftRef.current?.remoteBookingId === bookingId) {
+      return activeDraftRef.current;
+    }
+    setActiveDraft(null);
+    return null;
   }, []);
 
   const clearActiveDraft = useCallback(() => setActiveDraft(null), []);
@@ -332,6 +367,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await withDraft((id) => bookingApi.confirmBooking(id));
   }, [withDraft]);
 
+  const confirmPhotographer = useCallback(
+    async (bookingId: string, providerId: string) => {
+      const updated = await bookingApi.confirmPhotographer(bookingId, providerId);
+      upsertLocalBooking(updated);
+      await refreshBookings();
+      return updated;
+    },
+    [upsertLocalBooking, refreshBookings],
+  );
+
   const markPaymentComplete = useCallback(async () => {
     await withDraft((id) => bookingApi.markPaymentComplete(id));
   }, [withDraft]);
@@ -350,6 +395,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const target =
         bookings.find((b) => b.bookingId === bookingId || b.remoteBookingId === bookingId) ??
         (activeDraftRef.current?.bookingId === bookingId ? activeDraftRef.current : null);
+
+      if (target && isCompletedBooking(target)) {
+        throw new Error("Already finished bookings cannot be deleted.");
+      }
 
       if (target && (isLocalWizardBooking(target) || (!target.remoteBookingId && target.status === "DRAFT"))) {
         // Local draft: permanently delete from local storage & memory
@@ -379,6 +428,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const updated = await bookingApi.reopenForMatching(bookingId);
       setActiveDraft(updated);
       await refreshBookings();
+    },
+    [refreshBookings],
+  );
+
+  const searchAgainBooking = useCallback(
+    async (booking: Booking) => {
+      const draft = await bookingApi.cloneBookingForSearchAgain(booking);
+      setActiveDraft(draft);
+      await refreshBookings();
+      return draft;
     },
     [refreshBookings],
   );
@@ -418,11 +477,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       submitVendorRequest,
       respondToCounterOffer,
       confirmBooking,
+      confirmPhotographer,
       markPaymentComplete,
       cancelBooking,
       deleteBooking,
       deleteDraft: deleteBooking,
       reopenForMatching,
+      searchAgainBooking,
       notifications,
       refreshNotifications,
       markNotificationsRead,
@@ -457,10 +518,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       submitVendorRequest,
       respondToCounterOffer,
       confirmBooking,
+      confirmPhotographer,
       markPaymentComplete,
       cancelBooking,
       deleteBooking,
       reopenForMatching,
+      searchAgainBooking,
       notifications,
       refreshNotifications,
       markNotificationsRead,

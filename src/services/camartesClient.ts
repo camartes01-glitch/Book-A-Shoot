@@ -6,8 +6,40 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { isDemoAuthMode } from "@/src/config/authMode";
 
-export const CAMARTES_API =
-  process.env.EXPO_PUBLIC_CAMARTES_API_URL?.trim() || "https://camartes-backend.onrender.com";
+function resolveApiUrl(): string {
+  const envUrl =
+    process.env.EXPO_PUBLIC_CAMARTES_API_URL?.trim() ||
+    process.env.EXPO_PUBLIC_CAMARTES_API?.trim() ||
+    process.env.EXPO_PUBLIC_API_URL?.trim() ||
+    process.env.API_BASE_URL?.trim() ||
+    process.env.CAMARTES_API_URL?.trim() ||
+    process.env.CAMARTES_API?.trim();
+
+  if (envUrl) {
+    let clean = envUrl.replace(/\/+$/, "");
+    if (clean.endsWith("/api")) {
+      clean = clean.slice(0, -4);
+    }
+    return clean;
+  }
+
+  // When running locally in a web browser (e.g. localhost or 127.0.0.1),
+  // automatically point to the local Camartes backend running on port 8001
+  if (typeof window !== "undefined" && window.location) {
+    const host = window.location.hostname;
+    if (host === "localhost" || host === "127.0.0.1") {
+      return "http://localhost:8001";
+    }
+  }
+
+  return "https://camartes-backend.onrender.com";
+}
+
+export const CAMARTES_API = resolveApiUrl();
+
+if (typeof console !== "undefined" && console.log) {
+  console.log(`[Camartes API] Target backend URL: ${CAMARTES_API}`);
+}
 const TOKEN_KEY = "camartes-customer:auth-token:v1";
 
 export class CamartesApiError extends Error {
@@ -85,6 +117,9 @@ function friendlyDetail(detail: string): string {
   if (lower.includes("invalid phone number or password")) {
     return "Invalid phone number or password.";
   }
+  if (lower.includes("no photography firms with active balance") || lower.includes("no suitable firms with active balance")) {
+    return "No photography firms with active balance and availability found in your area right now. Please check back shortly.";
+  }
   return trimmed;
 }
 
@@ -124,22 +159,29 @@ function detailMessage(body: unknown, fallback: string): string {
 export async function camartesFetch<T>(
   path: string,
   init: RequestInit = {},
-  opts: { auth?: boolean; requireAuth?: boolean } = {},
+  opts: { auth?: boolean; requireAuth?: boolean; timeoutMs?: number } = {},
 ): Promise<T> {
   const headers = new Headers(init.headers);
+  if (!headers.has("X-Client-App")) headers.set("X-Client-App", "bookashoot");
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const needsAuth = opts.auth !== false;
   const token = isDemoAuthMode() ? null : needsAuth ? await getAuthToken() : null;
   if (opts.requireAuth && !token) {
-    throw new CamartesApiError("Sign in to your Camartes account to continue.", 401);
+    throw new CamartesApiError("Sign in to your Book A Shoot account to continue.", 401);
   }
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
+  const controller = new AbortController();
+  const timeoutMs = opts.timeoutMs ?? 5000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
   let res: Response;
   try {
-    res = await fetch(`${CAMARTES_API}${path}`, { ...init, headers });
+    res = await fetch(`${CAMARTES_API}${path}`, { ...init, headers, signal: controller.signal });
   } catch {
     throw new CamartesApiError("Couldn't reach Camartes. Check your connection and try again.", 0);
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   const text = await res.text();
@@ -159,7 +201,7 @@ export async function camartesFetch<T>(
           ? "Invalid email, phone, or password."
           : path.includes("/api/auth/google")
             ? "Google sign-in was rejected by Camartes."
-            : "Sign in to your Camartes account to continue."
+            : "Sign in to your Book A Shoot account to continue."
         : res.status === 403
           ? "Camartes denied this request."
           : res.status === 404 && path.includes("/api/auth/google")

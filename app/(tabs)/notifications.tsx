@@ -8,6 +8,8 @@ import { EmptyState } from "@/src/components/EmptyState";
 import { useAppStore } from "@/src/state/AppProvider";
 import { colors } from "@/src/constants/theme";
 
+import { markNotificationRead } from "@/src/services/notificationsStore";
+
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diffMs / 60000);
@@ -19,13 +21,82 @@ function timeAgo(iso: string): string {
 }
 
 export default function NotificationsScreen() {
-  const { notifications, refreshNotifications, markNotificationsRead } = useAppStore();
+  const { notifications, bookings, refreshNotifications, markNotificationsRead } = useAppStore();
 
   useFocusEffect(
     useCallback(() => {
       void refreshNotifications();
     }, [refreshNotifications]),
   );
+
+  const handlePressNotification = async (n: (typeof notifications)[0]) => {
+    if (n.id) {
+      try {
+        await markNotificationRead(n.id);
+        await refreshNotifications();
+      } catch {
+        // non-blocking
+      }
+    }
+
+    const titleLower = (n.title || "").toLowerCase();
+    const bodyLower = (n.body || "").toLowerCase();
+
+    const isChatMessage =
+      n.type === "message" ||
+      Boolean(n.userId) ||
+      Boolean(n.firmId) ||
+      titleLower.includes("message") ||
+      titleLower.includes("chat") ||
+      titleLower.includes("text") ||
+      bodyLower.includes("texted") ||
+      bodyLower.includes("messaged") ||
+      bodyLower.includes("sent a message");
+
+    let targetUserId = n.userId || n.firmId;
+    let targetFirmName = n.firmName;
+    let targetFirmPicture: string | undefined = undefined;
+
+    if (!targetUserId && n.bookingId) {
+      const matchBooking = bookings.find((b) => b.bookingId === n.bookingId);
+      if (matchBooking) {
+        const assigned = matchBooking.assigned_photographers || [];
+        const matchedFirm = assigned.find(
+          (f) =>
+            (f.name && (titleLower.includes(f.name.toLowerCase()) || bodyLower.includes(f.name.toLowerCase()))) ||
+            f.has_accepted
+        );
+        if (matchedFirm) {
+          targetUserId = matchedFirm.provider_id || matchedFirm.id;
+          targetFirmName = matchedFirm.name;
+          targetFirmPicture = matchedFirm.profile_image || undefined;
+        }
+      }
+    }
+
+    if (isChatMessage) {
+      if (targetUserId) {
+        router.push({
+          pathname: "/chat/[userId]",
+          params: {
+            userId: targetUserId,
+            name: targetFirmName || "Photography Firm",
+            picture: targetFirmPicture || "",
+            accepted: "true",
+          },
+        });
+        return;
+      }
+      router.push("/(tabs)/messages");
+      return;
+    }
+
+    if (n.bookingId) {
+      router.push(`/bookings/${n.bookingId}`);
+    } else {
+      router.push("/(tabs)/bookings");
+    }
+  };
 
   return (
     <ScreenContainer>
@@ -36,8 +107,13 @@ export default function NotificationsScreen() {
       {!notifications.length ? (
         <EmptyState icon={<BellOff size={40} color={colors.muted} />} title="You're all caught up" body="Booking and vendor updates will show up here." />
       ) : (
-        notifications.map((n) => (
-          <Pressable key={n.id} onPress={() => n.bookingId && router.push(`/bookings/${n.bookingId}`)}>
+        notifications.map((n, idx) => (
+          <Pressable
+            key={n.id && n.id !== "undefined" ? n.id : `notif-${idx}`}
+            onPress={() => void handlePressNotification(n)}
+            accessibilityRole="button"
+            accessibilityLabel={`Notification: ${n.title}`}
+          >
             <Card accent={!n.read}>
               <View style={styles.row}>
                 <Bell size={16} color={n.read ? colors.muted : colors.primary} />

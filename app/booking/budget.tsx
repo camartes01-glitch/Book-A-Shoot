@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, View } from "react-native";
 import { router } from "expo-router";
 import { AlertTriangle } from "lucide-react-native";
@@ -17,6 +17,12 @@ export default function BudgetScreen() {
   const [loading, setLoading] = useState(false);
   const [feasibility, setFeasibility] = useState<BudgetFeasibilityResult | null>(null);
   const transitionLockRef = useRef(false);
+
+  useEffect(() => {
+    if (activeDraft?.budget) {
+      setDigits(String(activeDraft.budget));
+    }
+  }, [activeDraft?.budget]);
 
   const numeric = parseInt(digits, 10) || 0;
   const display = digits ? formatInr(numeric).replace("₹", "₹ ") : "";
@@ -92,14 +98,8 @@ export default function BudgetScreen() {
       }}
       footer={<Button label={feasibility?.isBelowEstimate ? "Show closest options" : "Continue"} onPress={onFooter} loading={loading} flex={1} />}
     >
-      <SectionTitle>Approved coverage rates</SectionTitle>
-      <Muted>Essential, Signature and Elite use the approved Camartes ranges for the services you selected. These are not provider quotes.</Muted>
-      {preview.map((pkg) => (
-        <PackageTierCard key={pkg.id} pkg={pkg} selectable={false} />
-      ))}
-
       <SectionTitle>What's your budget?</SectionTitle>
-      <Muted>Select an option to continue, or enter a custom amount. This amount is kept separate from the package ranges above.</Muted>
+      <Muted>Select an option to continue, or enter a custom amount. This amount is kept separate from the package ranges below.</Muted>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spacing.sm, marginVertical: spacing.xs }}>
         {BUDGET_OPTIONS.map((val) => (
           <Button
@@ -116,7 +116,31 @@ export default function BudgetScreen() {
         keyboardType="number-pad"
         inputMode="numeric"
         value={display}
-        onChangeText={(text) => setDigits(text.replace(/[^0-9]/g, "").slice(0, 9))}
+        onChangeText={(text) => {
+          setDigits(text.replace(/[^0-9]/g, "").slice(0, 9));
+          setFeasibility(null);
+        }}
+        returnKeyType="done"
+        onSubmitEditing={() => void onFooter()}
+        {...({
+          onKeyDown: (e: any) => {
+            if (e.key === "Enter") {
+              e.preventDefault?.();
+              void onFooter();
+            }
+          },
+        } as any)}
+        rightElement={
+          <Button
+            label="Enter"
+            variant="primary"
+            compact
+            disabled={numeric <= 0 || loading}
+            loading={loading}
+            onPress={() => void onFooter()}
+            style={{ minWidth: 84 }}
+          />
+        }
       />
       {feasibility?.isBelowEstimate ? (
         <Card style={{ borderColor: colors.warning }}>
@@ -133,6 +157,12 @@ export default function BudgetScreen() {
           </View>
         </Card>
       ) : null}
+
+      <SectionTitle>Approved coverage rates</SectionTitle>
+      <Muted>Essential, Signature and Elite use the approved Camartes ranges for the services you selected. These are not provider quotes.</Muted>
+      {preview.map((pkg) => (
+        <PackageTierCard key={pkg.id} pkg={pkg} selectable={false} />
+      ))}
     </WizardScreen>
   );
 }

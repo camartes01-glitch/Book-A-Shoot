@@ -406,18 +406,59 @@ describe("Camartes Google authentication contract", () => {
     expect(() => extractGoogleIdToken(null)).toThrow(GoogleSignInCancelledError);
   });
 
-  test("loginWithGoogle attempts POST /api/auth/google (now implemented)", async () => {
-    // Google sign-in is now implemented — calls POST /api/auth/google with the ID token.
-    // Without a real backend in test environment, camartesFetch will reject with a network error.
-    // We verify the function no longer throws the old static 501 stub.
-    const err = await authApi.loginWithGoogle("google-id-token").catch((e) => e);
-    expect(err).toBeDefined();
-    expect(err?.status).not.toBe(501);
+  test("loginWithGoogle with ID token posts to /api/auth/google and persists session", async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/auth/google")) {
+        return jsonResponse(200, {
+          user_id: "google-user-1",
+          session_token: "google-session-token",
+          email: "google@example.com",
+          name: "Google Customer",
+        });
+      }
+      if (String(input).includes("/api/auth/me")) {
+        return jsonResponse(200, {
+          user_id: "google-user-1",
+          name: "Google Customer",
+          email: "google@example.com",
+        });
+      }
+      return jsonResponse(404, {});
+    }) as typeof fetch;
+
+    const profile = await authApi.loginWithGoogle("valid-google-id-token");
+    expect(profile.customerId).toBe("google-user-1");
+    expect(profile.email).toBe("google@example.com");
+    expect(await getAuthToken()).toBe("google-session-token");
   });
 
-  test("restoreSession and logout work after a Google session", async () => {
-    // Google auth is not currently supported by the backend, so skip this test
-    // When backend adds Google OAuth support, this test should be re-enabled
-    expect(true).toBe(true);
+  test("loginWithGoogle with GoogleUserInfo posts to /api/auth/google-userinfo and persists session", async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/auth/google-userinfo")) {
+        return jsonResponse(200, {
+          user_id: "google-user-2",
+          session_token: "google-session-token-2",
+          email: "sandbox@example.com",
+          name: "Sandbox User",
+        });
+      }
+      if (String(input).includes("/api/auth/me")) {
+        return jsonResponse(200, {
+          user_id: "google-user-2",
+          name: "Sandbox User",
+          email: "sandbox@example.com",
+        });
+      }
+      return jsonResponse(404, {});
+    }) as typeof fetch;
+
+    const profile = await authApi.loginWithGoogle({
+      google_id: "google_123",
+      email: "sandbox@example.com",
+      name: "Sandbox User",
+    });
+    expect(profile.customerId).toBe("google-user-2");
+    expect(profile.name).toBe("Sandbox User");
+    expect(await getAuthToken()).toBe("google-session-token-2");
   });
 });

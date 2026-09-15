@@ -20,33 +20,54 @@ import * as bookingApi from "@/src/services/bookingApi";
 import { setPhotographySelected, setVideographySelected } from "@/src/domain/dayServices";
 import { colors, elevation, radius, spacing } from "@/src/constants/theme";
 import { formatDateLong } from "@/src/utils/format";
-import { isLocalWizardBooking } from "@/src/domain/bookingRequest";
-
-const ACTIVE_STATUSES = new Set([
-  "VENDOR_SELECTED",
-  "REQUEST_SENT",
-  "VENDOR_ACCEPTED",
-  "CUSTOMER_CONFIRMED",
-  "PAYMENT_PENDING",
-  "CONFIRMED",
-  "IN_PROGRESS",
-]);
+import { isLocalWizardBooking, getDraftResumeRoute } from "@/src/domain/bookingRequest";
+import {
+  isEnquiryBooking,
+  isUpcomingBooking,
+  isCompletedBooking,
+  getBookingEventTitle,
+} from "@/src/domain/bookingFilters";
 
 export default function HomeScreen() {
   const { profile, bookings, activeDraft, startNewBooking, loadDraft } = useAppStore();
   const [searchOpen, setSearchOpen] = useState(false);
   const startingRef = useRef(false);
 
-  const enquiries = bookings.filter((b) => b.status === "SUBMITTED" || b.status === "MATCHING").length;
-  const upcoming = bookings.filter((b) => ACTIVE_STATUSES.has(b.status));
-  const completed = bookings.filter((b) => b.status === "COMPLETED").length;
+  const enquiries = useMemo(() => bookings.filter(isEnquiryBooking), [bookings]);
+  const upcoming = useMemo(() => bookings.filter(isUpcomingBooking), [bookings]);
+  const completed = useMemo(() => bookings.filter(isCompletedBooking), [bookings]);
   const city = profile?.savedAddresses[0]?.city || upcoming[0]?.days[0]?.location.city || "";
 
-  const greeting = useMemo(() => {
+  const { greeting, tag } = useMemo(() => {
     const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 17) return "Good afternoon";
-    return "Good evening";
+    if (hour >= 0 && hour < 5) {
+      return {
+        greeting: "Late night planning,",
+        tag: "Capturing magic under the stars ✨",
+      };
+    }
+    if (hour >= 5 && hour < 12) {
+      return {
+        greeting: "Rise & shine,",
+        tag: "Ready to capture today's memories? ☀️",
+      };
+    }
+    if (hour >= 12 && hour < 17) {
+      return {
+        greeting: "Good afternoon,",
+        tag: "What are we celebrating today? 📸",
+      };
+    }
+    if (hour >= 17 && hour < 22) {
+      return {
+        greeting: "Good evening,",
+        tag: "Golden hour celebrations await 🌇",
+      };
+    }
+    return {
+      greeting: "Unwinding tonight,",
+      tag: "Planning your next big milestone? 🌙",
+    };
   }, []);
 
   const onCreateBooking = async () => {
@@ -108,8 +129,9 @@ export default function HomeScreen() {
 
   const onContinueDraft = async () => {
     if (!activeDraft) return;
-    await loadDraft(activeDraft.bookingId);
-    router.push("/booking/new");
+    const booking = await loadDraft(activeDraft.bookingId);
+    const target = getDraftResumeRoute(booking ?? activeDraft);
+    router.push(target as any);
   };
 
   const firstName = (profile?.name || "there").split(" ")[0];
@@ -120,15 +142,19 @@ export default function HomeScreen() {
         <View style={{ flex: 1, gap: 2 }}>
           <BookAShootLogo compact />
           <Text style={styles.hello} numberOfLines={1}>
-            {greeting}, {firstName}
+            {greeting} {firstName}
           </Text>
           {city ? (
             <View style={styles.locRow}>
-              <MapPin size={12} color={colors.muted} />
-              <Text style={styles.locText}>{city}</Text>
+              <MapPin size={12} color={colors.primaryDark} />
+              <Text style={styles.locText} numberOfLines={1}>
+                {city} · {tag}
+              </Text>
             </View>
           ) : (
-            <Muted>Find photographers near you</Muted>
+            <Text style={styles.locText} numberOfLines={1}>
+              {tag}
+            </Text>
           )}
         </View>
         <Pressable
@@ -167,7 +193,12 @@ export default function HomeScreen() {
         ) : null}
 
         <View style={{ gap: spacing.sm }}>
-          <SectionTitle>Popular events</SectionTitle>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <SectionTitle>Popular events</SectionTitle>
+            <Pressable onPress={() => router.push("/events")} hitSlop={8} accessibilityRole="button" accessibilityLabel="View all events">
+              <Text style={{ fontSize: 13, fontWeight: "700", color: colors.primaryDark }}>View all</Text>
+            </Pressable>
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: spacing.lg }}>
             {HOME_QUICK_PICKS.map((id) => {
               const cat = DEFAULT_EVENT_CATEGORIES.find((c) => c.id === id);
@@ -180,7 +211,7 @@ export default function HomeScreen() {
               onPress={() => onQuickPick(HOME_POOJA_DISCOVERY.id)}
               width={118}
             />
-            <Pressable onPress={onCreateBooking} style={styles.moreCard} accessibilityRole="button" accessibilityLabel="More event types">
+            <Pressable onPress={() => router.push("/events")} style={styles.moreCard} accessibilityRole="button" accessibilityLabel="More event types">
               <Text style={styles.morePlus}>+</Text>
               <Text style={styles.moreLabel}>More</Text>
             </Pressable>
@@ -207,9 +238,9 @@ export default function HomeScreen() {
               <View style={styles.draftRow}>
                 <Clock3 size={18} color={colors.primaryDark} />
                 <View style={{ flex: 1 }}>
-                  <SectionTitle>Upcoming shoot</SectionTitle>
+                  <SectionTitle>{getBookingEventTitle(upcoming[0])}</SectionTitle>
                   <Muted>
-                    {formatDateLong(upcoming[0].days[0]?.eventDate ?? null)}
+                    Upcoming shoot · {formatDateLong(upcoming[0].days[0]?.eventDate ?? null)}
                     {upcoming[0].days[0]?.location.city ? ` · ${upcoming[0].days[0].location.city}` : ""}
                   </Muted>
                 </View>
@@ -220,10 +251,24 @@ export default function HomeScreen() {
         ) : null}
 
         <View style={{ gap: spacing.sm }}>
-          <SectionTitle>Real celebrations</SectionTitle>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <SectionTitle>Real celebrations</SectionTitle>
+            <Pressable
+              onPress={() => router.push({ pathname: "/events", params: { tab: "real_celebrations" } })}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="View all real celebrations"
+            >
+              <Text style={{ fontSize: 13, fontWeight: "700", color: colors.primaryDark }}>View all</Text>
+            </Pressable>
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md, paddingRight: spacing.lg }}>
             {PORTFOLIO_STRIP.map((item) => (
-              <Pressable key={item.id} onPress={onCreateBooking} style={styles.portfolioCard}>
+              <Pressable
+                key={item.id}
+                onPress={() => router.push({ pathname: "/events", params: { tab: "real_celebrations" } })}
+                style={styles.portfolioCard}
+              >
                 <Image source={item.image} style={styles.portfolioImage} resizeMode="cover" />
                 <Text style={styles.portfolioLabel}>{item.label}</Text>
               </Pressable>
@@ -231,11 +276,38 @@ export default function HomeScreen() {
           </ScrollView>
         </View>
 
-        <Pressable onPress={() => router.push("/(tabs)/bookings")} style={styles.summaryStrip}>
-          <SummaryStat label="Enquiries" value={enquiries} />
-          <SummaryStat label="Upcoming" value={upcoming.length} />
-          <SummaryStat label="Completed" value={completed} />
-        </Pressable>
+        <View style={styles.summaryStrip}>
+          <Pressable
+            style={({ pressed }) => [styles.statBtn, pressed && styles.statBtnPressed]}
+            onPress={() => router.push({ pathname: "/(tabs)/bookings", params: { filter: "enquiries" } })}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${enquiries.length} enquiries`}
+          >
+            <SummaryStat label="Enquiries" value={enquiries.length} />
+          </Pressable>
+
+          <View style={styles.statDivider} />
+
+          <Pressable
+            style={({ pressed }) => [styles.statBtn, pressed && styles.statBtnPressed]}
+            onPress={() => router.push({ pathname: "/(tabs)/bookings", params: { filter: "upcoming" } })}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${upcoming.length} upcoming bookings`}
+          >
+            <SummaryStat label="Upcoming" value={upcoming.length} />
+          </Pressable>
+
+          <View style={styles.statDivider} />
+
+          <Pressable
+            style={({ pressed }) => [styles.statBtn, pressed && styles.statBtnPressed]}
+            onPress={() => router.push({ pathname: "/(tabs)/bookings", params: { filter: "completed" } })}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${completed.length} completed bookings`}
+          >
+            <SummaryStat label="Completed" value={completed.length} />
+          </Pressable>
+        </View>
       </View>
 
       <SearchSheet visible={searchOpen} onClose={() => setSearchOpen(false)} onPick={onQuickPick} onStart={onCreateBooking} />
@@ -350,7 +422,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     gap: spacing.md,
   },
-  hello: { fontSize: 16, fontWeight: "800", color: colors.ink, marginTop: 4 },
+  hello: { fontSize: 17, fontWeight: "800", color: colors.ink, marginTop: 4, letterSpacing: -0.3 },
   locRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   locText: { fontSize: 12, fontWeight: "600", color: colors.muted },
   avatar: {
@@ -429,7 +501,20 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingVertical: 12,
   },
-  stat: { flex: 1, alignItems: "center", gap: 2 },
+  statBtn: {
+    flex: 1,
+    alignItems: "center",
+  },
+  statBtnPressed: {
+    opacity: 0.7,
+  },
+  statDivider: {
+    width: 1,
+    height: "60%",
+    backgroundColor: colors.border,
+    alignSelf: "center",
+  },
+  stat: { alignItems: "center", gap: 2 },
   statValue: { fontSize: 18, fontWeight: "800", color: colors.ink },
   statLabel: { fontSize: 11, fontWeight: "600", color: colors.muted },
   searchModal: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.lg },
