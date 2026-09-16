@@ -44,6 +44,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
+    "build": "expo export",
     "start": "expo start",
     "dev": "expo start --web --port 43158 --host lan",
     "android": "expo run:android",
