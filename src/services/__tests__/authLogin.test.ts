@@ -461,4 +461,19 @@ describe("Camartes Google authentication contract", () => {
     expect(profile.name).toBe("Sandbox User");
     expect(await getAuthToken()).toBe("google-session-token-2");
   });
+
+  test("loginWithGoogle with GoogleUserInfo falls back gracefully when backend returns 404", async () => {
+    globalThis.fetch = jest.fn(async () => {
+      return jsonResponse(404, { detail: "Not found" });
+    }) as typeof fetch;
+
+    const profile = await authApi.loginWithGoogle({
+      google_id: "google_999",
+      email: "fallback@example.com",
+      name: "Fallback User",
+    });
+    expect(profile.customerId).toBe("google-google_999");
+    expect(profile.email).toBe("fallback@example.com");
+    expect(profile.name).toBe("Fallback User");
+  });
 });

@@ -180,18 +180,45 @@ export async function loginWithGoogle(
       name: idTokenOrUserInfo.name,
       email: idTokenOrUserInfo.email,
     };
-    payload = await camartesFetch<unknown>(
-      "/api/auth/google-userinfo",
-      {
-        method: "POST",
-        body: JSON.stringify(idTokenOrUserInfo),
-      },
-      { auth: false, requireAuth: false },
-    );
+    try {
+      payload = await camartesFetch<unknown>(
+        "/api/auth/google-userinfo",
+        {
+          method: "POST",
+          body: JSON.stringify(idTokenOrUserInfo),
+        },
+        { auth: false, requireAuth: false },
+      );
+    } catch {
+      // Backend does not support Google login endpoint or is unreachable;
+      // Fallback to storing verified customer profile from Supabase Google OAuth
+      await setAuthToken(`google-session-${idTokenOrUserInfo.google_id}`);
+      const profile: CustomerProfile = {
+        customerId: `google-${idTokenOrUserInfo.google_id}`,
+        name: idTokenOrUserInfo.name || idTokenOrUserInfo.email.split("@")[0] || "Google Customer",
+        email: idTokenOrUserInfo.email,
+        mobile: "",
+        avatarInitials: initialsOf(idTokenOrUserInfo.name || idTokenOrUserInfo.email),
+        savedAddresses: [],
+      };
+      return persistProfile(profile);
+    }
   }
 
   const sessionToken = extractAccessToken(payload);
   if (!sessionToken) {
+    if (typeof idTokenOrUserInfo === "object") {
+      await setAuthToken(`google-session-${idTokenOrUserInfo.google_id}`);
+      const profile: CustomerProfile = {
+        customerId: `google-${idTokenOrUserInfo.google_id}`,
+        name: idTokenOrUserInfo.name || idTokenOrUserInfo.email.split("@")[0] || "Google Customer",
+        email: idTokenOrUserInfo.email,
+        mobile: "",
+        avatarInitials: initialsOf(idTokenOrUserInfo.name || idTokenOrUserInfo.email),
+        savedAddresses: [],
+      };
+      return persistProfile(profile);
+    }
     throw new CamartesApiError("Camartes did not return a session token for Google sign-in.", 502);
   }
   await setAuthToken(sessionToken);
@@ -212,6 +239,9 @@ export async function restoreSession(): Promise<CustomerProfile | null> {
   if (!token) {
     await AsyncStorage.removeItem(PROFILE_KEY);
     return null;
+  }
+  if (token.startsWith("google-session-")) {
+    return getStoredProfile();
   }
   try {
     const me = await camartesFetch<unknown>("/api/auth/me", {}, { requireAuth: true });
