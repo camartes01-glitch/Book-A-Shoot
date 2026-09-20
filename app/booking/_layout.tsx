@@ -25,6 +25,7 @@ export default function BookingLayout() {
       <Stack.Screen name="location-preference" />
       <Stack.Screen name="matches" />
       <Stack.Screen name="vendor/[vendorId]" />
+      <Stack.Screen name="vendor/gallery" />
       <Stack.Screen name="confirm" />
     </Stack>
   );

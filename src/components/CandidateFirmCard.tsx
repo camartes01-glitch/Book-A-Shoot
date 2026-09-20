@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { Check, CheckCircle2, Clock, Lock, MapPin, MessageCircle, MessageSquare, Phone, Star } from "lucide-react-native";
+import { Check, CheckCircle2, ChevronRight, Clock, Lock, MapPin, MessageCircle, MessageSquare, Phone, Star } from "lucide-react-native";
 import type { AssignedPhotographer } from "@/src/types/booking";
 import { maskPhoneNumber } from "@/src/domain/bookingRequest";
 
@@ -16,6 +16,7 @@ interface CandidateFirmCardProps {
   onConfirm?: (firm: AssignedPhotographer) => void;
   confirmLoading?: boolean;
   onChat?: (firm: AssignedPhotographer) => void;
+  onPress?: (firm: AssignedPhotographer) => void;
   testID?: string;
 }
 
@@ -34,6 +35,7 @@ export function CandidateFirmCard({
   onConfirm,
   confirmLoading = false,
   onChat,
+  onPress,
   testID,
 }: CandidateFirmCardProps) {
   const isConfirmed = Boolean(firm.is_confirmed);
@@ -76,7 +78,12 @@ export function CandidateFirmCard({
       testID={testID || `candidate-firm-${firm.provider_id}`}
     >
       {/* Top Header Row: Firm Avatar, Name, Rating, City, Status Badge */}
-      <View style={styles.headerRow}>
+      <Pressable
+        style={({ pressed }) => [styles.headerRow, onPress && pressed && { opacity: 0.8 }]}
+        onPress={() => onPress?.(firm)}
+        accessibilityRole="button"
+        accessibilityLabel={`View timeline and details for ${firm.name}`}
+      >
         {firm.profile_image ? (
           <Image
             source={{ uri: firm.profile_image }}
@@ -131,7 +138,7 @@ export function CandidateFirmCard({
             <Text style={styles.awaitingBadgeText}>Awaiting</Text>
           </View>
         )}
-      </View>
+      </Pressable>
 
       {/* Response Status Statement */}
       {isConfirmed ? (

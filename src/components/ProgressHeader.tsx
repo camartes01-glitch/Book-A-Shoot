@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { ChevronLeft } from "lucide-react-native";
+import { ChevronLeft, Home } from "lucide-react-native";
 import { router } from "expo-router";
 import { colors, spacing } from "@/src/constants/theme";
 import {
@@ -15,12 +15,22 @@ export function ProgressHeader({
   title,
   step,
   onBack,
+  onHome,
 }: {
   title: string;
   step: WizardStepId;
   onBack?: () => void;
+  onHome?: () => void;
 }) {
   const activeIndex = VISUAL_INDEX[step] ?? 0;
+
+  const handleHome = () => {
+    if (onHome) {
+      onHome();
+    } else {
+      router.replace("/(tabs)");
+    }
+  };
 
   return (
     <View style={styles.safe}>
@@ -29,7 +39,7 @@ export function ProgressHeader({
           accessibilityRole="button"
           accessibilityLabel="Go back"
           onPress={onBack ?? (() => router.back())}
-          style={styles.backBtn}
+          style={({ pressed }) => [styles.navBtn, pressed && { opacity: 0.7 }]}
           hitSlop={10}
         >
           <ChevronLeft size={22} color={colors.ink} />
@@ -37,7 +47,15 @@ export function ProgressHeader({
         <Text style={styles.title} numberOfLines={1}>
           {title}
         </Text>
-        <View style={{ width: 34 }} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Go to Home (Save as draft)"
+          onPress={handleHome}
+          style={({ pressed }) => [styles.navBtn, pressed && { opacity: 0.7 }]}
+          hitSlop={10}
+        >
+          <Home size={18} color={colors.ink} strokeWidth={2} />
+        </Pressable>
       </View>
       <View style={styles.stepsRow} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: WIZARD_STEPS.length - 1, now: activeIndex }}>
         {WIZARD_STEPS.map((s, i) => {
@@ -70,6 +88,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     paddingBottom: spacing.xs,
+  },
+  navBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.card,
+    alignItems: "center",
+    justifyContent: "center",
   },
   backBtn: {
     width: 34,

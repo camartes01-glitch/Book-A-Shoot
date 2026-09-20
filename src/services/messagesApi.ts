@@ -75,7 +75,7 @@ function notifyMessageListeners(): void {
  */
 export async function fetchConversations(): Promise<Conversation[]> {
   const token = await getAuthToken();
-  const allowRemote = token && !isDemoAuthMode();
+  const allowRemote = true;
 
   if (allowRemote) {
     try {
@@ -134,7 +134,7 @@ export async function fetchMessagesWithUser(userId: string): Promise<ChatMessage
   if (!userId || userId === "undefined" || userId === "null") return [];
 
   const token = await getAuthToken();
-  const allowRemote = token && !isDemoAuthMode();
+  const allowRemote = true;
 
   let remoteMessages: ChatMessage[] = [];
 
@@ -143,7 +143,7 @@ export async function fetchMessagesWithUser(userId: string): Promise<ChatMessage
       const data = await camartesFetch<any[]>(
         `/api/messages/${encodeURIComponent(userId)}`,
         {},
-        { requireAuth: true },
+        { auth: true, requireAuth: false },
       );
       if (Array.isArray(data)) {
         remoteMessages = data.map((m: any) => {
@@ -166,7 +166,7 @@ export async function fetchMessagesWithUser(userId: string): Promise<ChatMessage
             id: m.id || Date.now(),
             senderId: isMine ? "me" : String(rawSender || userId),
             recipientId: isMine ? String(userId) : "me",
-            message: String(m.message || ""),
+            message: String(m.message || m.text || ""),
             read: Boolean(m.read),
             createdAt: m.created_at || m.createdAt || new Date().toISOString(),
             isMine,
@@ -234,38 +234,40 @@ export async function sendMessage(
     throw new Error("Message cannot be empty.");
   }
 
-  const token = await getAuthToken();
-  const allowRemote = token && !isDemoAuthMode();
-
-  if (!token && !isDemoAuthMode()) {
-    throw new Error("Sign in to send messages.");
-  }
+  let senderUid = "";
+  try {
+    const rawProf = await AsyncStorage.getItem("camartes-customer:profile:v1");
+    if (rawProf) {
+      const parsedProf = JSON.parse(rawProf);
+      senderUid = parsedProf?.customerId || parsedProf?.id || "";
+    }
+  } catch {}
 
   let finalId = Date.now();
   let finalCreatedAt = new Date().toISOString();
   let finalStatus = "sent";
 
-  if (allowRemote) {
-    try {
-      const result = await camartesFetch<{ id?: number; status?: string; created_at?: string }>(
-        "/api/messages",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            recipient_id: recipientId,
-            message: text,
-          }),
-        },
-        { requireAuth: true },
-      );
-      if (result) {
-        finalId = result.id || finalId;
-        finalCreatedAt = result.created_at || finalCreatedAt;
-        finalStatus = result.status || "sent";
-      }
-    } catch {
-      // Offline mode
+  try {
+    const result = await camartesFetch<{ id?: number; status?: string; created_at?: string }>(
+      "/api/messages",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          recipient_id: recipientId,
+          message: text,
+          sender_id: senderUid || undefined,
+        }),
+      },
+      { auth: true, requireAuth: false },
+    );
+    if (result) {
+      finalId = result.id || finalId;
+      finalCreatedAt = result.created_at || finalCreatedAt;
+      finalStatus = result.status || "sent";
     }
+  } catch (err) {
+    console.error("[Chat] Error delivering message to Camartes:", err);
+    throw err;
   }
 
   // Record in local thread

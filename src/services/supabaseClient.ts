@@ -1,6 +1,11 @@
 /**
  * Supabase Client configuration for BOOK A SHOOT.
  * Uses AsyncStorage for cross-platform session persistence on Android, iOS, and Web.
+ *
+ * IMPORTANT: detectSessionInUrl=true on web means Supabase automatically processes
+ * the ?code= PKCE callback from Google OAuth. Do NOT manually call
+ * exchangeCodeForSession() on web — the code is single-use and Supabase already
+ * consumed it. Use getSession() after the redirect instead.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
@@ -30,6 +35,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
+    // On web: Supabase auto-processes the OAuth callback URL (?code= or #access_token=).
+    // On native: We manually parse the deep-link URL in signInWithGoogleViaSupabase().
     detectSessionInUrl: Platform.OS === "web",
   },
 });

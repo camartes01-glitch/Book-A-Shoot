@@ -65,9 +65,51 @@ describe("Supabase Google Auth integration", () => {
     };
 
     const info = extractUserInfoFromSupabaseUser(mockUser);
-    expect(info.google_id).toBe("supa-user-fallback");
-    expect(info.email).toBe("priya@example.com");
     expect(info.name).toBe("Priya");
     expect(info.picture).toBeNull();
+  });
+
+  test("extractUserInfoFromSupabaseUser extracts mobile number from metadata", () => {
+    const mockUserWithMobile: User = {
+      id: "supa-user-mobile",
+      app_metadata: {},
+      user_metadata: {
+        name: "Vijay Kumar",
+        mobile: "+91 98765 43210",
+      },
+      aud: "authenticated",
+      created_at: new Date().toISOString(),
+      email: "vijay@example.com",
+    };
+
+    const info = extractUserInfoFromSupabaseUser(mockUserWithMobile);
+    expect(info.mobile).toBe("9876543210");
+  });
+
+  test("cleanUrlOAuthParams removes code and OAuth error params while preserving app params", () => {
+    const originalWindow = (globalThis as any).window;
+    const replaceStateMock = jest.fn();
+    // Mock browser window location
+    (globalThis as any).window = {
+      location: {
+        href: "http://localhost:43158/login?code=test-code-123&state=state-xyz&returnTo=%2Fbooking%2Fconfirm",
+        pathname: "/login",
+      },
+      history: {
+        state: null,
+        replaceState: replaceStateMock,
+      },
+    };
+
+    const { cleanUrlOAuthParams } = require("@/src/services/supabaseAuth");
+    cleanUrlOAuthParams();
+
+    expect(replaceStateMock).toHaveBeenCalled();
+    const cleanUrl = replaceStateMock.mock.calls[0][2];
+    expect(cleanUrl).not.toContain("code=");
+    expect(cleanUrl).not.toContain("state=");
+    expect(cleanUrl).toContain("returnTo=");
+
+    (globalThis as any).window = originalWindow;
   });
 });

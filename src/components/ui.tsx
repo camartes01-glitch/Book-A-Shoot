@@ -1,13 +1,13 @@
 import { useId } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View, ActivityIndicator, type TextInputProps, type StyleProp, type ViewStyle } from "react-native";
+import { Pressable, StyleSheet, Text, TextInput, View, ActivityIndicator, type TextInputProps, type StyleProp, type ViewStyle, type TextStyle } from "react-native";
 import { colors, elevation, radius, radiusSm, spacing, touchTarget } from "@/src/constants/theme";
 
 export function Card({ children, accent = false, style }: { children: React.ReactNode; accent?: boolean; style?: object }) {
   return <View style={[styles.card, accent && styles.cardAccent, style]}>{children}</View>;
 }
 
-export function ScreenTitle({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.screenTitle}>{children}</Text>;
+export function ScreenTitle({ children, style }: { children: React.ReactNode; style?: StyleProp<TextStyle> }) {
+  return <Text style={[styles.screenTitle, style]}>{children}</Text>;
 }
 
 export function Title({ children, style }: { children: React.ReactNode; style?: object }) {

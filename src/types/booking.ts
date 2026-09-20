@@ -208,6 +208,19 @@ export type AssignedPhotographer = {
   contact_phone?: string;
   contact_email?: string;
   contact_whatsapp?: string;
+  accepted_at?: string | null;
+  portfolio_items?: any[];
+  social_unlocked?: boolean;
+  instagram_url?: string;
+  facebook_url?: string;
+  youtube_url?: string;
+  website_url?: string;
+  social_links?: {
+    instagram?: string;
+    facebook?: string;
+    youtube?: string;
+    website?: string;
+  };
 };
 
 export type Booking = {
@@ -247,6 +260,7 @@ export type Booking = {
   eventType?: string | null;
   eventName?: string | null;
   replacedBookingId?: string | null;
+  excludedVendorIds?: string[];
 };
 
 export type CustomerProfile = {
@@ -258,6 +272,8 @@ export type CustomerProfile = {
   savedAddresses: EventLocation[];
 };
 
+export type AppNotificationCategory = "all" | "booking" | "message" | "reminder";
+
 export type AppNotification = {
   id: string;
   title: string;
@@ -268,5 +284,9 @@ export type AppNotification = {
   userId?: string;
   firmId?: string;
   firmName?: string;
-  type?: "message" | "booking" | "system";
+  type?: "message" | "booking" | "system" | "reminder" | "match";
+  category?: AppNotificationCategory;
+  actionType?: "reply" | "view_booking" | "view_matches";
+  data?: Record<string, unknown>;
 };
+

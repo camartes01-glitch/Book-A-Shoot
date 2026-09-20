@@ -10,14 +10,20 @@ export default function Splash() {
   const { ready, profile } = useAppStore();
 
   useEffect(() => {
+    const getDestination = () => {
+      if (!profile) return "/(auth)/login";
+      const hasMobile = Boolean(profile.mobile && profile.mobile.length >= 10);
+      return hasMobile ? "/(tabs)" : "/(auth)/complete-profile";
+    };
+
     if (ready) {
       const timer = setTimeout(() => {
-        router.replace(profile ? "/(tabs)" : "/(auth)/login");
+        router.replace(getDestination() as any);
       }, 350);
       return () => clearTimeout(timer);
     }
     const hardFallback = setTimeout(() => {
-      router.replace(profile ? "/(tabs)" : "/(auth)/login");
+      router.replace(getDestination() as any);
     }, 2000);
     return () => clearTimeout(hardFallback);
   }, [ready, profile]);

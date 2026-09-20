@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { CheckCircle2, Lock, Mail, Phone, XCircle } from "lucide-react-native";
+import { CheckCircle2, Clock, Lock, Mail, Phone, XCircle } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ProgressHeader } from "@/src/components/ProgressHeader";
 import { Badge, Button, Card, Muted, ScreenTitle, SectionTitle } from "@/src/components/ui";
-import { StatusTimeline } from "@/src/components/StatusTimeline";
 import { CandidateFirmCard } from "@/src/components/CandidateFirmCard";
+import { FirmDetailModal } from "@/src/components/FirmDetailModal";
 import * as bookingApi from "@/src/services/bookingApi";
 import * as paymentApi from "@/src/services/paymentApi";
-import type { AssignedPhotographer, Booking } from "@/src/types/booking";
+import type { AssignedPhotographer, Booking, PackageTierId } from "@/src/types/booking";
 import { STATUS_LABEL, STATUS_TONE } from "@/src/domain/statusLabels";
 import { selectedAddOnLabels, selectedCoreServiceLabels } from "@/src/domain/dayServices";
 import { eventTypeLabels } from "@/src/constants/eventCategories";
 import { canSearchAgain, getBookingEventTitle, getEffectiveBookingStatus, isCompletedBooking } from "@/src/domain/bookingFilters";
-import { selectedPackageQuote } from "@/src/engine/pricing";
+import { resolvePackageOptions, selectedPackageQuote } from "@/src/engine/pricing";
+import { PACKAGE_TIER_META } from "@/src/config/approvedBudget";
+import { defaultExpectedDeliveryDate } from "@/src/engine/validation";
 import { formatDateLong, formatInr, formatInrRange, formatPackageOverallLabel } from "@/src/utils/format";
 import { colors, spacing } from "@/src/constants/theme";
 import { useAppStore } from "@/src/state/AppProvider";
@@ -36,6 +38,7 @@ export default function BookingDetailScreen() {
   const [missing, setMissing] = useState(false);
   const [confirmMode, setConfirmMode] = useState<"delete" | null>(null);
   const [firmToConfirm, setFirmToConfirm] = useState<AssignedPhotographer | null>(null);
+  const [selectedFirmModal, setSelectedFirmModal] = useState<AssignedPhotographer | null>(null);
   const [confirmingFirmId, setConfirmingFirmId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -106,8 +109,60 @@ export default function BookingDetailScreen() {
   const contactUnlocked = CONTACT_UNLOCKED.has(booking.status);
   const displayId = booking.remoteBookingId || booking.bookingId;
   const services = Array.from(new Set(booking.days.flatMap((day) => selectedCoreServiceLabels(day))));
-  const addOns = Array.from(new Set(booking.days.flatMap((day) => selectedAddOnLabels(day))));
+
+  const albumLabel = booking.deliverables?.photo?.album
+    ? `Printed Photo Album (${
+        booking.deliverables.photo.albumPagesOption === "custom"
+          ? booking.deliverables.photo.albumPagesCustomCount || 20
+          : booking.deliverables.photo.albumPagesOption || 20
+      } pages)`
+    : null;
+  const rawAddOns = [
+    ...booking.days.flatMap((day) => selectedAddOnLabels(day)),
+    ...(albumLabel ? [albumLabel] : []),
+  ];
+  const addOns = Array.from(new Set(rawAddOns.filter(Boolean)));
+
+  const deliverablesSummary: string[] = [];
+  if (booking.deliverables?.photo?.album) {
+    const pages =
+      booking.deliverables.photo.albumPagesOption === "custom"
+        ? Math.max(1, booking.deliverables.photo.albumPagesCustomCount ?? 20)
+        : parseInt(String(booking.deliverables.photo.albumPagesOption ?? "20"), 10) || 20;
+    deliverablesSummary.push(`Printed Photo Album (${pages} pages)`);
+  }
+  if (booking.deliverables?.photo?.rawPhotos) deliverablesSummary.push("Raw Photos");
+  const edCount =
+    booking.deliverables?.photo?.editedPhotosOption === "custom"
+      ? booking.deliverables.photo.editedPhotosCustomCount
+      : booking.deliverables?.photo?.editedPhotosOption;
+  if (edCount && String(edCount) !== "0") deliverablesSummary.push(`Edited Photos (${edCount})`);
+  if (booking.deliverables?.video?.rawVideo) deliverablesSummary.push("Raw Video Footage");
+  if (booking.deliverables?.video?.editedTraditionalVideoCount) {
+    deliverablesSummary.push(`${booking.deliverables.video.editedTraditionalVideoCount} Traditional Video${booking.deliverables.video.editedTraditionalVideoCount > 1 ? "s" : ""}`);
+  }
+  if (booking.deliverables?.video?.editedCinematicVideoCount) {
+    deliverablesSummary.push(`${booking.deliverables.video.editedCinematicVideoCount} Cinematic Video${booking.deliverables.video.editedCinematicVideoCount > 1 ? "s" : ""}`);
+  }
+  if (booking.deliverables?.video?.teaserCinematicEnabled) {
+    deliverablesSummary.push(`Teaser Cinematic Video (${booking.deliverables.video.teaserDurationMinutes || 1} min)`);
+  }
+
   const quoted = selectedPackageQuote(booking);
+  let effectiveQuoted = quoted;
+  if (!effectiveQuoted && booking.selectedPackage) {
+    try {
+      const opts = resolvePackageOptions(booking);
+      effectiveQuoted = opts.find((o) => o.id === booking.selectedPackage);
+    } catch {
+      effectiveQuoted = undefined;
+    }
+  }
+
+  const rawTier = booking.selectedPackage as PackageTierId | null | undefined;
+  const packageLabel = rawTier
+    ? (PACKAGE_TIER_META[rawTier]?.label ?? (typeof rawTier === "string" ? rawTier.charAt(0).toUpperCase() + rawTier.slice(1) : "—"))
+    : "—";
 
   const assignedFirms: AssignedPhotographer[] = booking.assigned_photographers?.length
     ? booking.assigned_photographers
@@ -258,44 +313,17 @@ export default function BookingDetailScreen() {
 
         {error ? <Muted style={{ color: colors.danger, fontWeight: "700" }}>{error}</Muted> : null}
 
-        {TERMINAL_ALTERNATE.has(booking.status) || canSearchAgain(booking) ? (
-          <Card style={{ borderColor: canSearchAgain(booking) ? colors.primary : colors.danger }}>
+        {TERMINAL_ALTERNATE.has(booking.status) ? (
+          <Card style={{ borderColor: colors.danger }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <XCircle size={18} color={canSearchAgain(booking) ? colors.primaryDark : colors.danger} />
+              <XCircle size={18} color={colors.danger} />
               <SectionTitle>{STATUS_LABEL[getEffectiveBookingStatus(booking)]}</SectionTitle>
             </View>
             <Muted style={{ marginTop: 4 }}>
-              {booking.firms_status_message || (TERMINAL_ALTERNATE.has(booking.status) ? "This booking is no longer active." : "No photography firms were available or accepted for this request.")}
+              {booking.firms_status_message || "This booking is no longer active."}
             </Muted>
-            {canSearchAgain(booking) ? (
-              <View style={{ marginTop: 12 }}>
-                <Button
-                  label="Search Again"
-                  variant="primary"
-                  onPress={async () => {
-                    setBusy(true);
-                    try {
-                      await searchAgainBooking(booking);
-                      router.push("/booking/confirm");
-                    } catch (e) {
-                      const msg = e instanceof Error ? e.message : "Could not prepare booking for retry.";
-                      Alert.alert("Search again", msg);
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                  disabled={busy}
-                  loading={busy}
-                />
-              </View>
-            ) : null}
           </Card>
-        ) : (
-          <Card>
-            <SectionTitle>Status</SectionTitle>
-            <StatusTimeline status={getEffectiveBookingStatus(booking)} booking={booking} />
-          </Card>
-        )}
+        ) : null}
 
         {/* Candidate Photography Firms List with Swiggy-like Clean Design */}
         {assignedFirms.length > 0 ? (
@@ -304,11 +332,18 @@ export default function BookingDetailScreen() {
               <SectionTitle>Candidate Photography Firms ({assignedFirms.length})</SectionTitle>
               <Muted style={{ fontSize: 11, color: colors.muted }}>Pull down to refresh</Muted>
             </View>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: -4, marginBottom: 2 }}>
+              <Clock size={12} color="#EA580C" />
+              <Text style={{ fontSize: 12, color: "#9A3412", fontWeight: "600" }}>
+                Tap on any firm card to track live response status & shoot timeline
+              </Text>
+            </View>
             <View style={{ gap: 8 }}>
               {assignedFirms.map((firm) => (
                 <CandidateFirmCard
                   key={firm.provider_id || firm.id}
                   firm={firm}
+                  onPress={(f) => setSelectedFirmModal(f)}
                   onConfirm={(f) => setFirmToConfirm(f)}
                   confirmLoading={busy && confirmingFirmId === firm.provider_id}
                   onChat={(f) => {
@@ -378,26 +413,30 @@ export default function BookingDetailScreen() {
             <Muted>Add-ons</Muted>
             <Muted style={{ fontWeight: "700", flex: 1, textAlign: "right" }}>{addOns.join(" · ") || "None"}</Muted>
           </View>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-            <Muted>Package</Muted>
-            <Muted style={{ fontWeight: "700", flex: 1, textAlign: "right", flexShrink: 1 }}>
-              {quoted
-                ? formatPackageOverallLabel(quoted.label, quoted.minPrice, quoted.maxPrice)
-                : booking.selectedPackage ?? "—"}
-            </Muted>
-          </View>
-          {quoted && quoted.maxPrice > 0 ? (
+          {deliverablesSummary.length > 0 ? (
             <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-              <Muted>Package estimate</Muted>
+              <Muted>Deliverables</Muted>
               <Muted style={{ fontWeight: "700", flex: 1, textAlign: "right", flexShrink: 1 }}>
-                {formatInrRange(quoted.minPrice, quoted.maxPrice)}
+                {deliverablesSummary.join(" · ")}
               </Muted>
             </View>
           ) : null}
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Muted>Provider estimate</Muted>
-            <Muted style={{ fontWeight: "700" }}>{booking.estimatedAmount ? formatInr(booking.estimatedAmount) : "—"}</Muted>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+            <Muted>Package</Muted>
+            <Muted style={{ fontWeight: "700", flex: 1, textAlign: "right", flexShrink: 1 }}>
+              {effectiveQuoted
+                ? formatPackageOverallLabel(effectiveQuoted.label, effectiveQuoted.minPrice, effectiveQuoted.maxPrice)
+                : packageLabel}
+            </Muted>
           </View>
+          {effectiveQuoted && effectiveQuoted.maxPrice > 0 ? (
+            <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+              <Muted>Package estimate</Muted>
+              <Muted style={{ fontWeight: "700", flex: 1, textAlign: "right", flexShrink: 1 }}>
+                {formatInrRange(effectiveQuoted.minPrice, effectiveQuoted.maxPrice)}
+              </Muted>
+            </View>
+          ) : null}
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
             <Muted>Event days</Muted>
             <Muted style={{ fontWeight: "700" }}>{booking.days.length}</Muted>
@@ -410,7 +449,9 @@ export default function BookingDetailScreen() {
           </View>
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
             <Muted>Expected delivery</Muted>
-            <Muted style={{ fontWeight: "700" }}>{formatDateLong(booking.expectedDeliveryDate)}</Muted>
+            <Muted style={{ fontWeight: "700" }}>
+              {formatDateLong(booking.expectedDeliveryDate || defaultExpectedDeliveryDate(booking.days))}
+            </Muted>
           </View>
         </Card>
 
@@ -493,6 +534,51 @@ export default function BookingDetailScreen() {
           if (!busy) setConfirmMode(null);
         }}
         testID="booking-detail-confirm-dialog"
+      />
+
+      <FirmDetailModal
+        visible={selectedFirmModal !== null}
+        firm={selectedFirmModal}
+        booking={booking}
+        onClose={() => setSelectedFirmModal(null)}
+        onViewProfile={(f) => {
+          setSelectedFirmModal(null);
+          const vid = f.provider_id || f.id;
+          if (vid) {
+            router.push({
+              pathname: "/booking/vendor/[vendorId]",
+              params: {
+                vendorId: vid,
+                name: f.name,
+                city: f.city,
+                rating: String(f.rating || 4.8),
+                image: f.profile_image || "",
+              },
+            });
+          }
+        }}
+        onConfirmFirm={(f) => {
+          setSelectedFirmModal(null);
+          setFirmToConfirm(f);
+        }}
+        confirmLoading={busy && confirmingFirmId === selectedFirmModal?.provider_id}
+        onChat={(f) => {
+          const pid = f.provider_id || f.id;
+          if (!pid) {
+            router.push("/(tabs)/messages");
+            return;
+          }
+          router.push({
+            pathname: "/chat/[userId]",
+            params: {
+              userId: pid,
+              name: f.name,
+              picture: f.profile_image || "",
+              phone: f.contact_phone || "",
+              accepted: "true",
+            },
+          });
+        }}
       />
 
       <ConfirmDialog

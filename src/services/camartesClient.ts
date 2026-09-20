@@ -53,7 +53,21 @@ export class CamartesApiError extends Error {
 
 export async function getAuthToken(): Promise<string | null> {
   try {
-    return await AsyncStorage.getItem(TOKEN_KEY);
+    const direct = await AsyncStorage.getItem(TOKEN_KEY);
+    if (direct && direct.trim()) return direct.trim();
+
+    // Check active Supabase session
+    try {
+      const { supabase } = await import("./supabaseClient");
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.access_token) {
+        return data.session.access_token;
+      }
+    } catch {
+      // Non-blocking
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -163,10 +177,28 @@ export async function camartesFetch<T>(
 ): Promise<T> {
   const headers = new Headers(init.headers);
   if (!headers.has("X-Client-App")) headers.set("X-Client-App", "bookashoot");
+  if (!headers.has("X-Booking-Source")) headers.set("X-Booking-Source", "book_a_shoot");
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+
+  try {
+    const rawProf = await AsyncStorage.getItem("camartes-customer:profile:v1");
+    if (rawProf) {
+      const parsedProf = JSON.parse(rawProf);
+      const uid = parsedProf?.customerId || parsedProf?.id;
+      if (uid) {
+        if (!headers.has("X-User-Id")) headers.set("X-User-Id", uid);
+        if (typeof uid === "string" && uid.startsWith("guest_") && !headers.has("X-Guest-Id")) {
+          headers.set("X-Guest-Id", uid);
+        }
+      }
+    }
+  } catch {
+    // Non-blocking
+  }
   const needsAuth = opts.auth !== false;
-  const token = isDemoAuthMode() ? null : needsAuth ? await getAuthToken() : null;
-  if (opts.requireAuth && !token) {
+  const token = needsAuth ? await getAuthToken() : null;
+  const hasUserAuth = Boolean(token) || headers.has("X-User-Id") || headers.has("X-Guest-Id");
+  if (opts.requireAuth && !hasUserAuth) {
     throw new CamartesApiError("Sign in to your Book A Shoot account to continue.", 401);
   }
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -195,18 +227,21 @@ export async function camartesFetch<T>(
   }
 
   if (!res.ok) {
+    if (res.status === 401 && !path.includes("/api/auth/login") && !path.includes("/api/auth/google") && !path.includes("/api/bookings")) {
+      try {
+        await setAuthToken(null);
+      } catch {
+        // Ignore storage clear failure
+      }
+    }
     const fallback =
       res.status === 401
         ? path.includes("/api/auth/login")
           ? "Invalid email, phone, or password."
-          : path.includes("/api/auth/google")
-            ? "Google sign-in was rejected by Camartes."
-            : "Sign in to your Book A Shoot account to continue."
+          : "Authentication required on Camartes platform."
         : res.status === 403
           ? "Camartes denied this request."
-          : res.status === 404 && path.includes("/api/auth/google")
-            ? "Camartes Google sign-in is not available."
-            : `Camartes request failed (${res.status}).`;
+          : `Camartes request failed (${res.status}).`;
     throw new CamartesApiError(detailMessage(parsed, fallback), res.status);
   }
 

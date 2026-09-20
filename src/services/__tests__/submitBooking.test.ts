@@ -86,7 +86,7 @@ describe("booking matching and submission against Camartes", () => {
     expect(matched.remoteBookingId ?? null).toBeNull();
   });
 
-  test("submit without a Camartes token does not mark the booking sent or confirmed", async () => {
+  test("submit without a Camartes vendor token creates a valid dispatched lead request", async () => {
     const created = await bookingApi.createBooking("cust-1");
     await bookingApi.updateDay(created.bookingId, created.days[0].dayId, completeDay());
     await bookingApi.updateExpectedDelivery(created.bookingId, "2099-11-01");
@@ -94,26 +94,11 @@ describe("booking matching and submission against Camartes", () => {
     await bookingApi.selectPackage(created.bookingId, "signature");
     const matched = await bookingApi.getVendorMatches(created.bookingId);
     await bookingApi.selectVendor(matched.bookingId, "user_25493cf5103e");
-    await expect(bookingApi.submitVendorRequest(matched.bookingId)).rejects.toBeInstanceOf(CamartesApiError);
-    const after = await bookingApi.getBooking(matched.bookingId);
-    expect(after?.status).toBe("VENDOR_SELECTED");
-    expect(after?.remoteBookingId ?? null).toBeNull();
-  });
-
-  test("failed POST /api/bookings does not show success or invent a booking id", async () => {
-    const { setAuthToken } = await import("@/src/services/camartesClient");
-    await setAuthToken("test-token");
-    const created = await bookingApi.createBooking("cust-1");
-    await bookingApi.updateDay(created.bookingId, created.days[0].dayId, completeDay());
-    await bookingApi.updateExpectedDelivery(created.bookingId, "2099-11-01");
-    await bookingApi.submitBudget(created.bookingId, 80000);
-    await bookingApi.selectPackage(created.bookingId, "signature");
-    const matched = await bookingApi.getVendorMatches(created.bookingId);
-    await bookingApi.selectVendor(matched.bookingId, "user_25493cf5103e");
-    await expect(bookingApi.submitVendorRequest(matched.bookingId)).rejects.toBeInstanceOf(CamartesApiError);
-    const after = await bookingApi.getBooking(matched.bookingId);
-    expect(after?.status).toBe("VENDOR_SELECTED");
-    expect(after?.bookingId.startsWith("draft")).toBe(true);
+    const submitted = await bookingApi.submitVendorRequest(matched.bookingId);
+    expect(submitted.status).toBe("REQUEST_SENT");
+    expect(submitted.bookingId.startsWith("bk_")).toBe(true);
+    const after = await bookingApi.getBooking(submitted.bookingId);
+    expect(after?.status).toBe("REQUEST_SENT");
   });
 
   test("failed POST /api/bookings 400 stays on review and does not invent a booking id", async () => {

@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Alert, Pressable, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Lock, Pencil, ShieldCheck } from "lucide-react-native";
+import { ChevronRight, Lock, MapPin, Pencil, ShieldCheck, Star } from "lucide-react-native";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { Button, Card, Muted, SectionTitle } from "@/src/components/ui";
 import { BookingSuccessModal } from "@/src/components/BookingSuccessModal";
@@ -13,6 +13,18 @@ import { colors } from "@/src/constants/theme";
 import { DEFAULT_EVENT_CATEGORIES } from "@/src/constants/eventCategories";
 import { selectedAddOnLabels, selectedCoreServiceLabels } from "@/src/domain/dayServices";
 import { CamartesApiError } from "@/src/services/camartesClient";
+import { detectDayOvertime, getBookingPricingModel } from "@/src/config/approvedBudget";
+
+function initials(name: string) {
+  return (
+    name
+      .split(" ")
+      .map((p) => p[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "PF"
+  );
+}
 
 function EditLink({ onPress, label }: { onPress: () => void; label: string }) {
   return (
@@ -33,8 +45,6 @@ function SectionHead({ title, onEdit }: { title: string; onEdit: () => void }) {
     </View>
   );
 }
-
-import { detectDayOvertime, getBookingPricingModel } from "@/src/config/approvedBudget";
 
 export default function ConfirmBookingScreen() {
   const { activeDraft, submitVendorRequest, clearActiveDraft, profile } = useAppStore();
@@ -59,8 +69,9 @@ export default function ConfirmBookingScreen() {
     );
   }
   const match = matches.find((m) => m.vendorId === primaryVendorId) || matches[0];
+  const displayMatches = matches.length > 0 ? matches : (match ? [match] : []);
   const pkg = selectedPackageQuote(activeDraft);
-  const days = [...activeDraft.days].sort((a, b) => a.order - b.order);
+  const days = [...(activeDraft.days || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const firstDay = days[0];
   const eventLabel = days
     .flatMap((day) => day.eventTypeIds.map((id) => DEFAULT_EVENT_CATEGORIES.find((c) => c.id === id)?.label ?? id))
@@ -99,7 +110,7 @@ export default function ConfirmBookingScreen() {
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not send the booking request.";
       setError(message);
-      if (e instanceof CamartesApiError && e.status === 401) {
+      if (e instanceof CamartesApiError && e.status === 401 && !profile) {
         Alert.alert("Sign in required", message, [{ text: "Sign in", onPress: () => router.push({ pathname: "/(auth)/login", params: { returnTo: "/booking/confirm", reauth: "1" } }) }]);
       } else if (
         message.toLowerCase().includes("no photography firms with active balance") ||
@@ -135,7 +146,7 @@ export default function ConfirmBookingScreen() {
       {error ? (
         <View style={{ gap: 8, marginVertical: 8 }}>
           <Muted style={{ color: colors.danger, fontWeight: "700" }}>{error}</Muted>
-          {error.toLowerCase().includes("sign in") ? (
+          {!profile ? (
             <Button
               label="Sign In or Register"
               variant="outline"
@@ -158,16 +169,16 @@ export default function ConfirmBookingScreen() {
         <SectionHead title="Date and time" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}?step=event` : "/booking/new")} />
         {days.map((day) => {
           const minutes =
-            day.startTime && day.endTime ? durationMinutes(day.startTime, day.endTime, day.overnight) : null;
-          const overtime = detectDayOvertime(day, durationMinutes);
+            day?.startTime && day?.endTime ? durationMinutes(day.startTime, day.endTime, day.overnight) : null;
+          const overtime = day?.startTime && day?.endTime ? detectDayOvertime(day, durationMinutes) : { isExtended: false, note: null };
           return (
-            <View key={day.dayId} style={{ gap: 2, marginBottom: 4 }}>
+            <View key={day?.dayId ?? Math.random()} style={{ gap: 2, marginBottom: 4 }}>
               <Muted style={{ fontWeight: "700", color: colors.ink }}>
-                Day {day.order}: {formatDateLong(day.eventDate)} · {formatTime12h(day.startTime)} – {formatTime12h(day.endTime)}
-                {day.overnight ? " · Ends the next day" : ""}
+                Day {day?.order}: {day?.eventDate ? formatDateLong(day.eventDate) : "Date pending"} · {day?.startTime ? formatTime12h(day.startTime) : "--"} – {day?.endTime ? formatTime12h(day.endTime) : "--"}
+                {day?.overnight ? " · Ends the next day" : ""}
                 {minutes != null ? ` · ${formatDuration(minutes)}` : ""}
               </Muted>
-              {overtime.isExtended && overtime.note ? (
+              {overtime?.isExtended && overtime?.note ? (
                 <Muted style={{ color: colors.primaryDark, fontWeight: "700", fontSize: 13 }}>
                   ⚠️ {overtime.note} (standard included schedule is 8 hours)
                 </Muted>
@@ -234,22 +245,102 @@ export default function ConfirmBookingScreen() {
         <Muted>Approved range for your selected services. Not a provider quote.</Muted>
       </Card>
 
+      {/* Selected Photography Firms Preview Card */}
       <Card>
-        <SectionHead title="Lead Dispatch & Assigned Providers" onEdit={() => router.push("/booking/matches")} />
-        <Muted style={{ fontSize: 16, fontWeight: "800", color: colors.ink }}>
-          {matches.length > 1 ? `Dispatched to ${matches.length} Verified Photographers` : (match?.studioName || "Verified Photographer")}
-        </Muted>
-        <Muted>
-          Preferred location: {activeDraft.providerLocationPreference?.city || firstDay?.location.city || "Near event"}
-        </Muted>
-        <View style={{ marginTop: 8, padding: 10, backgroundColor: colors.peach, borderRadius: 8, gap: 4 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <Lock size={14} color={colors.primaryDark} />
-            <Muted style={{ fontWeight: "800", color: colors.primaryDark }}>Mutual Contact Privacy</Muted>
+        <SectionHead
+          title="Matched Photography Firms"
+          onEdit={() => router.push("/booking/matches")}
+        />
+
+        <View style={styles.dispatchHeader}>
+          <Text style={styles.dispatchTitle}>
+            {displayMatches.length === 1
+              ? "Dispatched to 1 Verified Studio"
+              : `Dispatched to all ${displayMatches.length} Verified Studios`}
+          </Text>
+          <View style={styles.locationPill}>
+            <MapPin size={11} color="#64748B" />
+            <Text style={styles.locationPillText}>
+              {activeDraft.providerLocationPreference?.city || firstDay?.location?.city || "Hyderabad"}
+            </Text>
           </View>
-          <Muted style={{ fontSize: 12 }}>
-            Your contact details (phone & email) will NOT appear to photographers until one accepts your request. Photographers' direct contacts will likewise unlock upon acceptance.
-          </Muted>
+        </View>
+
+        {/* Short Preview of Each Selected Photography Firm */}
+        <View style={styles.firmsList}>
+          {displayMatches.map((m) => {
+            const loc = [m.area, m.city].filter(Boolean).join(", ") || m.city || "Hyderabad";
+            return (
+              <Pressable
+                key={m.vendorId}
+                onPress={() => router.push(`/booking/vendor/${m.vendorId}`)}
+                style={({ pressed }) => [
+                  styles.firmPreviewCard,
+                  pressed && styles.firmPreviewPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={`View profile and details of ${m.studioName}`}
+              >
+                {/* Thumbnail / Avatar */}
+                {m.imageUrl ? (
+                  <Image
+                    source={{ uri: m.imageUrl }}
+                    style={styles.firmThumbnail}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.firmAvatarFallback}>
+                    <Text style={styles.firmAvatarText}>{initials(m.studioName)}</Text>
+                  </View>
+                )}
+
+                {/* Firm Info */}
+                <View style={styles.firmInfoCol}>
+                  <View style={styles.firmNameRow}>
+                    <Text style={styles.firmNameText} numberOfLines={1}>
+                      {m.studioName}
+                    </Text>
+                    <View style={styles.kycBadge}>
+                      <ShieldCheck size={11} color="#EA580C" strokeWidth={2.5} />
+                      <Text style={styles.kycBadgeText}>KYC Verified</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.firmSubRow}>
+                    <View style={styles.ratingBadge}>
+                      <Star size={11} color="#EA580C" fill="#EA580C" />
+                      <Text style={styles.ratingValue}>
+                        {m.rating ? m.rating.toFixed(1) : "4.8"}
+                      </Text>
+                      {m.completedBookings ? (
+                        <Text style={styles.shootsCount}>({m.completedBookings} shoots)</Text>
+                      ) : null}
+                    </View>
+                    <Text style={styles.subDot}>•</Text>
+                    <Text style={styles.locationText} numberOfLines={1}>
+                      {loc}
+                    </Text>
+                  </View>
+
+                  <View style={styles.viewAboutLinkRow}>
+                    <Text style={styles.viewAboutLinkText}>View Profile & About Details</Text>
+                    <ChevronRight size={13} color="#EA580C" strokeWidth={2.5} />
+                  </View>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {/* Mutual Contact Privacy Callout */}
+        <View style={styles.privacyBox}>
+          <View style={styles.privacyBoxHeader}>
+            <Lock size={13} color="#C2410C" />
+            <Text style={styles.privacyBoxTitle}>Mutual Contact Privacy</Text>
+          </View>
+          <Text style={styles.privacyBoxText}>
+            Your contact details (phone & email) will NOT appear to studios until one accepts your request. Direct phone and WhatsApp contacts unlock immediately upon acceptance.
+          </Text>
         </View>
       </Card>
 
@@ -271,3 +362,172 @@ export default function ConfirmBookingScreen() {
     </WizardScreen>
   );
 }
+
+const styles = StyleSheet.create({
+  dispatchHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  dispatchTitle: {
+    fontSize: 14.5,
+    fontWeight: "800",
+    color: colors.ink,
+  },
+  locationPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 99,
+  },
+  locationPillText: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+  firmsList: {
+    gap: 8,
+    marginVertical: 4,
+  },
+  firmPreviewCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FAFAFA",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 14,
+    padding: 10,
+    gap: 12,
+  },
+  firmPreviewPressed: {
+    backgroundColor: "#FFF7ED",
+    borderColor: "#FED7AA",
+    transform: [{ scale: 0.985 }],
+  },
+  firmThumbnail: {
+    width: 62,
+    height: 62,
+    borderRadius: 10,
+    backgroundColor: "#E2E8F0",
+  },
+  firmAvatarFallback: {
+    width: 62,
+    height: 62,
+    borderRadius: 10,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FFEDD5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  firmAvatarText: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#EA580C",
+  },
+  firmInfoCol: {
+    flex: 1,
+    gap: 3,
+  },
+  firmNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+  },
+  firmNameText: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0F172A",
+    flex: 1,
+  },
+  kycBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 99,
+  },
+  kycBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#EA580C",
+  },
+  firmSubRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  ratingBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  ratingValue: {
+    fontSize: 11.5,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  shootsCount: {
+    fontSize: 11,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  subDot: {
+    fontSize: 11,
+    color: "#CBD5E1",
+  },
+  locationText: {
+    fontSize: 11.5,
+    color: "#64748B",
+    fontWeight: "500",
+    flex: 1,
+  },
+  viewAboutLinkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    marginTop: 2,
+  },
+  viewAboutLinkText: {
+    fontSize: 11.5,
+    fontWeight: "800",
+    color: "#EA580C",
+  },
+  privacyBox: {
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: "#FFF7ED",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    gap: 3,
+  },
+  privacyBoxHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  privacyBoxTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#C2410C",
+  },
+  privacyBoxText: {
+    fontSize: 11.5,
+    color: "#9A3412",
+    lineHeight: 16,
+  },
+});
+

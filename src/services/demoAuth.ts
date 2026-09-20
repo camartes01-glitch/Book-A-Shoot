@@ -183,6 +183,7 @@ export async function signupDemo(input: {
   if (accounts.some((account) => account.email === email || account.mobile === phone)) {
     throw new CamartesApiError("An account with this email or phone already exists.", 400);
   }
+
   const account: DemoAccount = {
     customerId: makeId("demo-cust"),
     name,

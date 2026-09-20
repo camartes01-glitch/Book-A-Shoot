@@ -4,7 +4,7 @@
  * Camartes auth APIs. Tokens are stored on-device and never logged.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { CustomerProfile } from "@/src/types/booking";
+import type { CustomerProfile, EventLocation } from "@/src/types/booking";
 import { isDemoAuthMode } from "@/src/config/authMode";
 import { camartesFetch, CamartesApiError, extractAccessToken, getAuthToken, setAuthToken } from "@/src/services/camartesClient";
 import {
@@ -16,8 +16,11 @@ import {
   signupDemo,
 } from "@/src/services/demoAuth";
 import { makeId } from "@/src/utils/id";
+import { signOutSupabase, updateSupabaseUserProfile } from "@/src/services/supabaseAuth";
 
 const PROFILE_KEY = "camartes-customer:profile:v1";
+const PROFILES_REGISTRY_KEY = "camartes-customer:registry-by-email:v1";
+const BOOKINGS_KEY = "camartes-customer:bookings:v1";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 let loginInFlight: Promise<CustomerProfile> | null = null;
@@ -64,8 +67,48 @@ export function profileFromCamartesUser(payload: unknown, fallback: Partial<Cust
   };
 }
 
+export async function getProfileFromRegistry(email: string): Promise<CustomerProfile | null> {
+  const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail) return null;
+  try {
+    const raw = await AsyncStorage.getItem(PROFILES_REGISTRY_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw) as Record<string, CustomerProfile>;
+    return map[cleanEmail] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveProfileToRegistry(profile: CustomerProfile): Promise<void> {
+  const cleanEmail = profile.email.trim().toLowerCase();
+  if (!cleanEmail) return;
+  try {
+    const raw = await AsyncStorage.getItem(PROFILES_REGISTRY_KEY);
+    const map = raw ? (JSON.parse(raw) as Record<string, CustomerProfile>) : {};
+    const prev = map[cleanEmail];
+    map[cleanEmail] = {
+      customerId: prev?.customerId || profile.customerId,
+      name: profile.name || prev?.name || "",
+      email: profile.email || prev?.email || cleanEmail,
+      mobile: profile.mobile || prev?.mobile || "",
+      avatarInitials: profile.avatarInitials || prev?.avatarInitials || initialsOf(profile.name || cleanEmail),
+      savedAddresses: mergeAddresses(prev?.savedAddresses ?? [], profile.savedAddresses ?? []),
+    };
+    await AsyncStorage.setItem(PROFILES_REGISTRY_KEY, JSON.stringify(map));
+  } catch {
+    // Non-fatal
+  }
+}
+
 async function persistProfile(profile: CustomerProfile): Promise<CustomerProfile> {
   await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  await saveProfileToRegistry(profile);
+  try {
+    await updateSupabaseUserProfile({ name: profile.name, mobile: profile.mobile });
+  } catch {
+    // Non-fatal
+  }
   return profile;
 }
 
@@ -79,6 +122,86 @@ async function clearLocalSession(): Promise<void> {
   await AsyncStorage.removeItem(PROFILE_KEY);
 }
 
+async function migrateBookingsToCustomer(oldCustomerId: string, newCustomerId: string): Promise<void> {
+  if (!oldCustomerId || !newCustomerId || oldCustomerId === newCustomerId) return;
+  try {
+    const raw = await AsyncStorage.getItem(BOOKINGS_KEY);
+    if (!raw) return;
+    const bookings = JSON.parse(raw);
+    if (!Array.isArray(bookings)) return;
+    let changed = false;
+    for (const b of bookings) {
+      if (b && b.customerId === oldCustomerId) {
+        b.customerId = newCustomerId;
+        changed = true;
+      }
+    }
+    if (changed) {
+      await AsyncStorage.setItem(BOOKINGS_KEY, JSON.stringify(bookings));
+    }
+  } catch {
+    // Non-fatal
+  }
+}
+
+/**
+ * Reconcile an incoming profile against the locally-stored profile or persistent registry by email.
+ * If both share the same email address, reuse the existing customerId and saved mobile number so that
+ * bookings and data stay unified regardless of sign-in method (Google vs email) and across logouts.
+ * When the customerId changes, local bookings are migrated to the canonical ID.
+ */
+async function reconcileProfileByEmail(incoming: CustomerProfile): Promise<CustomerProfile> {
+  if (!incoming.email) return incoming;
+
+  const existing = (await getStoredProfile()) ?? (await getProfileFromRegistry(incoming.email));
+  if (!existing || !existing.email) {
+    await saveProfileToRegistry(incoming);
+    return incoming;
+  }
+
+  if (existing.email.toLowerCase() !== incoming.email.toLowerCase()) return incoming;
+
+  // Same email → same user. Merge fields, keeping the richer value.
+  const canonicalId = existing.customerId;
+  const oldId = incoming.customerId;
+
+  const merged: CustomerProfile = {
+    customerId: canonicalId,
+    name: incoming.name || existing.name,
+    email: incoming.email || existing.email,
+    mobile: incoming.mobile || existing.mobile,
+    avatarInitials: initialsOf(incoming.name || existing.name),
+    savedAddresses: mergeAddresses(existing.savedAddresses, incoming.savedAddresses ?? []),
+  };
+
+  // Migrate bookings from the old customerId to the canonical one
+  if (oldId && oldId !== canonicalId) {
+    try {
+      await migrateBookingsToCustomer(oldId, canonicalId);
+    } catch {
+      // Non-fatal: booking migration failure must not block sign-in
+      console.warn("[Auth] Booking migration warning:", oldId, "→", canonicalId);
+    }
+  }
+
+  await saveProfileToRegistry(merged);
+  return merged;
+}
+
+function mergeAddresses(a: EventLocation[] = [], b: EventLocation[] = []): EventLocation[] {
+  const seen = new Set<string>();
+  const merged: EventLocation[] = [];
+  for (const loc of [...a, ...b]) {
+    if (!loc) continue;
+    const key = loc.placeId || loc.formattedAddress || `${loc.latitude},${loc.longitude}`;
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      merged.push(loc);
+    }
+  }
+  return merged;
+}
+
 async function profileAfterAuth(payload: unknown, fallback: Partial<CustomerProfile> = {}): Promise<CustomerProfile> {
   const token = extractAccessToken(payload);
   if (!token) {
@@ -89,7 +212,9 @@ async function profileAfterAuth(payload: unknown, fallback: Partial<CustomerProf
     const me = await camartesFetch<unknown>("/api/auth/me", {}, { requireAuth: true });
     const existing = await getStoredProfile();
     const fromAuth = profileFromCamartesUser(payload, fallback);
-    return persistProfile(profileFromCamartesUser(me, { ...existing, ...fromAuth, ...fallback }));
+    const profile = profileFromCamartesUser(me, { ...existing, ...fromAuth, ...fallback });
+    const reconciled = await reconcileProfileByEmail(profile);
+    return persistProfile(reconciled);
   } catch (error) {
     await clearLocalSession();
     throw error;
@@ -153,13 +278,13 @@ export async function signup(input: { name: string; email: string; phone: string
 }
 
 export async function loginWithGoogle(
-  idTokenOrUserInfo: string | { google_id: string; email: string; name: string; picture?: string | null },
+  idTokenOrUserInfo: string | { google_id: string; email: string; name: string; mobile?: string; picture?: string | null },
 ): Promise<CustomerProfile> {
   if (isDemoAuthMode()) {
     rejectDemoGoogleSignIn();
   }
 
-  let payload: unknown;
+  let payload: unknown = null;
   let fallback: Partial<CustomerProfile> = {};
 
   if (typeof idTokenOrUserInfo === "string") {
@@ -167,18 +292,34 @@ export async function loginWithGoogle(
     if (!token) {
       throw new CamartesApiError("A valid Google ID token is required.", 400);
     }
-    payload = await camartesFetch<unknown>(
-      "/api/auth/google",
-      {
-        method: "POST",
-        body: JSON.stringify({ id_token: token }),
-      },
-      { auth: false, requireAuth: false },
-    );
+    try {
+      payload = await camartesFetch<unknown>(
+        "/api/auth/google",
+        {
+          method: "POST",
+          body: JSON.stringify({ id_token: token }),
+        },
+        { auth: false, requireAuth: false },
+      );
+    } catch {
+      try {
+        payload = await camartesFetch<unknown>(
+          "/api/auth/google-userinfo",
+          {
+            method: "POST",
+            body: JSON.stringify({ id_token: token }),
+          },
+          { auth: false, requireAuth: false },
+        );
+      } catch {
+        // Camartes Google endpoint unavailable; fall back to local Google user
+      }
+    }
   } else {
     fallback = {
       name: idTokenOrUserInfo.name,
       email: idTokenOrUserInfo.email,
+      mobile: idTokenOrUserInfo.mobile,
     };
     try {
       payload = await camartesFetch<unknown>(
@@ -190,45 +331,44 @@ export async function loginWithGoogle(
         { auth: false, requireAuth: false },
       );
     } catch {
-      // Backend does not support Google login endpoint or is unreachable;
-      // Fallback to storing verified customer profile from Supabase Google OAuth
-      await setAuthToken(`google-session-${idTokenOrUserInfo.google_id}`);
-      const profile: CustomerProfile = {
-        customerId: `google-${idTokenOrUserInfo.google_id}`,
-        name: idTokenOrUserInfo.name || idTokenOrUserInfo.email.split("@")[0] || "Google Customer",
-        email: idTokenOrUserInfo.email,
-        mobile: "",
-        avatarInitials: initialsOf(idTokenOrUserInfo.name || idTokenOrUserInfo.email),
-        savedAddresses: [],
-      };
-      return persistProfile(profile);
+      // Camartes Google endpoint unavailable; fall back to local Google user
     }
   }
 
-  const sessionToken = extractAccessToken(payload);
-  if (!sessionToken) {
-    if (typeof idTokenOrUserInfo === "object") {
-      await setAuthToken(`google-session-${idTokenOrUserInfo.google_id}`);
-      const profile: CustomerProfile = {
-        customerId: `google-${idTokenOrUserInfo.google_id}`,
-        name: idTokenOrUserInfo.name || idTokenOrUserInfo.email.split("@")[0] || "Google Customer",
-        email: idTokenOrUserInfo.email,
-        mobile: "",
-        avatarInitials: initialsOf(idTokenOrUserInfo.name || idTokenOrUserInfo.email),
-        savedAddresses: [],
-      };
-      return persistProfile(profile);
+  if (payload) {
+    const sessionToken = extractAccessToken(payload);
+    if (sessionToken) {
+      await setAuthToken(sessionToken);
     }
-    throw new CamartesApiError("Camartes did not return a session token for Google sign-in.", 502);
+    const fromPayload = profileFromCamartesUser(payload, fallback);
+    try {
+      const me = await camartesFetch<unknown>("/api/auth/me", {}, { auth: true, requireAuth: true });
+      const profile = profileFromCamartesUser(me, { ...fromPayload, ...fallback });
+      const reconciled = await reconcileProfileByEmail(profile);
+      return persistProfile(reconciled);
+    } catch {
+      const reconciled = await reconcileProfileByEmail(fromPayload);
+      return persistProfile(reconciled);
+    }
   }
-  await setAuthToken(sessionToken);
 
-  try {
-    const me = await camartesFetch<unknown>("/api/auth/me", {}, { auth: true, requireAuth: true });
-    return persistProfile(profileFromCamartesUser(me, fallback));
-  } catch {
-    return persistProfile(profileFromCamartesUser(payload, fallback));
-  }
+  const userInfo =
+    typeof idTokenOrUserInfo === "string"
+      ? { google_id: makeId("g"), email: "", name: "Customer", mobile: "" }
+      : idTokenOrUserInfo;
+
+  const remembered = userInfo.email ? await getProfileFromRegistry(userInfo.email) : null;
+  const profile: CustomerProfile = {
+    customerId: remembered?.customerId || (userInfo.google_id ? `google-${userInfo.google_id}` : makeId("cust")),
+    name: userInfo.name || remembered?.name || userInfo.email.split("@")[0] || "Customer",
+    email: userInfo.email || remembered?.email || "",
+    mobile: userInfo.mobile || remembered?.mobile || "",
+    avatarInitials: initialsOf(userInfo.name || remembered?.name || userInfo.email),
+    savedAddresses: remembered?.savedAddresses ?? [],
+  };
+
+  const reconciled = await reconcileProfileByEmail(profile);
+  return persistProfile(reconciled);
 }
 
 export async function restoreSession(): Promise<CustomerProfile | null> {
@@ -236,35 +376,56 @@ export async function restoreSession(): Promise<CustomerProfile | null> {
     return restoreDemoSession();
   }
   const token = await getAuthToken();
-  if (!token) {
-    await AsyncStorage.removeItem(PROFILE_KEY);
-    return null;
-  }
-  if (token.startsWith("google-session-")) {
-    return getStoredProfile();
-  }
-  try {
-    const me = await camartesFetch<unknown>("/api/auth/me", {}, { requireAuth: true });
-    const existing = await getStoredProfile();
-    return persistProfile(profileFromCamartesUser(me, existing ?? {}));
-  } catch (error) {
-    if (error instanceof CamartesApiError && error.status === 401) {
-      await clearLocalSession();
-      return null;
+  if (token && !token.startsWith("google-session-")) {
+    try {
+      const me = await camartesFetch<unknown>("/api/auth/me", {}, { requireAuth: true });
+      const existing = await getStoredProfile();
+      return persistProfile(profileFromCamartesUser(me, existing ?? {}));
+    } catch (error) {
+      if (error instanceof CamartesApiError && error.status === 401) {
+        await clearLocalSession();
+        return null;
+      }
     }
-    return getStoredProfile();
   }
+  const stored = await getStoredProfile();
+  if (stored) {
+    return stored;
+  }
+  return null;
 }
 
 export async function updateProfile(patch: Partial<CustomerProfile>): Promise<CustomerProfile> {
-  const existing = await getStoredProfile();
+  const existing = (await getStoredProfile()) ?? (patch.email ? await getProfileFromRegistry(patch.email) : null);
   if (!existing) throw new Error("No signed-in customer.");
+  
+  const token = await getAuthToken();
+  if (token && !isDemoAuthMode() && !token.startsWith("google-session-")) {
+    try {
+      await camartesFetch(
+        "/api/profile",
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            name: patch.name ?? existing.name,
+            phone_number: patch.mobile ?? existing.mobile,
+            phone: patch.mobile ?? existing.mobile,
+            mobile: patch.mobile ?? existing.mobile,
+            has_completed_profile: true,
+          }),
+        },
+        { requireAuth: true },
+      );
+    } catch (e) {
+      // Non-fatal: local profile will still be saved
+      console.warn("[Profile] Backend sync warning:", e);
+    }
+  }
+
   const next = { ...existing, ...patch };
   if (patch.name) next.avatarInitials = initialsOf(patch.name);
   return persistProfile(next);
 }
-
-import { signOutSupabase } from "@/src/services/supabaseAuth";
 
 export async function logout(): Promise<void> {
   try {

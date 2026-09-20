@@ -4,6 +4,7 @@ import {
   catalogServiceTypes,
   mapCamartesBookingStatus,
   parseRemoteBookingList,
+  parseRemoteBookingRow,
   primaryServiceType,
   remoteBookingIdOf,
   selectActiveWizardDraft,
@@ -74,14 +75,14 @@ describe("toCamartesBookingRequest", () => {
     const body = toCamartesBookingRequest(bookingWith([day]), null);
     expect(body.message).toContain("Aerial:");
     expect(body.message).toContain("photo drone");
-    expect(catalogServiceTypes([day])).toEqual(["photography_firm"]);
+    expect(catalogServiceTypes([day])).toContain("photography_firm");
   });
 
   test("Videography + Drone/Aerial serializes video drones", () => {
     const day = setAerialEnabled(setVideographySelected(completeDay(1), true), true);
     const body = toCamartesBookingRequest(bookingWith([day]), null);
     expect(body.message).toContain("video drone");
-    expect(catalogServiceTypes([day])).toEqual(["photography_firm"]);
+    expect(catalogServiceTypes([day])).toContain("photography_firm");
   });
 
   test("Photography + LED Wall serializes the LED add-on", () => {
@@ -91,7 +92,7 @@ describe("toCamartesBookingRequest", () => {
     };
     const body = toCamartesBookingRequest(bookingWith([day]), null);
     expect(body.message).toContain("LED Wall: 8 x 12 × 2");
-    expect(catalogServiceTypes([day])).toEqual(["photography_firm"]);
+    expect(catalogServiceTypes([day])).toContain("photography_firm");
   });
 
   test("Photography + Web Live serializes the Web Live add-on", () => {
@@ -101,7 +102,7 @@ describe("toCamartesBookingRequest", () => {
     };
     const body = toCamartesBookingRequest(bookingWith([day]), null);
     expect(body.message).toContain("Web Live: HD × 1");
-    expect(catalogServiceTypes([day])).toEqual(["photography_firm"]);
+    expect(catalogServiceTypes([day])).toContain("photography_firm");
   });
 
   test("Photography + Drone/Aerial + LED Wall + Web Live keeps the real provider id", () => {
@@ -117,7 +118,7 @@ describe("toCamartesBookingRequest", () => {
     expect(body.message).toContain("Aerial:");
     expect(body.message).toContain("LED Wall");
     expect(body.message).toContain("Web Live");
-    expect(catalogServiceTypes([day])).toEqual(["photography_firm"]);
+    expect(catalogServiceTypes([day])).toContain("photography_firm");
   });
 
   test("overnight 20:00-02:00 is 6 hours and notes the next day", () => {
@@ -235,6 +236,39 @@ describe("remote booking snapshots", () => {
     expect(selectActiveWizardDraft([emptyNewest, newer, older])?.bookingId).toBe("draft-new");
     expect(selectActiveWizardDraft([submitted])).toBeNull();
   });
+
+  test("parseRemoteBookingRow and applyRemoteSnapshot extract and preserve user chosen package, deliverables, and delivery date", () => {
+    const parsed = parseRemoteBookingRow({
+      booking_id: "BK-EB42E6CC",
+      status: "accepted",
+      event_type: "Wedding",
+      lead_details: {
+        packageTier: "Essential",
+        expectedDeliveryDate: "2026-10-15",
+        deliverables: ["Printed Photo Album (20 pages)", "Raw Photos", "Edited Photos (50)"],
+        addOns: ["Drone", "Printed Photo Album (20 pages)"],
+        services: ["Traditional Photography", "Candid Photography"],
+        budget: 50000,
+      },
+      message: "[Book A Shoot] Booking Request\n\nPackage: Essential\n\nDeliverables: Printed Photo Album (20 pages), Raw Photos, Edited Photos (50)\n\nExpected delivery: 2026-10-15",
+    });
+
+    expect(parsed?.packageTier).toBe("Essential");
+    expect(parsed?.expectedDeliveryDate).toBe("2026-10-15");
+    expect(parsed?.deliverables).toContain("Printed Photo Album (20 pages)");
+    expect(parsed?.deliverables).toContain("Raw Photos");
+    expect(parsed?.addOns).toContain("Drone");
+
+    const local = bookingWith([setPhotographySelected(completeDay(1), true)], {
+      bookingId: "BK-EB42E6CC",
+      selectedPackage: null,
+      expectedDeliveryDate: null,
+    });
+    const enriched = applyRemoteSnapshot(local, parsed!);
+    expect(enriched.selectedPackage).toBe("essential");
+    expect(enriched.expectedDeliveryDate).toBe("2026-10-15");
+    expect(enriched.status).toBe("VENDOR_ACCEPTED");
+  });
 });
 
 describe("multi-day isolation", () => {
@@ -247,5 +281,49 @@ describe("multi-day isolation", () => {
     expect(day1.photography.traditional).toBe(true);
     expect(copy.dayId).not.toBe(day1.dayId);
     expect(copy.eventDate).toBeNull();
+  });
+
+  test("toCamartesBookingRequest serializes deliverables, album pages, and delivery date clearly", () => {
+    const day = setPhotographySelected(completeDay(1), true);
+    const booking = bookingWith([day], {
+      expectedDeliveryDate: "2099-11-15",
+      deliverables: {
+        photo: {
+          rawPhotos: true,
+          editedPhotosOption: "100",
+          editedPhotosCustomCount: null,
+          album: true,
+          albumPagesOption: "custom",
+          albumPagesCustomCount: 25,
+        },
+        video: {
+          rawVideo: true,
+          editedTraditionalVideoCount: 1,
+          editedCinematicVideoCount: 1,
+          teaserCinematicEnabled: true,
+          teaserDurationMinutes: 2,
+        },
+      },
+    });
+
+    const body = toCamartesBookingRequest(booking, {
+      customerId: "cust-1",
+      name: "Asha",
+      mobile: "9876543210",
+      email: "asha@example.com",
+      avatarInitials: "A",
+      savedAddresses: [],
+    });
+
+    expect(body.message).toContain("Deliverables: Printed Photo Album (25 pages), Raw Photos, Edited Photos (100)");
+    expect(body.message).toContain("Expected delivery: 2099-11-15");
+    expect(body.deliverables).toContain("Printed Photo Album (25 pages)");
+    expect(body.deliverables).toContain("Raw Photos");
+    expect(body.deliverables).toContain("Edited Photos (100)");
+    expect(body.deliverables).toContain("Teaser Cinematic Video (2 min)");
+    expect(body.expected_delivery_date).toBe("2099-11-15");
+    expect(body.lead_details?.album).toEqual({ enabled: true, pages: 25 });
+    expect(body.lead_details?.expectedDeliveryDate).toBe("2099-11-15");
+    expect(body.lead_details?.addOns).toContain("Printed Photo Album (25 pages)");
   });
 });

@@ -26,6 +26,7 @@ export interface GoogleUserInfo {
   google_id: string;
   email: string;
   name: string;
+  mobile?: string;
   picture?: string | null;
   email_verified?: boolean;
 }

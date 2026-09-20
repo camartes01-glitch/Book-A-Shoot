@@ -7,6 +7,11 @@ import { getNotifications, markAllRead, subscribeNotifications } from "@/src/ser
 import { isLocalWizardBooking, selectActiveWizardDraft } from "@/src/domain/bookingRequest";
 import { isCompletedBooking } from "@/src/domain/bookingFilters";
 import type { BudgetFeasibilityResult } from "@/src/engine/pricing";
+import { router } from "expo-router";
+import { InAppNotificationToast } from "@/src/components/InAppNotificationToast";
+import { pushNotificationService } from "@/src/services/pushNotificationService";
+import { markNotificationRead } from "@/src/services/notificationsStore";
+import { selectionFeedback } from "@/src/utils/haptics";
 import { normalizeRouteParam } from "@/src/utils/routeParam";
 
 type AppContextValue = {
@@ -16,7 +21,7 @@ type AppContextValue = {
   signup: (input: { name: string; email: string; phone: string; password: string }) => Promise<void>;
   loginWithGoogle: (
     idTokenOrUserInfo: string | { google_id: string; email: string; name: string; picture?: string | null },
-  ) => Promise<void>;
+  ) => Promise<CustomerProfile>;
   logout: () => Promise<void>;
   updateProfile: (patch: Partial<CustomerProfile>) => Promise<void>;
 
@@ -64,6 +69,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [activeDraft, setActiveDraft] = useState<Booking | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [activeToastNotification, setActiveToastNotification] = useState<AppNotification | null>(null);
+  const seenNotifIdsRef = useRef<Set<string>>(new Set());
+  const initialLoadDoneRef = useRef(false);
   const activeDraftRef = useRef<Booking | null>(null);
   const bookingsRef = useRef<Booking[]>(bookings);
   useEffect(() => {
@@ -169,6 +177,75 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => subscribeNotifications(() => void refreshNotifications()), [refreshNotifications]);
 
+  // Push notifications initialization
+  useEffect(() => {
+    pushNotificationService.init(profile?.customerId).catch(() => {});
+  }, [profile?.customerId]);
+
+  // Periodic polling for notifications every 12 seconds
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const fresh = await getNotifications();
+        setNotifications(fresh);
+
+        if (!initialLoadDoneRef.current) {
+          fresh.forEach((n) => seenNotifIdsRef.current.add(n.id));
+          initialLoadDoneRef.current = true;
+          return;
+        }
+
+        const brandNew = fresh.filter((n) => !n.read && !seenNotifIdsRef.current.has(n.id));
+        if (brandNew.length > 0) {
+          const newest = brandNew[0];
+          brandNew.forEach((n) => seenNotifIdsRef.current.add(n.id));
+          setActiveToastNotification(newest);
+          selectionFeedback().catch(() => {});
+
+          if (typeof document !== "undefined" && document.hidden) {
+            pushNotificationService.showWebNotification(newest.title, newest.body, {
+              sender_id: newest.userId || newest.firmId,
+              sender_name: newest.firmName,
+              booking_id: newest.bookingId,
+            });
+          }
+        }
+      } catch {
+        // Ignore network poll errors
+      }
+    };
+
+    const timer = setInterval(() => void poll(), 12000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleToastPress = useCallback((notif: AppNotification) => {
+    setActiveToastNotification(null);
+    if (notif.id) {
+      void markNotificationRead(notif.id);
+    }
+    if (notif.userId || notif.firmId || notif.category === "message" || notif.type === "message") {
+      const targetId = notif.userId || notif.firmId;
+      if (targetId) {
+        router.push({
+          pathname: "/chat/[userId]",
+          params: {
+            userId: targetId,
+            name: notif.firmName || "Photography Partner",
+          },
+        });
+        return;
+      }
+      router.push("/(tabs)/messages");
+      return;
+    }
+    if (notif.bookingId) {
+      router.push(`/bookings/${notif.bookingId}`);
+      return;
+    }
+    router.push("/(tabs)/notifications");
+  }, []);
+
   const login = useCallback(
     async (emailOrPhone: string, password: string) => {
       const result = await authApi.login(emailOrPhone, password);
@@ -192,6 +269,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const result = await authApi.loginWithGoogle(idTokenOrUserInfo);
       setProfile(result);
       await adoptAuthenticatedBookings(result.customerId);
+      return result;
     },
     [adoptAuthenticatedBookings],
   );
@@ -530,7 +608,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ],
   );
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={value}>
+      <InAppNotificationToast
+        notification={activeToastNotification}
+        onPress={handleToastPress}
+        onDismiss={() => setActiveToastNotification(null)}
+      />
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export function useAppStore() {

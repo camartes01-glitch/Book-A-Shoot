@@ -29,11 +29,16 @@ export default function DeliveryDateScreen() {
       return;
     }
     await updateExpectedDelivery(date!);
-    router.push("/booking/summary");
+    router.push("/booking/budget");
   };
 
   return (
-    <WizardScreen title="When do you need them?" step="services" footer={<Button label="Continue" onPress={onContinue} flex={1} />}>
+    <WizardScreen
+      title="When do you need them?"
+      step="deliverables"
+      onBack={() => router.back()}
+      footer={<Button label="Continue to budget" onPress={onContinue} flex={1} />}
+    >
       <Card>
           <SectionTitle>When do you need your photos & videos?</SectionTitle>
           <Muted>

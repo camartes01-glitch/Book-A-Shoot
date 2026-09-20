@@ -22,7 +22,7 @@ import {
 import { WIZARD_STEPS } from "@/src/constants/steps";
 import { setAerialEnabled, setPhotographySelected, setVideographySelected } from "@/src/domain/dayServices";
 import { createEmptyDay, emptyDeliverables, sanitizeEventDay } from "@/src/domain/defaults";
-import { generatePackageOptions, resolvePackageOptions, selectedPackageQuote } from "@/src/engine/pricing";
+import { estimateBookingCost, generatePackageOptions, resolvePackageOptions, selectedPackageQuote } from "@/src/engine/pricing";
 import { durationMinutes } from "@/src/utils/dateTime";
 import type { EventDay } from "@/src/types/booking";
 
@@ -330,5 +330,68 @@ describe("6. Multi-Day Pricing Isolation and Selection Persistence", () => {
 
     expect(essentialLow.minPrice).toBe(essentialHigh.minPrice);
     expect(essentialLow.maxPrice).toBe(essentialHigh.maxPrice);
+  });
+});
+
+describe("8. Photo Album & Deliverables Pricing Integration", () => {
+  test("Selecting photo album with 20 pages increases package totals according to sheet rates", () => {
+    const day = makeWeddingDay({
+      photography: { traditional: true, traditionalCount: 1, candid: false, candidCount: 0 },
+    });
+    const baseDeliverables = emptyDeliverables();
+    const withAlbumDeliverables = {
+      ...emptyDeliverables(),
+      photo: {
+        ...emptyDeliverables().photo,
+        album: true,
+        albumPagesOption: "20" as const,
+        albumPagesCustomCount: null,
+      },
+    };
+
+    const baseCost = estimateBookingCost({ days: [day], deliverables: baseDeliverables });
+    const albumCost = estimateBookingCost({ days: [day], deliverables: withAlbumDeliverables });
+
+    // 20 pages * min 300/page (essential) = 6,000 increase
+    expect(albumCost).toBe(baseCost + 20 * 300);
+
+    const basePackages = generatePackageOptions({ days: [day], deliverables: baseDeliverables }, 50000);
+    const albumPackages = generatePackageOptions({ days: [day], deliverables: withAlbumDeliverables }, 50000);
+
+    const baseSig = basePackages.find((p) => p.id === "signature")!;
+    const albumSig = albumPackages.find((p) => p.id === "signature")!;
+
+    // Signature album designing is 400 - 500 per page => 8,000 min, 10,000 max increase for 20 pages
+    expect(albumSig.minPrice).toBe(baseSig.minPrice + 20 * 400);
+    expect(albumSig.maxPrice).toBe(baseSig.maxPrice + 20 * 500);
+
+    // Check service line bullet contains album
+    expect(albumSig.bullets.some((b) => b.includes("Printed Photo Album (20 pages)"))).toBe(true);
+  });
+
+  test("Custom album pages count scales price accordingly", () => {
+    const day = makeWeddingDay({
+      photography: { traditional: true, traditionalCount: 1, candid: false, candidCount: 0 },
+    });
+    const custom25Deliverables = {
+      ...emptyDeliverables(),
+      photo: {
+        ...emptyDeliverables().photo,
+        album: true,
+        albumPagesOption: "custom" as const,
+        albumPagesCustomCount: 25,
+      },
+    };
+
+    const packages = generatePackageOptions({ days: [day], deliverables: custom25Deliverables }, 50000);
+    const elitePkg = packages.find((p) => p.id === "elite")!;
+
+    // Elite album designing is 600 - 700 per page => 25 * 600 = 15,000 min, 25 * 700 = 17,500 max
+    const basePackages = generatePackageOptions({ days: [day], deliverables: emptyDeliverables() }, 50000);
+    const baseElite = basePackages.find((p) => p.id === "elite")!;
+
+    expect(elitePkg.minPrice).toBe(baseElite.minPrice + 25 * 600);
+    expect(elitePkg.maxPrice).toBe(baseElite.maxPrice + 25 * 700);
+    expect(elitePkg.bullets.some((b) => b.includes("Printed Photo Album (25 pages)"))).toBe(true);
   });
 });

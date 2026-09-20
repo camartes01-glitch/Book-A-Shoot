@@ -5,7 +5,7 @@
  * Persists read notification IDs locally so read state is 100% reliable.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { AppNotification } from "@/src/types/booking";
+import type { AppNotification, AppNotificationCategory } from "@/src/types/booking";
 import { getAuthToken } from "@/src/services/camartesClient";
 import { isDemoAuthMode } from "@/src/config/authMode";
 import {
@@ -84,12 +84,47 @@ function mapBackendNotification(n: BackendNotification): AppNotification {
     n.type === "chat" ||
     n.type === "message" ||
     n.type === "new_message" ||
+    n.type === "chat_message" ||
     n.type === "vendor_message" ||
-    Boolean(userId) ||
+    Boolean(data.sender_id) ||
     titleLower.includes("message") ||
     titleLower.includes("chat") ||
     msgLower.includes("texted") ||
     msgLower.includes("messaged");
+
+  const isReminder =
+    n.type === "shoot_reminder" ||
+    titleLower.includes("reminder") ||
+    titleLower.includes("tomorrow") ||
+    titleLower.includes("almost time") ||
+    msgLower.includes("reminder");
+
+  const isMatch =
+    n.type === "new_match" ||
+    titleLower.includes("match") ||
+    msgLower.includes("new match");
+
+  let notifType: AppNotification["type"] = "booking";
+  let category: AppNotificationCategory = "booking";
+  if (isMsg) {
+    notifType = "message";
+    category = "message";
+  } else if (isReminder) {
+    notifType = "reminder";
+    category = "reminder";
+  } else if (isMatch) {
+    notifType = "match";
+    category = "booking";
+  }
+
+  let actionType: "reply" | "view_booking" | "view_matches" | undefined = undefined;
+  if (isMsg) {
+    actionType = "reply";
+  } else if (isMatch) {
+    actionType = "view_matches";
+  } else if (data.booking_id || data.bookingId || data.request_id) {
+    actionType = "view_booking";
+  }
 
   return {
     id: notifId,
@@ -105,7 +140,10 @@ function mapBackendNotification(n: BackendNotification): AppNotification {
     userId,
     firmId: userId,
     firmName,
-    type: isMsg ? "message" : "booking",
+    type: notifType,
+    category,
+    actionType,
+    data: data as Record<string, unknown>,
   };
 }
 
@@ -209,6 +247,14 @@ export async function markNotificationRead(id: string): Promise<void> {
 }
 
 export async function unreadCount(): Promise<number> {
+  const token = await getAuthToken();
+  if (token && !isDemoAuthMode()) {
+    try {
+      return await fetchUnreadCount();
+    } catch {
+      // fallback to local list
+    }
+  }
   const list = await getNotifications();
   return list.filter((n) => !n.read).length;
 }

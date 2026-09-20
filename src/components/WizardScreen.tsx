@@ -8,12 +8,14 @@ export function WizardScreen({
   title,
   step,
   onBack,
+  onHome,
   footer,
   children,
 }: {
   title: string;
   step: WizardStepId;
   onBack?: () => void;
+  onHome?: () => void;
   footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -22,7 +24,7 @@ export function WizardScreen({
   return (
     <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ProgressHeader title={title} step={step} onBack={onBack} />
+        <ProgressHeader title={title} step={step} onBack={onBack} onHome={onHome} />
         <ScrollView
           contentContainerStyle={[styles.content, footer ? { paddingBottom: spacing.xxl } : { paddingBottom: Math.max(insets.bottom, spacing.xl) }]}
           keyboardShouldPersistTaps="handled"

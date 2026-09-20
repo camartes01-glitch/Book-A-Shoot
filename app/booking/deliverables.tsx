@@ -29,6 +29,12 @@ export default function DeliverablesScreen() {
   const teaserRates = pricingGroup.teaserCinematicEditingPerMin;
   const teaserMinutes = Math.max(1, d?.video.teaserDurationMinutes ?? 1);
 
+  const albumRates = pricingGroup.albumDesigningPerSheet;
+  const albumPages =
+    d?.photo.albumPagesOption === "custom"
+      ? Math.max(1, d.photo.albumPagesCustomCount ?? 20)
+      : parseInt(d?.photo.albumPagesOption ?? "20", 10) || 20;
+
   // See the day editor screen for why these need to be refs: the
   // useFocusEffect callback below is only created once (stable deps), so
   // reading `activeDraft`/`updateDeliverables` directly would freeze them at
@@ -72,7 +78,7 @@ export default function DeliverablesScreen() {
   };
 
   return (
-    <WizardScreen title="What you'll receive" step="services" footer={<Button label="Continue" onPress={onContinue} flex={1} />}>
+    <WizardScreen title="What you'll receive" step="deliverables" onBack={() => router.back()} footer={<Button label="Continue" onPress={onContinue} flex={1} />}>
       <Card>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Camera size={18} color={colors.primaryDark} />
@@ -119,6 +125,12 @@ export default function DeliverablesScreen() {
                 onChangeText={(v) => patchPhoto({ albumPagesCustomCount: parseInt(v, 10) || 0 })}
               />
             ) : null}
+            <Muted style={{ fontSize: 13, color: colors.primaryDark, fontWeight: "700", marginTop: 4 }}>
+              Calculated range: {formatInrRange(albumRates.essential.min * albumPages, albumRates.essential.max * albumPages)} (Essential) · {formatInrRange(albumRates.signature.min * albumPages, albumRates.signature.max * albumPages)} (Signature) · {formatInrRange(albumRates.elite.min * albumPages, albumRates.elite.max * albumPages)} (Elite)
+            </Muted>
+            <Muted style={{ fontSize: 12 }}>
+              Pricing: {formatInrRange(albumRates.essential.min, albumRates.essential.max)}/page (Essential) · {formatInrRange(albumRates.signature.min, albumRates.signature.max)}/page (Signature) · {formatInrRange(albumRates.elite.min, albumRates.elite.max)}/page (Elite).
+            </Muted>
           </View>
         ) : null}
       </Card>

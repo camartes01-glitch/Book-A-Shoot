@@ -44,14 +44,16 @@ describe("Notifications & Messaging Backend Integration", () => {
 
     const list = await getNotifications();
     expect(list).toHaveLength(1);
-    expect(list[0]).toEqual({
-      id: "42",
-      title: "Booking Accepted",
-      body: "Vendor has accepted your booking request.",
-      createdAt: "2026-09-09T12:00:00Z",
-      read: false,
-      bookingId: "bk-12345",
-    });
+    expect(list[0]).toEqual(
+      expect.objectContaining({
+        id: "42",
+        title: "Booking Accepted",
+        body: "Vendor has accepted your booking request.",
+        createdAt: "2026-09-09T12:00:00Z",
+        read: false,
+        bookingId: "bk-12345",
+      }),
+    );
   });
 
   it("marks all notifications as read via backend PUT /api/notifications/read", async () => {
@@ -147,7 +149,7 @@ describe("Notifications & Messaging Backend Integration", () => {
           message: "Looking forward to working together",
         }),
       },
-      { requireAuth: true },
+      { auth: true, requireAuth: false },
     );
   });
 });

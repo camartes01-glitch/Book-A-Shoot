@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   KeyboardAvoidingView,
@@ -337,10 +338,24 @@ function ChatScreenInternal() {
       setTimeout(() => {
         safeScrollToEnd(true);
       }, 80);
-    } catch {
-      // Failed to send
+    } catch (err: any) {
+      console.error("[Chat] Message send error:", err);
+      setInputText(textToSend); // Restore user text so it never disappears!
+      Alert.alert("Failed to Send", err?.message || "Could not deliver message. Please try again.");
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleBack = () => {
+    if (typeof router.canGoBack === "function" && router.canGoBack()) {
+      try {
+        router.back();
+      } catch {
+        router.replace("/(tabs)/messages");
+      }
+    } else {
+      router.replace("/(tabs)/messages");
     }
   };
 
@@ -430,7 +445,7 @@ function ChatScreenInternal() {
       <View style={styles.header}>
         <Pressable
           style={styles.backBtn}
-          onPress={() => router.back()}
+          onPress={handleBack}
           hitSlop={12}
           accessibilityRole="button"
           accessibilityLabel="Back to messages"

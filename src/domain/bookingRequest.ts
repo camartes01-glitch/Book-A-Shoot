@@ -1,4 +1,4 @@
-import type { AssignedPhotographer, Booking, CustomerProfile, EventDay } from "@/src/types/booking";
+import type { AssignedPhotographer, Booking, CustomerProfile, EventDay, PackageTierId } from "@/src/types/booking";
 import { durationMinutes } from "@/src/utils/dateTime";
 import { bookingRequirementPayload, selectedAddOnLabels, selectedCoreServiceLabels, selectedDetailedServiceLabels } from "@/src/domain/dayServices";
 import { DEFAULT_EVENT_CATEGORIES, eventTypeLabels } from "@/src/constants/eventCategories";
@@ -45,6 +45,10 @@ export type CamartesBookingRequest = {
   client_email: string | null;
   client_phone: string | null;
   budget: string | null;
+  deliverables?: string[];
+  expected_delivery_date?: string | null;
+  customer_id?: string | null;
+  client_profile_id?: string | null;
   location_preference?: {
     type?: string;
     mode?: string;
@@ -53,12 +57,17 @@ export type CamartesBookingRequest = {
   } | null;
   lead_details?: {
     source?: string;
+    channel?: string;
+    header?: string;
     eventType: string;
     city: string;
     venueAddress: string;
     packageTier: string | null;
     services: string[];
     addOns?: string[];
+    deliverables?: string[];
+    album?: { enabled: boolean; pages: number } | null;
+    expectedDeliveryDate?: string | null;
     budget?: number | null;
     clientName?: string | null;
     clientContactMasked?: boolean;
@@ -71,7 +80,7 @@ export function primaryServiceType(_days?: EventDay[]): string {
 }
 
 export function catalogServiceTypes(_days?: EventDay[]): string[] {
-  // Customer shoot booking requests must ONLY match and reach registered Photography Firms
+  // Customer shoot booking requests query registered photography firms
   return ["photography_firm"];
 }
 
@@ -119,13 +128,48 @@ export function toCamartesBookingRequest(booking: Booking, profile: CustomerProf
       .join("\n");
   });
 
+  const { photo, video } = booking.deliverables || { photo: {}, video: {} };
+  const deliverablesSummary: string[] = [];
+
+  const albumPages =
+    photo?.albumPagesOption === "custom"
+      ? Math.max(1, photo?.albumPagesCustomCount ?? 20)
+      : parseInt(String(photo?.albumPagesOption ?? "20"), 10) || 20;
+
+  if (photo?.album) {
+    deliverablesSummary.push(`Printed Photo Album (${albumPages} pages)`);
+  }
+  if (photo?.rawPhotos) {
+    deliverablesSummary.push("Raw Photos");
+  }
+  const editedCount =
+    photo?.editedPhotosOption === "custom"
+      ? photo?.editedPhotosCustomCount ?? 0
+      : photo?.editedPhotosOption;
+  if (editedCount && String(editedCount) !== "0") {
+    deliverablesSummary.push(`Edited Photos (${editedCount})`);
+  }
+  if (video?.rawVideo) {
+    deliverablesSummary.push("Raw Video Footage");
+  }
+  if (video?.editedTraditionalVideoCount) {
+    deliverablesSummary.push(`${video.editedTraditionalVideoCount} Traditional Video${video.editedTraditionalVideoCount > 1 ? "s" : ""}`);
+  }
+  if (video?.editedCinematicVideoCount) {
+    deliverablesSummary.push(`${video.editedCinematicVideoCount} Cinematic Video${video.editedCinematicVideoCount > 1 ? "s" : ""}`);
+  }
+  if (video?.teaserCinematicEnabled) {
+    deliverablesSummary.push(`Teaser Cinematic Video (${video.teaserDurationMinutes || 1} min)`);
+  }
+
   const quoted = selectedPackageQuote(booking);
   const message = [
-    `Camartes booking request`,
+    `[Book A Shoot] Booking Request`,
     `Package: ${booking.selectedPackage ?? "n/a"}`,
     quoted && quoted.maxPrice > 0
       ? `Package estimate: ${formatInrRange(quoted.minPrice, quoted.maxPrice)} (customer-side approved range, not a provider quote)`
       : null,
+    deliverablesSummary.length > 0 ? `Deliverables: ${deliverablesSummary.join(", ")}` : null,
     booking.expectedDeliveryDate ? `Expected delivery: ${booking.expectedDeliveryDate}` : null,
     ...lines,
   ]
@@ -174,15 +218,30 @@ export function toCamartesBookingRequest(booking: Booking, profile: CustomerProf
     client_phone: profile?.mobile || null,
     client_email: profile?.email || null,
     budget: booking.budget != null ? String(booking.budget) : null,
+    deliverables: deliverablesSummary,
+    expected_delivery_date: booking.expectedDeliveryDate || null,
     location_preference: locationPrefObj,
     lead_details: {
-      source: "bookashoot",
+      source: "book_a_shoot",
+      channel: "book_a_shoot",
+      header: "Book A Shoot",
       eventType,
       city,
       venueAddress,
       packageTier,
       services: detailedServices.length ? detailedServices : (cores.length ? cores : ["Candid Photography"]),
-      addOns,
+      addOns: [
+        ...addOns,
+        ...(photo?.album ? [`Printed Photo Album (${albumPages} pages)`] : []),
+      ],
+      deliverables: deliverablesSummary,
+      album: photo?.album
+        ? {
+            enabled: true,
+            pages: typeof albumPages === "number" ? albumPages : parseInt(String(albumPages), 10) || 20,
+          }
+        : null,
+      expectedDeliveryDate: booking.expectedDeliveryDate || null,
       budget: booking.budget,
       clientName: profile?.name || "Customer",
       clientContactMasked: true,
@@ -260,6 +319,13 @@ export type RemoteBookingSnapshot = {
   assignedCount?: number;
   confirmedProviderId?: string | null;
   assignedPhotographers?: AssignedPhotographer[];
+  packageTier?: string | null;
+  expectedDeliveryDate?: string | null;
+  deliverables?: string[];
+  addOns?: string[];
+  services?: string[];
+  message?: string | null;
+  leadDetails?: Record<string, unknown> | null;
 };
 
 function stringField(row: Record<string, unknown>, keys: string[]): string | null {
@@ -289,6 +355,23 @@ function parseAssignedPhotographers(raw: unknown): AssignedPhotographer[] | unde
       const contactPhone = stringField(r, ["contact_phone", "contactPhone", "phone", "mobile"]);
       const contactEmail = stringField(r, ["contact_email", "contactEmail", "email"]);
       const contactWhatsapp = stringField(r, ["contact_whatsapp", "contactWhatsapp", "whatsapp"]);
+      const socialUnlocked = Boolean(r.social_unlocked ?? r.socialUnlocked ?? hasAccepted ?? isConfirmed);
+      const portfolioItems = Array.isArray(r.portfolio_items ?? r.portfolioItems)
+        ? (r.portfolio_items ?? r.portfolioItems) as any[]
+        : undefined;
+      const instagramUrl = stringField(r, ["instagram_url", "instagramUrl"]);
+      const facebookUrl = stringField(r, ["facebook_url", "facebookUrl"]);
+      const youtubeUrl = stringField(r, ["youtube_url", "youtubeUrl"]);
+      const websiteUrl = stringField(r, ["website_url", "websiteUrl"]);
+      const rawSocialLinks = (r.social_links ?? r.socialLinks) as Record<string, unknown> | undefined;
+      const socialLinks = rawSocialLinks && typeof rawSocialLinks === "object"
+        ? {
+            instagram: stringField(rawSocialLinks, ["instagram"]) ?? undefined,
+            facebook: stringField(rawSocialLinks, ["facebook"]) ?? undefined,
+            youtube: stringField(rawSocialLinks, ["youtube"]) ?? undefined,
+            website: stringField(rawSocialLinks, ["website"]) ?? undefined,
+          }
+        : undefined;
 
       return {
         id: providerId,
@@ -304,9 +387,16 @@ function parseAssignedPhotographers(raw: unknown): AssignedPhotographer[] | unde
         contact_phone: contactPhone ?? undefined,
         contact_email: contactEmail ?? undefined,
         contact_whatsapp: contactWhatsapp ?? undefined,
+        portfolio_items: portfolioItems,
+        social_unlocked: socialUnlocked,
+        instagram_url: instagramUrl ?? undefined,
+        facebook_url: facebookUrl ?? undefined,
+        youtube_url: youtubeUrl ?? undefined,
+        website_url: websiteUrl ?? undefined,
+        social_links: socialLinks,
       };
     })
-    .filter((p): p is AssignedPhotographer => p !== null);
+    .filter((item): item is AssignedPhotographer => item !== null);
 }
 
 export function parseRemoteBookingRow(payload: unknown): RemoteBookingSnapshot | null {
@@ -325,12 +415,80 @@ export function parseRemoteBookingRow(payload: unknown): RemoteBookingSnapshot |
   const confirmedProviderId = stringField(row, ["confirmed_provider_id", "confirmedProviderId"]);
   const assignedPhotographers = parseAssignedPhotographers(row.assigned_photographers ?? row.assignedPhotographers);
 
+  const message = stringField(row, ["message", "notes", "description"]);
   const leadDetails = row.lead_details && typeof row.lead_details === "object" ? (row.lead_details as Record<string, unknown>) : null;
   const eventType =
     stringField(row, ["event_type", "eventType", "event_name", "eventName", "title", "name", "category"]) ||
     (leadDetails ? stringField(leadDetails, ["eventType", "event_type", "eventName", "event_name"]) : null);
-  const venueAddress = stringField(row, ["venue_address", "venueAddress", "address", "formatted_address"]);
+  const venueAddress =
+    stringField(row, ["venue_address", "venueAddress", "address", "formatted_address"]) ||
+    (leadDetails ? stringField(leadDetails, ["venueAddress", "venue_address", "address"]) : null);
   const city = stringField(row, ["city", "location"]) || (leadDetails ? stringField(leadDetails, ["city"]) : null);
+
+  // 1. Package Tier
+  let packageTier =
+    stringField(row, ["package_tier", "packageTier", "package", "selected_package", "selectedPackage"]) ||
+    (leadDetails ? stringField(leadDetails, ["packageTier", "package_tier", "package", "selectedPackage"]) : null);
+  if (!packageTier && message) {
+    const pkgMatch = message.match(/Package:\s*([^\n\r]+)/i);
+    if (pkgMatch && pkgMatch[1]?.trim() && pkgMatch[1].trim().toLowerCase() !== "n/a") {
+      packageTier = pkgMatch[1].trim();
+    }
+  }
+
+  // 2. Expected Delivery Date
+  let expectedDeliveryDate =
+    stringField(row, ["expected_delivery_date", "expectedDeliveryDate", "delivery_date", "deliveryDate"]) ||
+    (leadDetails ? stringField(leadDetails, ["expectedDeliveryDate", "expected_delivery_date", "deliveryDate"]) : null);
+  if (!expectedDeliveryDate && message) {
+    const delMatch = message.match(/Expected delivery:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/i);
+    if (delMatch && delMatch[1]?.trim()) {
+      expectedDeliveryDate = delMatch[1].trim();
+    }
+  }
+
+  // 3. Deliverables
+  let deliverables: string[] = [];
+  if (Array.isArray(row.deliverables)) {
+    deliverables = row.deliverables.map(String).filter(Boolean);
+  } else if (leadDetails && Array.isArray(leadDetails.deliverables)) {
+    deliverables = (leadDetails.deliverables as unknown[]).map(String).filter(Boolean);
+  } else if (message) {
+    const delivMatch = message.match(/Deliverables:\s*([^\n\r]+)/i);
+    if (delivMatch && delivMatch[1]?.trim()) {
+      deliverables = delivMatch[1].split(",").map((s) => s.trim()).filter(Boolean);
+    }
+  }
+
+  // 4. Add-ons
+  let addOns: string[] = [];
+  if (Array.isArray(row.add_ons ?? row.addOns)) {
+    addOns = ((row.add_ons ?? row.addOns) as unknown[]).map(String).filter(Boolean);
+  } else if (leadDetails && Array.isArray(leadDetails.addOns ?? leadDetails.add_ons)) {
+    addOns = ((leadDetails.addOns ?? leadDetails.add_ons) as unknown[]).map(String).filter(Boolean);
+  } else if (message) {
+    const addOnMatches = message.match(/Add-ons:\s*([^\n\r]+)/i);
+    if (addOnMatches && addOnMatches[1]?.trim() && addOnMatches[1].trim().toLowerCase() !== "none") {
+      addOns = addOnMatches[1].split(",").map((s) => s.trim()).filter(Boolean);
+    }
+  }
+
+  // 5. Services
+  let services: string[] = [];
+  if (Array.isArray(row.services)) {
+    services = row.services.map(String).filter(Boolean);
+  } else if (leadDetails && Array.isArray(leadDetails.services)) {
+    services = (leadDetails.services as unknown[]).map(String).filter(Boolean);
+  } else if (message) {
+    const servMatches = message.match(/Services:\s*([^\n\r]+)/i);
+    if (servMatches && servMatches[1]?.trim() && servMatches[1].trim().toLowerCase() !== "none") {
+      services = servMatches[1].split(",").map((s) => s.trim()).filter(Boolean);
+    }
+  }
+
+  const budget =
+    stringField(row, ["budget"]) ||
+    (leadDetails && leadDetails.budget != null ? String(leadDetails.budget) : null);
 
   return {
     id,
@@ -339,7 +497,7 @@ export function parseRemoteBookingRow(payload: unknown): RemoteBookingSnapshot |
     eventDate: stringField(row, ["event_date", "eventDate"]),
     eventTime: stringField(row, ["event_time", "eventTime"]),
     serviceType: stringField(row, ["service_type", "serviceType"]),
-    budget: stringField(row, ["budget"]),
+    budget,
     eventType,
     venueAddress,
     city,
@@ -347,6 +505,13 @@ export function parseRemoteBookingRow(payload: unknown): RemoteBookingSnapshot |
     assignedCount,
     confirmedProviderId,
     assignedPhotographers,
+    packageTier,
+    expectedDeliveryDate,
+    deliverables,
+    addOns,
+    services,
+    message,
+    leadDetails,
   };
 }
 
@@ -400,6 +565,19 @@ export function applyRemoteSnapshot(local: Booking, remote: RemoteBookingSnapsho
     };
   }
 
+  // Restore package if local is missing it
+  const rawPkg = remote.packageTier?.toLowerCase();
+  const remotePackageId = rawPkg && ["essential", "signature", "elite"].includes(rawPkg)
+    ? (rawPkg as PackageTierId)
+    : null;
+  const selectedPackage = local.selectedPackage ?? remotePackageId ?? (local as any).selectedPackage ?? null;
+
+  // Restore expected delivery date
+  const expectedDeliveryDate =
+    local.expectedDeliveryDate ||
+    remote.expectedDeliveryDate ||
+    null;
+
   return {
     ...local,
     remoteBookingId: remote.id,
@@ -414,6 +592,9 @@ export function applyRemoteSnapshot(local: Booking, remote: RemoteBookingSnapsho
     assigned_count: remote.assignedCount ?? local.assigned_count,
     confirmed_provider_id: confirmedProviderId,
     assigned_photographers: assignedPhotographers,
+    selectedPackage,
+    expectedDeliveryDate,
+    budget: local.budget ?? (remote.budget ? Number(remote.budget) : null),
     leadDistribution: local.leadDistribution
       ? {
           ...local.leadDistribution,

@@ -244,12 +244,25 @@ export default function AllEventsScreen() {
     { id: "commercial", label: "Commercial" },
   ];
 
+  const handleBack = () => {
+    if (typeof router.canGoBack === "function" && router.canGoBack()) {
+      try {
+        router.back();
+        return;
+      } catch {
+        router.replace("/(tabs)");
+        return;
+      }
+    }
+    router.replace("/(tabs)");
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
       {/* Top Navigation Bar */}
       <View style={styles.headerBar}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={handleBack}
           style={styles.backButton}
           hitSlop={12}
           accessibilityRole="button"
@@ -396,7 +409,7 @@ export default function AllEventsScreen() {
                   <Plus size={24} color={colors.white} />
                 </View>
                 <View>
-                  <Text style={styles.customGridCardTitle}>+ Custom Event</Text>
+                  <Text style={styles.customGridCardTitle}>Custom Event</Text>
                   <Text style={styles.customGridCardDesc}>
                     Can't find your event? Type any celebration name
                   </Text>
@@ -790,9 +803,16 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 14,
     fontWeight: "800",
-    textShadowColor: "rgba(0, 0, 0, 0.6)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    ...Platform.select({
+      web: {
+        textShadow: "0px 1px 3px rgba(0, 0, 0, 0.6)",
+      } as any,
+      default: {
+        textShadowColor: "rgba(0, 0, 0, 0.6)",
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+      },
+    }),
   },
   cardTagline: {
     color: "rgba(255, 255, 255, 0.85)",

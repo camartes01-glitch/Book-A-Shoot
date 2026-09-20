@@ -469,6 +469,22 @@ export function approvedDeliverablesLines(
     });
   }
 
+  if (deliverables.photo?.album) {
+    const pages =
+      deliverables.photo.albumPagesOption === "custom"
+        ? Math.max(1, deliverables.photo.albumPagesCustomCount ?? 20)
+        : parseInt(deliverables.photo.albumPagesOption ?? "20", 10) || 20;
+    const range = pricingGroup.albumDesigningPerSheet[tier];
+    lines.push({
+      serviceId: "album_designing" as any,
+      label: `Printed Photo Album (${pages} pages)`,
+      quantity: pages,
+      minPrice: range.min * pages,
+      maxPrice: range.max * pages,
+      note: `${pages} pages`,
+    });
+  }
+
   return lines;
 }
 

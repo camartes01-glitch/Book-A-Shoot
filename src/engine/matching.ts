@@ -107,109 +107,72 @@ export function firmMatchesBudgetTier(firm: CustomerVendor, targetTier: BudgetTi
 
 export function isPhotographyFirm(vendor: CustomerVendor): boolean {
   const serviceType = vendor.serviceType?.toLowerCase().trim();
-  const nonFirmTypes = ["photographer", "videographer", "fly_cam", "editor", "album_designer", "drone_operator"];
-  if (serviceType && nonFirmTypes.includes(serviceType)) {
+  if (!serviceType) return true;
+  const nonFirmTypes = [
+    "photographer",
+    "videographer",
+    "drone_operator",
+    "drone_pilot",
+    "fly_cam",
+    "editor",
+    "album_designer",
+    "solo_photographer",
+    "solo_videographer",
+  ];
+  if (nonFirmTypes.includes(serviceType)) {
     return false;
   }
-  if (serviceType === "photography_firm" || vendor.isFirm || vendor.isStudio) {
-    return true;
-  }
-  return !serviceType;
+  return true;
 }
 
 function vendorHasCapabilities(vendor: CustomerVendor, req: AggregatedRequirement): boolean {
-  // Core photography capability check
-  if ((req.needsPhotographyTraditional || req.needsPhotographyCandid) && !vendor.photography.traditional && !vendor.photography.candid) {
+  if (req.needsPhotographyTraditional && !vendor.photography.traditional) return false;
+  if (req.needsPhotographyCandid && !vendor.photography.candid) return false;
+  if (req.needsVideographyTraditional && !vendor.videography.traditional) return false;
+  if (req.needsVideographyCandid && !vendor.videography.candid) return false;
+  if (
+    vendor.photography.maxPhotographers !== undefined &&
+    req.maxTraditionalPhotographers > vendor.photography.maxPhotographers
+  ) {
     return false;
   }
-  // Core videography capability check
-  if ((req.needsVideographyTraditional || req.needsVideographyCandid) && !vendor.videography.traditional && !vendor.videography.candid) {
+  if (
+    vendor.videography.maxVideographers !== undefined &&
+    req.maxTraditionalVideographers > vendor.videography.maxVideographers
+  ) {
     return false;
   }
-
-  // ADD-ONS: Photography firms fulfill all add-ons (LED walls, drones, web streaming) as full-service studios.
-  // Add-ons must NEVER filter out photography firms!
-  if (isPhotographyFirm(vendor)) {
-    return true;
-  }
-
-  // For non-firms, check add-ons:
-  if (req.needsAerialPhoto && !vendor.aerial.photography) return false;
-  if (req.needsAerialVideo && !vendor.aerial.videography) return false;
-  if (req.needsLedWall && !vendor.ledWall.available) return false;
-  if (req.needsWebLive && !vendor.webLive.available) return false;
   return true;
 }
 
 function vendorServesCity(vendor: CustomerVendor, city: string): boolean {
-  if (!city) return true;
+  if (!city || !city.trim()) return true;
   const key = city.trim().toLowerCase();
-  if (vendor.city.trim().toLowerCase() === key) return true;
-  return vendor.serviceAreas.some((area) => area.trim().toLowerCase() === key);
+  const vCity = (vendor.city || "").trim().toLowerCase();
+  if (vCity && (vCity === key || vCity.includes(key) || key.includes(vCity))) return true;
+  return vendor.serviceAreas.some((area) => {
+    const a = area.trim().toLowerCase();
+    return a && (a === key || a.includes(key) || key.includes(a));
+  });
 }
 
-/** A vendor must satisfy required services + quantities.
- * Calendar blocks do NOT exclude providers from receiving booking leads, allowing them to review and accept. */
+/** Check vendor availability based on minimum wallet balance (₹500). */
 export function checkVendorAvailability(
   vendor: CustomerVendor,
-  days: EventDay[],
-  req: AggregatedRequirement,
+  _days?: EventDay[],
+  req?: AggregatedRequirement,
 ): { available: boolean; reason?: string } {
-  // Photography firms: check wallet balance and core capabilities.
-  // Add-ons (LED screens, drones, web live cameras) must NEVER filter out or mark photography firms unavailable.
   if (vendor.walletBalance !== undefined && vendor.walletBalance < 500) {
-    return { available: false, reason: "Insufficient wallet balance to claim leads (minimum ₹500 required)." };
+    return { available: false, reason: "Insufficient wallet balance (minimum ₹500 required)." };
   }
-
-  if (!vendorHasCapabilities(vendor, req)) {
+  if (req && !vendorHasCapabilities(vendor, req)) {
     return { available: false, reason: "Doesn't offer all requested services." };
   }
-
-  const requiredPhotographers = req.maxTraditionalPhotographers + req.maxCandidPhotographers;
-  const requiredVideographers = req.maxTraditionalVideographers + req.maxCandidVideographers;
-  const requiredDrones = req.maxPhotoDrones + req.maxVideoDrones;
-
-  if (requiredPhotographers > 0 && vendor.photography.maxPhotographers > 0 && vendor.photography.maxPhotographers < requiredPhotographers) {
-    return { available: false, reason: `Only ${vendor.photography.maxPhotographers} photographer(s) listed.` };
-  }
-  if (requiredVideographers > 0 && vendor.videography.maxVideographers > 0 && vendor.videography.maxVideographers < requiredVideographers) {
-    return { available: false, reason: `Only ${vendor.videography.maxVideographers} videographer(s) listed.` };
-  }
-
-  // Add-ons (drones and LED screens) check only applies to non-firm standalone vendors:
-  if (!isPhotographyFirm(vendor)) {
-    if (requiredDrones > 0 && vendor.aerial.maxDrones < requiredDrones) {
-      return { available: false, reason: "Not enough drones listed for this request." };
-    }
-    if (req.maxLedScreens > 0 && vendor.ledWall.maxScreens < req.maxLedScreens) {
-      return { available: false, reason: "Not enough LED screens listed for this request." };
-    }
-  }
-
   return { available: true };
 }
 
-function requirementMatchScore(vendor: CustomerVendor, req: AggregatedRequirement): number {
-  if (isPhotographyFirm(vendor)) {
-    return 1;
-  }
-  const wants: boolean[] = [];
-  const has: boolean[] = [];
-  const push = (want: boolean, have: boolean) => {
-    if (!want) return;
-    wants.push(true);
-    has.push(have);
-  };
-  push(req.needsPhotographyTraditional, vendor.photography.traditional);
-  push(req.needsPhotographyCandid, vendor.photography.candid);
-  push(req.needsVideographyTraditional, vendor.videography.traditional);
-  push(req.needsVideographyCandid, vendor.videography.candid);
-  push(req.needsAerialPhoto, vendor.aerial.photography);
-  push(req.needsAerialVideo, vendor.aerial.videography);
-  push(req.needsLedWall, vendor.ledWall.available);
-  push(req.needsWebLive, vendor.webLive.available);
-  if (!wants.length) return 1;
-  return has.filter(Boolean).length / wants.length;
+function requirementMatchScore(_vendor: CustomerVendor, _req: AggregatedRequirement): number {
+  return 1;
 }
 
 /** Catalog full-day price only. Never derived from package ranges. */
@@ -278,6 +241,7 @@ export function matchVendors(
   vendors: CustomerVendor[],
   tier: PackageTierId,
   budget: number,
+  excludedVendorIds?: string[],
 ): VendorMatchResult[] {
   const req = aggregateRequirement(booking.days as EventDay[]);
   const eventCity = booking.days[0]?.location.city ?? "";
@@ -292,9 +256,11 @@ export function matchVendors(
   // Add-ons (LED walls, drones, etc.) NEVER filter out photography firms!
   const candidates = vendors.filter(
     (v) =>
+      (!excludedVendorIds || !excludedVendorIds.includes(v.vendorId)) &&
       isPhotographyFirm(v) &&
       vendorServesLocationPreference(v, locationPref, eventCity) &&
-      (v.walletBalance === undefined || v.walletBalance >= 500),
+      (v.walletBalance === undefined || v.walletBalance >= 500) &&
+      checkVendorAvailability(v, booking.days as EventDay[], req).available,
   );
 
   const results = candidates.map((vendor) => {
@@ -332,7 +298,7 @@ export function matchVendors(
   });
 
   // Rank by: [Tier Match] -> [Location/City Match] -> [Rating / Reviews / matchScore]
-  return results
+  const ranked = results
     .filter((r) => r.match.available)
     .sort((a, b) => {
       if (a.tierMatched !== b.tierMatched) {
@@ -342,7 +308,17 @@ export function matchVendors(
         return a.locationMatched ? -1 : 1;
       }
       return b.match.matchScore - a.match.matchScore;
-    })
-    .map((r) => r.match)
-    .slice(0, MAX_MATCHES);
+    });
+
+  const seenIds = new Set<string>();
+  const uniqueMatches: VendorMatchResult[] = [];
+  for (const r of ranked) {
+    if (!seenIds.has(r.match.vendorId)) {
+      seenIds.add(r.match.vendorId);
+      uniqueMatches.push(r.match);
+      if (uniqueMatches.length >= MAX_MATCHES) break;
+    }
+  }
+
+  return uniqueMatches;
 }

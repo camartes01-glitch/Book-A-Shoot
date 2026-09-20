@@ -10,7 +10,7 @@
 export type AuthMode = "DEMO" | "REAL";
 
 /** Centralized mode for development. Production builds ignore this and use REAL. */
-export const AUTH_MODE: AuthMode = "DEMO";
+export const AUTH_MODE: AuthMode = "REAL";
 
 export const DEMO_CREDENTIALS = {
   email: "demo@bookashoot.com",

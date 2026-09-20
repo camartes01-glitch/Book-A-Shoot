@@ -290,7 +290,7 @@ export default function DayEditorScreen() {
     router.setParams({ step: "addons" });
   };
 
-  const onContinueToBudget = async () => {
+  const onContinueToDeliverables = async () => {
     setSaveAttempted(true);
     const currentDay = dayRef.current ?? day;
     if (!currentDay || !hasCoreService(currentDay)) {
@@ -301,11 +301,16 @@ export default function DayEditorScreen() {
     servicesTransitionLockRef.current = true;
     router.setParams({ step: "addons" });
     await flushPersist();
-    router.push("/booking/budget");
+    router.push("/booking/deliverables");
   };
 
   const togglePhotography = () => applyDay((prev) => setPhotographySelected(prev, !isPhotographySelected(prev)), "photography");
   const toggleVideography = () => applyDay((prev) => setVideographySelected(prev, !isVideographySelected(prev)), "videography");
+
+  const onGoHome = async () => {
+    await flushPersist();
+    router.replace("/(tabs)");
+  };
 
   if (screenStep === "event") {
     return (
@@ -313,6 +318,7 @@ export default function DayEditorScreen() {
         title="What are you planning?"
         step="event"
         onBack={() => router.back()}
+        onHome={onGoHome}
         footer={
           <Button
             label="Continue to photography"
@@ -444,6 +450,7 @@ export default function DayEditorScreen() {
           setScreenStep("event");
           router.setParams({ step: "event" });
         }}
+        onHome={onGoHome}
         footer={
           <Button
             label="Continue to videography"
@@ -518,6 +525,7 @@ export default function DayEditorScreen() {
           setScreenStep("photography");
           router.setParams({ step: "photography" });
         }}
+        onHome={onGoHome}
         footer={
           <Button
             label="Continue to add-ons"
@@ -593,10 +601,11 @@ export default function DayEditorScreen() {
         setScreenStep("videography");
         router.setParams({ step: "videography" });
       }}
+      onHome={onGoHome}
       footer={
         <Button
-          label="Continue to budget"
-          onPress={onContinueToBudget}
+          label="Continue to deliverables"
+          onPress={onContinueToDeliverables}
           disabled={!hasCoreService(day)}
           flex={1}
         />

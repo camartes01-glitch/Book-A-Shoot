@@ -77,7 +77,14 @@ export default function BookingsScreen() {
   const drafts = useMemo(() => bookings.filter(isDraftBooking), [bookings]);
 
   const filteredBookings = useMemo(() => {
-    return filterBookings(bookings, activeFilter);
+    const raw = filterBookings(bookings, activeFilter);
+    const seen = new Set<string>();
+    return raw.filter((b) => {
+      const key = b.bookingId || b.remoteBookingId;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }, [bookings, activeFilter]);
 
   const openBooking = async (bookingId: string, booking: Booking) => {
@@ -248,7 +255,7 @@ export default function BookingsScreen() {
           />
         )
       ) : (
-        filteredBookings.map((b) => {
+        filteredBookings.map((b, index) => {
           const finalEventDate = b.days.map((d) => d.eventDate).filter(Boolean).sort().pop();
           const isDraft = isLocalWizardBooking(b) || (!b.remoteBookingId && b.status === "DRAFT");
           const isCompleted = isCompletedBooking(b);
@@ -257,7 +264,7 @@ export default function BookingsScreen() {
           const showRetrySearch = !isDraft && canSearchAgain(b);
 
           return (
-            <Card key={b.bookingId} style={styles.cardContainer}>
+            <Card key={`${b.bookingId || b.remoteBookingId}-${index}`} style={styles.cardContainer}>
               <Pressable
                 onPress={() => openBooking(b.bookingId, b)}
                 accessibilityRole="button"

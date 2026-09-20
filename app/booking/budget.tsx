@@ -10,10 +10,12 @@ import { generatePackageOptions } from "@/src/engine/pricing";
 import { formatInr } from "@/src/utils/format";
 import { colors, spacing } from "@/src/constants/theme";
 import type { BudgetFeasibilityResult } from "@/src/engine/pricing";
+import type { PackageOption, PackageTierId } from "@/src/types/booking";
 
 export default function BudgetScreen() {
-  const { activeDraft, submitBudget } = useAppStore();
+  const { activeDraft, submitBudget, selectPackage } = useAppStore();
   const [digits, setDigits] = useState(activeDraft?.budget ? String(activeDraft.budget) : "");
+  const [selectedTier, setSelectedTier] = useState<PackageTierId | null>(activeDraft?.selectedPackage ?? null);
   const [loading, setLoading] = useState(false);
   const [feasibility, setFeasibility] = useState<BudgetFeasibilityResult | null>(null);
   const transitionLockRef = useRef(false);
@@ -22,7 +24,10 @@ export default function BudgetScreen() {
     if (activeDraft?.budget) {
       setDigits(String(activeDraft.budget));
     }
-  }, [activeDraft?.budget]);
+    if (activeDraft?.selectedPackage) {
+      setSelectedTier(activeDraft.selectedPackage);
+    }
+  }, [activeDraft?.budget, activeDraft?.selectedPackage]);
 
   const numeric = parseInt(digits, 10) || 0;
   const display = digits ? formatInr(numeric).replace("₹", "₹ ") : "";
@@ -30,6 +35,19 @@ export default function BudgetScreen() {
     () => (activeDraft ? generatePackageOptions(activeDraft, numeric) : []),
     [activeDraft, numeric],
   );
+
+  const onSelectPackageCard = async (pkg: PackageOption) => {
+    setSelectedTier(pkg.id as PackageTierId);
+    try {
+      if (numeric <= 0) {
+        setDigits(String(pkg.minPrice));
+        await submitBudget(pkg.minPrice);
+      }
+      await selectPackage(pkg.id as PackageTierId);
+    } catch {
+      // state updated optimistically
+    }
+  };
 
   const onCheck = async () => {
     if (numeric <= 0) {
@@ -43,7 +61,12 @@ export default function BudgetScreen() {
       const result = await submitBudget(numeric);
       setFeasibility(result);
       if (!result.isBelowEstimate) {
-        router.push("/booking/packages");
+        if (selectedTier) {
+          await selectPackage(selectedTier);
+          router.push("/booking/location-preference");
+        } else {
+          router.push("/booking/packages");
+        }
       }
     } finally {
       setLoading(false);
@@ -56,22 +79,31 @@ export default function BudgetScreen() {
   const BUDGET_OPTIONS = [50000, 75000, 100000, 150000, 200000, 300000];
 
   const onSelectBudgetOption = async (val: number) => {
-    if (transitionLockRef.current) return;
-    transitionLockRef.current = true;
     setDigits(String(val));
-    setLoading(true);
+    setFeasibility(null);
     try {
       await submitBudget(val);
-      router.push("/booking/packages");
-    } finally {
-      setLoading(false);
-      setTimeout(() => {
-        transitionLockRef.current = false;
-      }, 500);
+    } catch {
+      // non-blocking
     }
   };
 
   const onFooter = async () => {
+    if (selectedTier && numeric > 0 && (!feasibility || !feasibility.isBelowEstimate)) {
+      if (transitionLockRef.current) return;
+      transitionLockRef.current = true;
+      try {
+        await submitBudget(numeric);
+        await selectPackage(selectedTier);
+        router.push("/booking/location-preference");
+      } finally {
+        setTimeout(() => {
+          transitionLockRef.current = false;
+        }, 500);
+      }
+      return;
+    }
+
     if (feasibility?.isBelowEstimate) {
       if (transitionLockRef.current) return;
       transitionLockRef.current = true;
@@ -89,12 +121,7 @@ export default function BudgetScreen() {
       title="What is your budget?"
       step="budget"
       onBack={() => {
-        const first = activeDraft?.days?.[0];
-        if (first) {
-          router.push({ pathname: "/booking/day/[dayId]", params: { dayId: first.dayId, step: "addons", back: "1" } });
-        } else {
-          router.back();
-        }
+        router.push("/booking/delivery-date");
       }}
       footer={<Button label={feasibility?.isBelowEstimate ? "Show closest options" : "Continue"} onPress={onFooter} loading={loading} flex={1} />}
     >
@@ -159,9 +186,15 @@ export default function BudgetScreen() {
       ) : null}
 
       <SectionTitle>Approved coverage rates</SectionTitle>
-      <Muted>Essential, Signature and Elite use the approved Camartes ranges for the services you selected. These are not provider quotes.</Muted>
+      <Muted>Tap any package card below to select your desired coverage tier (Essential, Signature, or Elite).</Muted>
       {preview.map((pkg) => (
-        <PackageTierCard key={pkg.id} pkg={pkg} selectable={false} />
+        <PackageTierCard
+          key={pkg.id}
+          pkg={pkg}
+          selected={selectedTier === pkg.id}
+          onSelect={() => void onSelectPackageCard(pkg)}
+          selectable={true}
+        />
       ))}
     </WizardScreen>
   );

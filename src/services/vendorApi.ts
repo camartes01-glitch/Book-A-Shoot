@@ -88,8 +88,12 @@ async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): 
 
     const res = await fetch(url.toString(), {
       method: "GET",
-      headers: { "Content-Type": "application/json" },
-      signal: AbortSignal.timeout(8000),
+      headers: {
+        "Content-Type": "application/json",
+        "X-Client-App": "bookashoot",
+        "X-Booking-Source": "book_a_shoot",
+      },
+      signal: AbortSignal.timeout(15000),
     });
     if (res.ok) {
       const rows = (await res.json()) as RawSearchHit[];
@@ -98,8 +102,12 @@ async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): 
         const broadUrl = new URL(`${CAMARTES_API}/api/providers/service/${encodeURIComponent(serviceType)}`);
         const broadRes = await fetch(broadUrl.toString(), {
           method: "GET",
-          headers: { "Content-Type": "application/json" },
-          signal: AbortSignal.timeout(8000),
+          headers: {
+            "Content-Type": "application/json",
+            "X-Client-App": "bookashoot",
+            "X-Booking-Source": "book_a_shoot",
+          },
+          signal: AbortSignal.timeout(15000),
         });
         if (broadRes.ok) {
           const broadRows = (await broadRes.json()) as RawSearchHit[];
@@ -115,8 +123,12 @@ async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): 
       if (query.city?.trim()) fallbackUrl.searchParams.set("city", query.city.trim());
       const fallbackRes = await fetch(fallbackUrl.toString(), {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(8000),
+        headers: {
+          "Content-Type": "application/json",
+          "X-Client-App": "bookashoot",
+          "X-Booking-Source": "book_a_shoot",
+        },
+        signal: AbortSignal.timeout(15000),
       });
       if (fallbackRes.ok) {
         const rows = (await fallbackRes.json()) as RawSearchHit[];
@@ -125,7 +137,39 @@ async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): 
     }
 
     return [];
-  } catch {
+  } catch (err) {
+    console.warn('[vendorApi] fetchServiceType error:', err);
+    return [];
+  }
+}
+
+async function fetchGeneralProviders(query: CatalogQuery = {}): Promise<RawSearchHit[]> {
+  try {
+    const url = new URL(`${CAMARTES_API}/api/providers`);
+    if (query.city?.trim()) {
+      url.searchParams.set("city", query.city.trim());
+    }
+    const res = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Client-App": "bookashoot",
+        "X-Booking-Source": "book_a_shoot",
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        return data as RawSearchHit[];
+      }
+      if (data && typeof data === "object" && Array.isArray((data as { providers?: unknown[] }).providers)) {
+        return (data as { providers: RawSearchHit[] }).providers;
+      }
+    }
+    return [];
+  } catch (err) {
+    console.warn('[vendorApi] fetchGeneralProviders error:', err);
     return [];
   }
 }
@@ -261,78 +305,48 @@ function mergeHit(acc: Aggregate, hit: RawSearchHit) {
     }
   }
 
-  // Handle portfolio from new backend format or legacy format
+  // Handle portfolio items
   const portfolioItems = Array.isArray(hit.portfolio) ? hit.portfolio : (hit.portfolio_items ?? []);
   for (const item of portfolioItems) {
     const imageUrl = typeof item === 'string' ? item : (item.image || null);
     if (imageUrl) acc.portfolio.push(imageUrl);
   }
 
-  // Extract day rate from new backend pricing fields or legacy pricing object
+  // Extract day rate
   const dayRate = extractDayRate(hit.pricing) ||
                   (typeof hit.full_day_rate === 'number' ? hit.full_day_rate : null) ||
                   (typeof hit.hourly_rate === 'number' ? hit.hourly_rate * 8 : null);
   if (dayRate) acc.dayRates.push(dayRate);
 
-  const equipment = [...(hit.equipment ?? []), ...(hit.equipment_owned ?? [])];
-  const hasDrone = equipment.some((e) => e && typeof e === 'string' && e.toLowerCase().includes("drone"));
-
-  // Use specialties/quality_options from new backend format if available
+  // If specific shooting styles or quality options were specified, map them; otherwise default to full coverage
   const specialties = Array.isArray(hit.specialties) ? hit.specialties : (hit.shooting_style ?? []);
-  const qualityOptions = Array.isArray(hit.quality_options) ? hit.quality_options : (hit.filmmaking_style ?? []);
-
-  if (hit.service_type === "photographer") {
+  if (specialties.length > 0) {
     const styles = specialties.map((s) => typeof s === 'string' ? s.toLowerCase() : s);
-    if (!styles.length) {
-      acc.photographyTraditional = true;
-      acc.photographyCandid = true;
-    } else {
-      acc.photographyTraditional = acc.photographyTraditional || styles.includes("traditional");
-      acc.photographyCandid = acc.photographyCandid || styles.includes("candid");
-    }
-    if (hasDrone) acc.aerialPhotography = true;
-  }
-  if (hit.service_type === "videographer") {
-    const styles = qualityOptions.map((s) => typeof s === 'string' ? s.toLowerCase() : s);
-    if (!styles.length) {
-      acc.videographyTraditional = true;
-      acc.videographyCandid = true;
-    } else {
-      acc.videographyTraditional = acc.videographyTraditional || styles.includes("traditional");
-      acc.videographyCandid = acc.videographyCandid || styles.some((s) => s === "cinematic" || s === "candid" || s === "documentary");
-    }
-    if (hasDrone) acc.aerialVideography = true;
-  }
-  if (
-    hit.service_type === "photography_firm" ||
-    hit.service_type === "photo_studio" ||
-    hit.service_type === "studio" ||
-    hit.business_category === "studio"
-  ) {
-    // A full-service firm or photo studio covers both core styles
-    acc.isStudio = true;
-    acc.isFirm = true;
+    acc.photographyTraditional = acc.photographyTraditional || styles.includes("traditional");
+    acc.photographyCandid = acc.photographyCandid || styles.includes("candid");
+  } else {
     acc.photographyTraditional = true;
     acc.photographyCandid = true;
+  }
+
+  const qualityOptions = Array.isArray(hit.quality_options) ? hit.quality_options : (hit.filmmaking_style ?? []);
+  if (qualityOptions.length > 0) {
+    const styles = qualityOptions.map((s) => typeof s === 'string' ? s.toLowerCase() : s);
+    acc.videographyTraditional = acc.videographyTraditional || styles.includes("traditional");
+    acc.videographyCandid = acc.videographyCandid || styles.some((s) => s === "cinematic" || s === "candid" || s === "documentary");
+  } else {
     acc.videographyTraditional = true;
     acc.videographyCandid = true;
-    if (hasDrone) {
-      acc.aerialPhotography = true;
-      acc.aerialVideography = true;
-    }
   }
-  if (hit.service_type === "fly_cam") {
-    acc.aerialPhotography = true;
-    acc.aerialVideography = true;
-  }
-  if (hit.service_type === "led_wall") {
-    acc.ledWallAvailable = true;
-  }
-  if (hit.service_type === "web_live_services" || hit.service_type === "live_stream") {
-    acc.webLiveAvailable = true;
-    acc.webLiveQualities.add("HD");
-    acc.webLiveQualities.add("4K");
-  }
+
+  acc.isFirm = true;
+  acc.isStudio = true;
+  acc.aerialPhotography = true;
+  acc.aerialVideography = true;
+  acc.ledWallAvailable = true;
+  acc.webLiveAvailable = true;
+  acc.webLiveQualities.add("HD");
+  acc.webLiveQualities.add("4K");
 }
 
 function toCustomerVendor(acc: Aggregate, fetchedLive: boolean): CustomerVendor {
@@ -382,7 +396,7 @@ function toCustomerVendor(acc: Aggregate, fetchedLive: boolean): CustomerVendor 
       available: acc.webLiveAvailable,
       qualities: [...acc.webLiveQualities],
     },
-    portfolioImages: acc.portfolio.slice(0, 12),
+    portfolioImages: acc.portfolio.slice(0, 100),
     about: acc.about || "Listed on the Camartes Vendor Platform.",
     serviceAreas: [...acc.serviceAreas],
     kycVerified: acc.kycVerified,
@@ -422,10 +436,14 @@ export type VendorCatalogResult = {
 export async function fetchVendorCatalog(query: CatalogQuery = {}): Promise<VendorCatalogResult> {
   try {
     const types = query.serviceTypes?.length ? query.serviceTypes : SEARCH_SERVICE_TYPES;
-    const results = await Promise.all(types.map((serviceType) => fetchServiceType(serviceType, query)));
+    const [serviceResults, generalHits] = await Promise.all([
+      Promise.all(types.map((serviceType) => fetchServiceType(serviceType, query))),
+      fetchGeneralProviders(query),
+    ]);
     const byId = new Map<string, Aggregate>();
 
-    results.forEach((hits) => {
+    const allBatches = [...serviceResults, generalHits];
+    allBatches.forEach((hits) => {
       for (const hit of hits) {
         const id = idOf(hit);
         if (!id) continue;
@@ -504,9 +522,28 @@ function hitsFromProviderProfile(raw: Record<string, unknown>): RawSearchHit[] {
   return hits;
 }
 
+const vendorMemoryCache = new Map<string, { vendor: CustomerVendor; timestamp: number }>();
+
+export function getCachedVendorProfile(vendorId: string): CustomerVendor | null {
+  const hit = vendorMemoryCache.get(vendorId);
+  if (hit && Date.now() - hit.timestamp < 10 * 60 * 1000) {
+    return hit.vendor;
+  }
+  return null;
+}
+
+export function cacheVendorProfile(vendor: CustomerVendor): void {
+  if (vendor?.vendorId) {
+    vendorMemoryCache.set(vendor.vendorId, { vendor, timestamp: Date.now() });
+  }
+}
+
 export async function fetchVendorById(vendorId: string): Promise<CustomerVendor | null> {
+  const cached = getCachedVendorProfile(vendorId);
+  if (cached) return cached;
+
   const res = await fetch(`${CAMARTES_API}/api/providers/${encodeURIComponent(vendorId)}`, {
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) {
     throw new Error(`Provider ${vendorId} could not be loaded (${res.status}).`);
@@ -526,7 +563,23 @@ export async function fetchVendorById(vendorId: string): Promise<CustomerVendor 
   if (typeof raw.wallet_balance === "number") acc.walletBalance = raw.wallet_balance;
   if (typeof raw.balance === "number") acc.walletBalance = raw.balance;
   for (const hit of hits) mergeHit(acc, hit);
-  return toCustomerVendor(acc, true);
+  if (Array.isArray(raw.portfolio_items)) {
+    for (const item of raw.portfolio_items as Array<{ image?: string } | string>) {
+      const img = typeof item === "string" ? item : item?.image;
+      if (img && !acc.portfolio.includes(img)) acc.portfolio.push(img);
+    }
+  }
+  if (Array.isArray(raw.portfolio)) {
+    for (const item of raw.portfolio as Array<{ image?: string } | string>) {
+      const img = typeof item === "string" ? item : item?.image;
+      if (img && !acc.portfolio.includes(img)) acc.portfolio.push(img);
+    }
+  }
+  const result = toCustomerVendor(acc, true);
+  if (result) {
+    vendorMemoryCache.set(vendorId, { vendor: result, timestamp: Date.now() });
+  }
+  return result;
 }
 
 /** Test helper: map raw catalog search hits with the same rules the live client uses. */

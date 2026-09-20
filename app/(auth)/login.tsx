@@ -14,17 +14,27 @@ import { getDraftResumeRoute } from "@/src/domain/bookingRequest";
 import { CamartesApiError } from "@/src/services/camartesClient";
 import { GoogleSignInCancelledError } from "@/src/services/googleSignIn";
 import { colors, spacing, touchTarget } from "@/src/constants/theme";
-import { isSupabaseConfigured } from "@/src/services/supabaseClient";
-import { checkWebSupabaseSession, signInWithGoogleViaSupabase } from "@/src/services/supabaseAuth";
+import { isSupabaseConfigured, supabase } from "@/src/services/supabaseClient";
+import { checkWebSupabaseSession, extractUserInfoFromSupabaseUser, signInWithGoogleViaSupabase } from "@/src/services/supabaseAuth";
 
 WebBrowser.maybeCompleteAuthSession();
+
+function resolveAppRoute(target?: string | null): string {
+  if (!target || target === "/(tabs)" || target === "/%28tabs%29" || target === "(tabs)" || target === "/(tabs)/index" || target === "/") {
+    return "/";
+  }
+  if (target.startsWith("/(tabs)/")) {
+    return target.replace("/(tabs)/", "/");
+  }
+  return target;
+}
 
 export default function LoginScreen() {
   const { login, signup, ready, profile, activeDraft, loginWithGoogle } = useAppStore();
   const params = useLocalSearchParams<{ returnTo?: string; reauth?: string }>();
   const explicitReturn = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
   const isReauth = (Array.isArray(params.reauth) ? params.reauth[0] : params.reauth) === "1";
-  const returnTarget = explicitReturn || (activeDraft ? getDraftResumeRoute(activeDraft) : "/(tabs)");
+  const returnTarget = explicitReturn || (activeDraft ? getDraftResumeRoute(activeDraft) : "/");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [emailOrPhone, setEmailOrPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -39,10 +49,19 @@ export default function LoginScreen() {
   const signInInFlight = useRef(false);
   const signupInFlight = useRef(false);
   const googleInFlight = useRef(false);
+  const oauthCompleted = useRef(false);
 
   useEffect(() => {
     if (ready && profile && !isReauth) {
-      router.replace(returnTarget as any);
+      const hasMobile = Boolean(profile.mobile && profile.mobile.length >= 10);
+      if (!hasMobile) {
+        router.replace({
+          pathname: "/(auth)/complete-profile",
+          params: { returnTo: returnTarget },
+        });
+      } else {
+        router.replace(resolveAppRoute(returnTarget) as any);
+      }
     }
   }, [ready, profile, returnTarget, isReauth]);
 
@@ -51,14 +70,34 @@ export default function LoginScreen() {
     if (Platform.OS !== "web") return;
     let active = true;
 
-    const checkWebOAuth = async () => {
+    // Check immediately if we have OAuth return params in URL to show busy state
+    const hasOAuthParams =
+      typeof window !== "undefined" &&
+      (window.location.search.includes("code=") ||
+        window.location.hash.includes("access_token=") ||
+        window.sessionStorage?.getItem("camartes:oauth_in_progress") === "true");
+
+    if (hasOAuthParams) {
+      setGoogleBusy(true);
+    }
+
+    const completeOAuthLogin = async (userInfo: ReturnType<typeof extractUserInfoFromSupabaseUser>) => {
+      if (!active || oauthCompleted.current) return;
+      oauthCompleted.current = true;
+      setGoogleBusy(true);
+      setError("");
+
       try {
-        const userInfo = await checkWebSupabaseSession();
-        if (userInfo && active) {
-          setGoogleBusy(true);
-          await loginWithGoogle(userInfo);
-          if (active) {
-            router.replace(returnTarget as any);
+        const authedProfile = await loginWithGoogle(userInfo);
+        if (active) {
+          const hasMobile = Boolean(authedProfile?.mobile && authedProfile.mobile.length >= 10);
+          if (!hasMobile) {
+            router.replace({
+              pathname: "/(auth)/complete-profile",
+              params: { returnTo: returnTarget },
+            });
+          } else {
+            router.replace(resolveAppRoute(returnTarget) as any);
           }
         }
       } catch (e) {
@@ -74,10 +113,42 @@ export default function LoginScreen() {
       }
     };
 
+    // Track 1: Supabase onAuthStateChange listener (reacts instantly when SDK completes exchange)
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!active || oauthCompleted.current) return;
+      if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session?.user) {
+        const info = extractUserInfoFromSupabaseUser(session.user);
+        await completeOAuthLogin(info);
+      }
+    });
+
+    // Track 2: Explicit checkWebSupabaseSession() polling / manual exchange fallback
+    const checkWebOAuth = async () => {
+      try {
+        const userInfo = await checkWebSupabaseSession();
+        if (userInfo && active && !oauthCompleted.current) {
+          await completeOAuthLogin(userInfo);
+        }
+      } catch (e) {
+        if (active && !oauthCompleted.current) {
+          setError(
+            e instanceof CamartesApiError || e instanceof Error
+              ? e.message
+              : "Could not complete Google sign-in.",
+          );
+        }
+      } finally {
+        if (active && !hasOAuthParams) {
+          setGoogleBusy(false);
+        }
+      }
+    };
+
     void checkWebOAuth();
 
     return () => {
       active = false;
+      authListener?.subscription?.unsubscribe();
     };
   }, [returnTarget, loginWithGoogle]);
 
@@ -89,11 +160,19 @@ export default function LoginScreen() {
 
     try {
       if (isSupabaseConfigured()) {
-        const userInfo = await signInWithGoogleViaSupabase();
+        let userInfo = await signInWithGoogleViaSupabase();
         if (userInfo) {
-          // Native deep link sign-in succeeded
-          await loginWithGoogle(userInfo);
-          router.replace(returnTarget as any);
+          // Native deep link sign-in succeeded on first attempt
+          const authedProfile = await loginWithGoogle(userInfo);
+          const hasMobile = Boolean(authedProfile?.mobile && authedProfile.mobile.length >= 10);
+          if (!hasMobile) {
+            router.replace({
+              pathname: "/(auth)/complete-profile",
+              params: { returnTo: returnTarget },
+            });
+          } else {
+            router.replace(resolveAppRoute(returnTarget) as any);
+          }
         }
         // If web, the browser has redirected to Google OAuth
         return;
@@ -121,7 +200,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await login(emailOrPhone, password);
-      router.replace(returnTarget as any);
+      router.replace(resolveAppRoute(returnTarget) as any);
     } catch (e) {
       setError(e instanceof CamartesApiError || e instanceof Error ? e.message : "Could not sign in.");
     } finally {
@@ -137,7 +216,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signup({ name, email, phone, password: signupPassword });
-      router.replace(returnTarget as any);
+      router.replace(resolveAppRoute(returnTarget) as any);
     } catch (e) {
       setError(e instanceof CamartesApiError || e instanceof Error ? e.message : "Could not create the account.");
     } finally {
@@ -158,13 +237,21 @@ export default function LoginScreen() {
     setError("");
     setLoading(true);
     try {
-      await loginWithGoogle({
+      const authedProfile = await loginWithGoogle({
         google_id: "google_sandbox_user_01",
         email: "google.user@example.com",
         name: "Google Customer",
         picture: null,
       });
-      router.replace(returnTarget as any);
+      const hasMobile = Boolean(authedProfile?.mobile && authedProfile.mobile.length >= 10);
+      if (!hasMobile) {
+        router.replace({
+          pathname: "/(auth)/complete-profile",
+          params: { returnTo: returnTarget },
+        });
+      } else {
+        router.replace(resolveAppRoute(returnTarget) as any);
+      }
     } catch (e) {
       setError(
         e instanceof CamartesApiError || e instanceof Error
@@ -309,6 +396,7 @@ export default function LoginScreen() {
         }}
       />
       <GoogleSignInButton
+        label="Continue with Google"
         disabled={loading || googleBusy}
         loading={googleBusy}
         onPress={onGoogleSignIn}

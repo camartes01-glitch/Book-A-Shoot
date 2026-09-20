@@ -1,5 +1,8 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as authApi from "@/src/services/authApi";
-import { extractAccessToken, getAuthToken } from "@/src/services/camartesClient";
+import { createBooking, migrateBookingsToCustomer, readAllBookings } from "@/src/services/bookingApi";
+import type { CustomerProfile, Booking } from "@/src/types/booking";
+import { extractAccessToken, getAuthToken, setAuthToken } from "@/src/services/camartesClient";
 import { extractGoogleIdToken, GoogleSignInCancelledError } from "@/src/services/googleSignIn";
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -476,4 +479,148 @@ describe("Camartes Google authentication contract", () => {
     expect(profile.email).toBe("fallback@example.com");
     expect(profile.name).toBe("Fallback User");
   });
+
+  test("loginWithGoogle populates linked account mobile phone number from backend", async () => {
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/auth/google-userinfo")) {
+        return jsonResponse(200, {
+          user_id: "linked-user-1",
+          session_token: "linked-session-token",
+          email: "linked@example.com",
+          name: "Linked User",
+          phone_number: "9876543210",
+          phone: "9876543210",
+          mobile: "9876543210",
+          is_new_user: false,
+          has_completed_profile: true,
+        });
+      }
+      if (String(input).includes("/api/auth/me")) {
+        return jsonResponse(200, {
+          user_id: "linked-user-1",
+          name: "Linked User",
+          email: "linked@example.com",
+          phone_number: "9876543210",
+        });
+      }
+      return jsonResponse(404, {});
+    }) as typeof fetch;
+
+    const profile = await authApi.loginWithGoogle({
+      google_id: "google_linked_123",
+      email: "linked@example.com",
+      name: "Linked User",
+    });
+    expect(profile.customerId).toBe("linked-user-1");
+    expect(profile.mobile).toBe("9876543210");
+  });
+
+  test("updateProfile sends PUT /api/profile to backend and updates local store", async () => {
+    let putCalled = false;
+    let putBody: any = null;
+
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/api/profile") && init?.method === "PUT") {
+        putCalled = true;
+        putBody = JSON.parse(String(init.body));
+        return jsonResponse(200, { message: "Profile updated successfully" });
+      }
+      return jsonResponse(404, {});
+    }) as typeof fetch;
+
+    await setAuthToken("valid-active-session-token");
+    await AsyncStorage.setItem(
+      "camartes-customer:profile:v1",
+      JSON.stringify({
+        customerId: "user-123",
+        name: "Old Name",
+        email: "user@example.com",
+        mobile: "",
+        avatarInitials: "ON",
+        savedAddresses: [],
+      }),
+    );
+    const updated = await authApi.updateProfile({
+      name: "New Name",
+      mobile: "9988776655",
+    });
+
+    expect(putCalled).toBe(true);
+    expect(putBody.phone_number).toBe("9988776655");
+    expect(putBody.name).toBe("New Name");
+    expect(updated.name).toBe("New Name");
+    expect(updated.mobile).toBe("9988776655");
+  });
+
+  describe("Unified Profile by Email & Booking Migration", () => {
+    test("migrateBookingsToCustomer updates bookings from old customerId to new canonical customerId", async () => {
+      const b1 = await createBooking("google-user-999");
+      const b2 = await createBooking("other-user-111");
+
+      await migrateBookingsToCustomer("google-user-999", "canonical-cust-123");
+
+      const all = await readAllBookings();
+      expect(all.find((b) => b.bookingId === b1.bookingId)?.customerId).toBe("canonical-cust-123");
+      expect(all.find((b) => b.bookingId === b2.bookingId)?.customerId).toBe("other-user-111");
+    });
+
+    test("reconciles Google profile with existing email/password profile sharing same email", async () => {
+      const existingProfile: CustomerProfile = {
+        customerId: "cust-canonical-456",
+        name: "Keerthan Kumar",
+        email: "keerthan@example.com",
+        mobile: "9876543210",
+        avatarInitials: "KK",
+        savedAddresses: [
+          {
+            placeId: "loc-1",
+            formattedAddress: "Indiranagar, Bengaluru",
+            latitude: 12.97,
+            longitude: 77.64,
+            city: "Bengaluru",
+            district: "Bengaluru",
+            state: "Karnataka",
+            pincode: "560038",
+            manuallyEdited: false,
+          },
+        ],
+      };
+      await AsyncStorage.setItem("camartes-customer:profile:v1", JSON.stringify(existingProfile));
+
+      globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/auth/google-userinfo")) {
+          return jsonResponse(200, {
+            session_token: "mock-google-token",
+            user: {
+              user_id: "google-id-789",
+              name: "Keerthan K",
+              email: "keerthan@example.com",
+              phone_number: "9876543210",
+            },
+          });
+        }
+        if (url.includes("/api/auth/me")) {
+          return jsonResponse(200, {
+            user_id: "google-id-789",
+            name: "Keerthan K",
+            email: "keerthan@example.com",
+            phone_number: "9876543210",
+          });
+        }
+        return jsonResponse(404, {});
+      }) as typeof fetch;
+
+      const result = await authApi.loginWithGoogle("fake-google-token");
+
+      expect(result.customerId).toBe("cust-canonical-456");
+      expect(result.email).toBe("keerthan@example.com");
+
+      const saved = await authApi.getStoredProfile();
+      expect(saved?.customerId).toBe("cust-canonical-456");
+      expect(saved?.savedAddresses).toHaveLength(1);
+      expect(saved?.savedAddresses[0].formattedAddress).toBe("Indiranagar, Bengaluru");
+    });
+  });
 });
+
