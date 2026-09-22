@@ -370,8 +370,7 @@ export function selectedServiceQuantitiesForDay(day: EventDay): Record<ApprovedS
   if (day.videography.candid) {
     qty.candid_videographer = Math.max(1, day.videography.candidCount);
   }
-  const drones = day.aerial.photographyDrones + day.aerial.videographyDrones;
-  if (drones > 0) qty.drone_operators = drones;
+  if (day.aerial.drones > 0) qty.drone_operators = day.aerial.drones;
   if (day.webLive.enabled) qty.web_live_link = 1;
   if (day.ledWall.enabled) qty.led_wall = Math.max(1, day.ledWall.screenCount);
   return qty;

@@ -621,6 +621,45 @@ describe("Camartes Google authentication contract", () => {
       expect(saved?.savedAddresses).toHaveLength(1);
       expect(saved?.savedAddresses[0].formattedAddress).toBe("Indiranagar, Bengaluru");
     });
+
+    test("new Google user first-time signin: profile persists, complete-profile succeeds, and restoreSession does not wipe", async () => {
+      globalThis.fetch = jest.fn(async () => {
+        return jsonResponse(404, { detail: "Not found" });
+      }) as typeof fetch;
+
+      // 1. First-time Google login
+      const googleProfile = await authApi.loginWithGoogle({
+        google_id: "google_new_kitty",
+        email: "kitty@example.com",
+        name: "Keerthika Kitty",
+      });
+
+      expect(googleProfile.name).toBe("Keerthika Kitty");
+      expect(googleProfile.email).toBe("kitty@example.com");
+      expect(googleProfile.mobile).toBe("");
+
+      // 2. restoreSession preserves profile even when backend endpoints 404/401
+      const restoredBeforePhone = await authApi.restoreSession();
+      expect(restoredBeforePhone).not.toBeNull();
+      expect(restoredBeforePhone?.email).toBe("kitty@example.com");
+
+      // 3. Complete profile with mobile number
+      const completed = await authApi.updateProfile({
+        name: "Keerthika Kitty",
+        mobile: "7337372940",
+      });
+
+      expect(completed.mobile).toBe("7337372940");
+      expect(completed.name).toBe("Keerthika Kitty");
+      expect(completed.email).toBe("kitty@example.com");
+
+      // 4. Stored profile and restored session retain updated phone
+      const stored = await authApi.getStoredProfile();
+      expect(stored?.mobile).toBe("7337372940");
+
+      const restoredAfterPhone = await authApi.restoreSession();
+      expect(restoredAfterPhone?.mobile).toBe("7337372940");
+    });
   });
 });
 

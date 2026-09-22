@@ -34,6 +34,7 @@ export default function CompleteProfileScreen() {
 
   const [name, setName] = useState(profile?.name || "");
   const [phone, setPhone] = useState(profile?.mobile || "");
+  const [email, setEmail] = useState(profile?.email || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -44,7 +45,32 @@ export default function CompleteProfileScreen() {
     if (profile?.mobile && !phone) {
       setPhone(profile.mobile);
     }
+    if (profile?.email && !email) {
+      setEmail(profile.email);
+    }
   }, [profile]);
+
+  useEffect(() => {
+    if (!email) {
+      (async () => {
+        try {
+          const { supabase } = await import("@/src/services/supabaseClient");
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.user) {
+            const uEmail = data.session.user.email || "";
+            const uName =
+              data.session.user.user_metadata?.full_name ||
+              data.session.user.user_metadata?.name ||
+              "";
+            if (uEmail) setEmail(uEmail);
+            if (uName && !name) setName(uName);
+          }
+        } catch {
+          // Ignore
+        }
+      })();
+    }
+  }, [email, name]);
 
   const cleanDigits = phone.replace(/\D/g, "").slice(-10);
   const isValidPhone = cleanDigits.length === 10 && /^[6-9]/.test(cleanDigits);
@@ -63,9 +89,11 @@ export default function CompleteProfileScreen() {
     setError("");
     setLoading(true);
     try {
+      const userEmail = email || profile?.email || "";
       await updateProfile({
         name: name.trim(),
         mobile: cleanDigits,
+        email: userEmail || undefined,
       });
 
       try {
@@ -114,7 +142,7 @@ export default function CompleteProfileScreen() {
           <Text style={styles.label}>Email Address</Text>
           <View style={styles.readonlyInput}>
             <Text style={styles.readonlyText} numberOfLines={1}>
-              {profile?.email || "Signed in with Google"}
+              {email || profile?.email || "Signed in with Google"}
             </Text>
             <View style={styles.verifiedBadge}>
               <CheckCircle2 size={14} color="#16A34A" />

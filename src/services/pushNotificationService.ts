@@ -10,8 +10,38 @@ import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { camartesFetch } from "./camartesClient";
+import type { AppNotification } from "@/src/types/booking";
+import { resolveNotificationRoute } from "@/src/domain/notificationRouting";
 
 const PUSH_PREFS_KEY = "camartes_customer:notification_preferences:v1";
+const SCHEDULED_MAP_KEY = "camartes_customer:scheduled_notifications:v1";
+
+/** Builds a minimal AppNotification from a raw push/local-notification `data`
+ * payload so both native taps and web onclick share the same routing logic. */
+function notificationFromPushData(data: Record<string, unknown> | undefined): AppNotification {
+  return {
+    id: String((data?.notification_id as string) || "push"),
+    title: "",
+    body: "",
+    createdAt: new Date().toISOString(),
+    read: false,
+    type: (data?.type as AppNotification["type"]) || undefined,
+    bookingId: (data?.booking_id as string) || (data?.bookingId as string) || undefined,
+    userId: (data?.sender_id as string) || (data?.user_id as string) || (data?.provider_id as string) || undefined,
+    firmId: (data?.firm_id as string) || (data?.provider_id as string) || undefined,
+    firmName: (data?.sender_name as string) || (data?.firm_name as string) || undefined,
+    data: data || undefined,
+  };
+}
+
+function routeFromPushData(data: Record<string, unknown> | undefined): void {
+  const route = resolveNotificationRoute(notificationFromPushData(data), []);
+  if (route.params) {
+    router.push({ pathname: route.pathname as any, params: route.params });
+  } else {
+    router.push(route.pathname as any);
+  }
+}
 
 export interface NotificationPreferences {
   pushEnabled: boolean;
@@ -96,17 +126,7 @@ class PushNotificationService {
       });
       notif.onclick = () => {
         window.focus();
-        if (data?.sender_id) {
-          router.push({
-            pathname: "/chat/[userId]",
-            params: {
-              userId: String(data.sender_id),
-              name: String(data.sender_name || "Photography Partner"),
-            },
-          });
-        } else if (data?.booking_id) {
-          router.push(`/bookings/${data.booking_id}`);
-        }
+        routeFromPushData(data);
       };
     } catch {
       // Notification constructor error ignored
@@ -163,18 +183,7 @@ class PushNotificationService {
       Notifications.addNotificationResponseReceivedListener((response: any) => {
         const data = response.notification.request.content.data as Record<string, unknown> | undefined;
         if (!data) return;
-
-        if (data.sender_id) {
-          router.push({
-            pathname: "/chat/[userId]",
-            params: {
-              userId: String(data.sender_id),
-              name: String(data.sender_name || "Photography Partner"),
-            },
-          });
-        } else if (data.booking_id) {
-          router.push(`/bookings/${data.booking_id}`);
-        }
+        routeFromPushData(data);
       });
     } catch (e) {
       if (__DEV__) console.log("[PushNotifications] Native init note:", e);
@@ -199,6 +208,103 @@ class PushNotificationService {
     } catch (e) {
       if (__DEV__) console.log("[PushNotifications] Registration note:", e);
     }
+  }
+
+  private async getScheduledMap(): Promise<Record<string, string>> {
+    try {
+      const raw = await AsyncStorage.getItem(SCHEDULED_MAP_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  private async loadNotificationsModule(): Promise<any | null> {
+    if (Platform.OS === "web") return null;
+    // @ts-ignore
+    return (await import("expo-notifications").catch(() => null)) as any;
+  }
+
+  private async ensurePermission(Notifications: any): Promise<boolean> {
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status === "granted") return true;
+      const { status: requested } = await Notifications.requestPermissionsAsync();
+      return requested === "granted";
+    } catch {
+      return false;
+    }
+  }
+
+  private async scheduleWithTrigger(
+    key: string,
+    content: { title: string; body: string; data?: Record<string, unknown> },
+    buildTrigger: (Notifications: any) => unknown,
+  ): Promise<void> {
+    const Notifications = await this.loadNotificationsModule();
+    if (!Notifications) return;
+    if (!(await this.ensurePermission(Notifications))) return;
+    try {
+      await this.cancelScheduledNotification(key);
+      const identifier = await Notifications.scheduleNotificationAsync({
+        content: { title: content.title, body: content.body, data: content.data },
+        trigger: buildTrigger(Notifications),
+      });
+      const map = await this.getScheduledMap();
+      map[key] = identifier;
+      await AsyncStorage.setItem(SCHEDULED_MAP_KEY, JSON.stringify(map));
+    } catch (e) {
+      if (__DEV__) console.log("[PushNotifications] Schedule note:", e);
+    }
+  }
+
+  /**
+   * Schedules a one-shot local notification for an absolute future time
+   * (event reminders, draft-abandonment nudges) so it fires even if the app
+   * is closed. Re-scheduling under the same `key` replaces any previous
+   * schedule. No-ops silently when expo-notifications isn't available —
+   * local scheduling needs no push/FCM/APNs credentials, only the package.
+   */
+  async scheduleAt(key: string, content: { title: string; body: string; data?: Record<string, unknown> }, when: Date): Promise<void> {
+    if (when.getTime() <= Date.now()) return;
+    await this.scheduleWithTrigger(key, content, (Notifications) => ({
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: when,
+    }));
+  }
+
+  /** Schedules a repeating nudge every `days` days (e.g. the idle "come back" nudge). */
+  async scheduleRepeatingEveryDays(
+    key: string,
+    content: { title: string; body: string; data?: Record<string, unknown> },
+    days: number,
+  ): Promise<void> {
+    await this.scheduleWithTrigger(key, content, (Notifications) => ({
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+      seconds: Math.round(days * 86400),
+      repeats: true,
+    }));
+  }
+
+  async hasScheduled(key: string): Promise<boolean> {
+    const map = await this.getScheduledMap();
+    return Boolean(map[key]);
+  }
+
+  async cancelScheduledNotification(key: string): Promise<void> {
+    const map = await this.getScheduledMap();
+    const identifier = map[key];
+    if (!identifier) return;
+    const Notifications = await this.loadNotificationsModule();
+    if (Notifications) {
+      try {
+        await Notifications.cancelScheduledNotificationAsync(identifier);
+      } catch (e) {
+        if (__DEV__) console.log("[PushNotifications] Cancel note:", e);
+      }
+    }
+    delete map[key];
+    await AsyncStorage.setItem(SCHEDULED_MAP_KEY, JSON.stringify(map));
   }
 }
 

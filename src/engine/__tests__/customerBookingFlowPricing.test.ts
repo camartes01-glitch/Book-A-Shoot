@@ -138,7 +138,7 @@ describe("3. Wedding Package Pricing Sheet Values & Reference Totals", () => {
     let fullWeddingDay = makeWeddingDay({
       photography: { traditional: true, traditionalCount: 1, candid: true, candidCount: 1 },
       videography: { traditional: true, traditionalCount: 1, candid: true, candidCount: 1 },
-      aerial: { photographyDrones: 1, videographyDrones: 0 },
+      aerial: { drones: 1 },
       ledWall: { enabled: true, size: "8 x 12", screenCount: 1 },
       webLive: { enabled: true, quality: "HD", cameraCount: 1, streamingPlatform: "", accessType: "private" },
     });
@@ -196,7 +196,7 @@ describe("4. Outdoor Shoot Package Rates", () => {
     const day = makeOutdoorDay("pre_wedding", {
       photography: { traditional: false, traditionalCount: 0, candid: true, candidCount: 1 },
       videography: { traditional: false, traditionalCount: 0, candid: true, candidCount: 1 },
-      aerial: { photographyDrones: 1, videographyDrones: 0 },
+      aerial: { drones: 1 },
     });
 
     const essential = overallApprovedRange([day], "essential");

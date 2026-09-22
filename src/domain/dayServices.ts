@@ -15,7 +15,7 @@ const CLEARED_VIDEOGRAPHY = {
   candidCount: 1,
 } as const;
 
-const CLEARED_AERIAL = { photographyDrones: 0, videographyDrones: 0 } as const;
+const CLEARED_AERIAL = { drones: 0 } as const;
 
 export function isPhotographySelected(day: Pick<EventDay, "photography">): boolean {
   return day.photography.traditional || day.photography.candid;
@@ -31,7 +31,7 @@ export function isAerialSelectable(day: Pick<EventDay, "photography" | "videogra
 }
 
 export function isAerialEnabled(day: Pick<EventDay, "aerial">): boolean {
-  return day.aerial.photographyDrones > 0 || day.aerial.videographyDrones > 0;
+  return day.aerial.drones > 0;
 }
 
 /** If the last core service is removed, Aerial (and only Aerial config) turns off. */
@@ -74,10 +74,7 @@ export function setAerialEnabled(day: EventDay, enabled: boolean): EventDay {
   }
   if (!isAerialSelectable(day)) return day;
   if (isAerialEnabled(day)) return day;
-  if (isPhotographySelected(day)) {
-    return { ...day, aerial: { photographyDrones: 1, videographyDrones: 0 } };
-  }
-  return { ...day, aerial: { photographyDrones: 0, videographyDrones: 1 } };
+  return { ...day, aerial: { drones: 1 } };
 }
 
 export function selectedCoreServiceLabels(day: EventDay): string[] {
@@ -124,8 +121,7 @@ export function bookingRequirementPayload(day: EventDay) {
       candidCount: day.videography.candid ? day.videography.candidCount : 0,
     },
     aerial: {
-      photographyDrones: day.aerial.photographyDrones,
-      videographyDrones: day.aerial.videographyDrones,
+      drones: day.aerial.drones,
       enabled: isAerialEnabled(day),
     },
     ledWall: {

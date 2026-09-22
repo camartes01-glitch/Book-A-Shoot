@@ -630,27 +630,15 @@ export default function DayEditorScreen() {
         enabled={aerialOn}
         disabled={!aerialSelectable}
         disabledReason="Select photography or videography first."
-        summary={[
-          day.aerial.photographyDrones ? `${day.aerial.photographyDrones} photo drone(s)` : null,
-          day.aerial.videographyDrones ? `${day.aerial.videographyDrones} video drone(s)` : null,
-        ]
-          .filter(Boolean)
-          .join(" · ")}
+        summary={day.aerial.drones ? `${day.aerial.drones} drone(s)` : ""}
         onToggle={(v) => applyDay((prev) => setAerialEnabled(prev, v), "addons")}
       >
         <Stepper
-          label="Photo drones"
-          value={day.aerial.photographyDrones}
+          label="Drones"
+          value={day.aerial.drones}
           min={0}
           max={ADMIN_LIMITS.maxDronesPerType}
-          onChange={(n) => applyDay((prev) => ({ ...prev, aerial: { ...prev.aerial, photographyDrones: n } }), "addons")}
-        />
-        <Stepper
-          label="Video drones"
-          value={day.aerial.videographyDrones}
-          min={0}
-          max={ADMIN_LIMITS.maxDronesPerType}
-          onChange={(n) => applyDay((prev) => ({ ...prev, aerial: { ...prev.aerial, videographyDrones: n } }), "addons")}
+          onChange={(n) => applyDay((prev) => ({ ...prev, aerial: { ...prev.aerial, drones: n } }), "addons")}
         />
       </AddOnCard>
 

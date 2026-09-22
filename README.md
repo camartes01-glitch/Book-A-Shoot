@@ -118,3 +118,30 @@ node scripts/serve-apk.js   # listens on 0.0.0.0:43159, GET /camartes-customer.a
 - Google/Apple OAuth need credentials configured before those buttons can do more than explain what's missing.
 - No payment gateway is integrated. This app does not mark bookings paid or confirmed locally.
 - Day reordering uses simple up/down controls rather than drag-and-drop.
+
+
+
+
+
+
+
+
+Here is how the automated workflow operates:
+
+Detection (Reject or 1-Hour Timeout):
+
+If a firm rejects: Whether they explicitly click reject, get marked as REJECTED, or are removed by the server, the system detects the dead slot immediately.
+If a firm doesn't respond within 1 hour: The system records firmFirstSeenAt when a firm is first assigned. If 1 hour passes without them accepting (has_accepted: false), the slot is marked as timed out.
+Automatic Search & Backfill (Per-Slot):
+
+The engine computes open slots (6 - activeFirms). For example, if 1 firm rejects or times out, exactly 1 open slot is identified.
+The system queries the vendor catalog for eligible firms matching your event's package tier, services, date, and location.
+Never repeats firms: Every firm previously assigned, matched, or rejected for this booking is strictly excluded.
+Silent Dispatch & Booking Merge:
+
+The system automatically dispatches the lead request to the replacement firm(s) via a replacement wave (POST /api/bookings).
+The new firm is merged directly into your active booking card (assigned_photographers) without requiring you to restart or go through the booking wizard again.
+Customer Notifications:
+
+You receive an in-app notice explaining that the previous firm didn't respond in time or is unavailable.
+You immediately get notified: "We found 1 better firm for you! ✨" letting you know a request was dispatched to fill the slot, keeping your firm count topped up.

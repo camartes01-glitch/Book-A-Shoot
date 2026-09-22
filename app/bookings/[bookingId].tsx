@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { CheckCircle2, Clock, Lock, Mail, Phone, XCircle } from "lucide-react-native";
@@ -29,8 +29,13 @@ const TERMINAL_ALTERNATE = new Set(["VENDOR_REJECTED", "CUSTOMER_CANCELLED", "VE
 const CONTACT_UNLOCKED = new Set(["VENDOR_ACCEPTED", "CUSTOMER_CONFIRMED", "PAYMENT_PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED"]);
 
 export default function BookingDetailScreen() {
-  const { bookingId: bookingIdParam } = useLocalSearchParams<{ bookingId: string | string[] }>();
+  const { bookingId: bookingIdParam, focusFirmId: focusFirmIdParam } = useLocalSearchParams<{
+    bookingId: string | string[];
+    focusFirmId?: string | string[];
+  }>();
   const bookingId = normalizeRouteParam(bookingIdParam);
+  const focusFirmId = normalizeRouteParam(focusFirmIdParam);
+  const focusHandledRef = useRef(false);
   const { refreshBookings, deleteBooking, confirmPhotographer, loadDraft, searchAgainBooking } = useAppStore();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [busy, setBusy] = useState(false);
@@ -84,6 +89,15 @@ export default function BookingDetailScreen() {
       setRefreshing(false);
     }
   }, [load]);
+
+  useEffect(() => {
+    if (!booking || !focusFirmId || focusHandledRef.current) return;
+    const match = booking.assigned_photographers?.find((f) => (f.provider_id || f.id) === focusFirmId);
+    if (match) {
+      setSelectedFirmModal(match);
+      focusHandledRef.current = true;
+    }
+  }, [booking, focusFirmId]);
 
   if (missing && !booking) {
     return (

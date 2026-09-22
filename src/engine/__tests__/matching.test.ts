@@ -208,7 +208,7 @@ describe("photography firm exclusivity & 3-tier budget matching", () => {
     test("never filters out a photography firm based on add-ons (LED wall, drones, web live)", () => {
       const day = eventDay();
       day.ledWall = { enabled: true, size: "12 x 16", screenCount: 2 };
-      day.aerial = { photographyDrones: 2, videographyDrones: 1 };
+      day.aerial = { drones: 3 };
       day.webLive = { enabled: true, quality: "HD", cameraCount: 2, streamingPlatform: "YouTube", accessType: "private" };
 
       const firmWithoutAddonEquipment = vendor({

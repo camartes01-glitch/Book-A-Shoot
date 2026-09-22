@@ -49,7 +49,7 @@ describe("core service + Drone/Aerial add-on transitions", () => {
     expect(isVideographySelected(day)).toBe(false);
     expect(isAerialSelectable(day)).toBe(false);
     expect(isAerialEnabled(day)).toBe(false);
-    expect(day.aerial).toEqual({ photographyDrones: 0, videographyDrones: 0 });
+    expect(day.aerial).toEqual({ drones: 0 });
     expect(shouldShowCoreServiceError(day, false)).toBe(false);
   });
 
@@ -74,24 +74,22 @@ describe("core service + Drone/Aerial add-on transitions", () => {
     expect(isAerialSelectable(day)).toBe(true);
   });
 
-  test("selecting Drone/Aerial after Photography succeeds and writes drone counts", () => {
+  test("selecting Drone/Aerial after Photography succeeds and writes a drone count", () => {
     const day = setAerialEnabled(setPhotographySelected(createEmptyDay(1), true), true);
     expect(isAerialEnabled(day)).toBe(true);
-    expect(day.aerial.photographyDrones).toBe(1);
-    expect(day.aerial.videographyDrones).toBe(0);
+    expect(day.aerial.drones).toBe(1);
   });
 
-  test("selecting Drone/Aerial after Videography succeeds and writes drone counts", () => {
+  test("selecting Drone/Aerial after Videography succeeds and writes a drone count", () => {
     const day = setAerialEnabled(setVideographySelected(createEmptyDay(1), true), true);
     expect(isAerialEnabled(day)).toBe(true);
-    expect(day.aerial.videographyDrones).toBe(1);
-    expect(day.aerial.photographyDrones).toBe(0);
+    expect(day.aerial.drones).toBe(1);
   });
 
   test("Drone/Aerial cannot be turned on without a core service", () => {
     const day = setAerialEnabled(createEmptyDay(1), true);
     expect(isAerialEnabled(day)).toBe(false);
-    expect(day.aerial).toEqual({ photographyDrones: 0, videographyDrones: 0 });
+    expect(day.aerial).toEqual({ drones: 0 });
   });
 
   test("deselecting Photography while Videography remains keeps Drone/Aerial enabled", () => {
@@ -112,11 +110,11 @@ describe("core service + Drone/Aerial add-on transitions", () => {
 
   test("deselecting the last remaining core service disables Drone/Aerial and clears its config", () => {
     let day = setAerialEnabled(setPhotographySelected(createEmptyDay(1), true), true);
-    day = { ...day, aerial: { photographyDrones: 2, videographyDrones: 1 } };
+    day = { ...day, aerial: { drones: 3 } };
     day = setPhotographySelected(day, false);
     expect(isAerialSelectable(day)).toBe(false);
     expect(isAerialEnabled(day)).toBe(false);
-    expect(day.aerial).toEqual({ photographyDrones: 0, videographyDrones: 0 });
+    expect(day.aerial).toEqual({ drones: 0 });
   });
 
   test("turning off the last photography style via applyAerialGate clears Aerial", () => {
@@ -126,7 +124,7 @@ describe("core service + Drone/Aerial add-on transitions", () => {
       photography: { traditional: false, traditionalCount: 1, candid: false, candidCount: 1 },
     });
     expect(isAerialEnabled(day)).toBe(false);
-    expect(day.aerial).toEqual({ photographyDrones: 0, videographyDrones: 0 });
+    expect(day.aerial).toEqual({ drones: 0 });
   });
 
   test("LED Wall can still be selected independently", () => {
@@ -151,7 +149,7 @@ describe("core service + Drone/Aerial add-on transitions", () => {
   });
 
   test("an add-on alone cannot satisfy the required Photography/Videography validation", () => {
-    const aerialOnly = { ...createEmptyDay(1), aerial: { photographyDrones: 1, videographyDrones: 0 } };
+    const aerialOnly = { ...createEmptyDay(1), aerial: { drones: 1 } };
     const ledOnly = { ...createEmptyDay(1), ledWall: { enabled: true, size: "8 x 12", screenCount: 1 } };
     const webOnly = {
       ...createEmptyDay(1),
@@ -216,14 +214,14 @@ describe("core service + Drone/Aerial add-on transitions", () => {
     expect(payload.photography.traditional).toBe(true);
     expect(payload.videography.traditional).toBe(true);
     expect(payload.aerial.enabled).toBe(true);
-    expect(payload.aerial.photographyDrones).toBeGreaterThan(0);
+    expect(payload.aerial.drones).toBeGreaterThan(0);
     expect(payload.ledWall.enabled).toBe(true);
     expect(payload.webLive.enabled).toBe(true);
 
     const req = aggregateRequirement([persisted]);
     expect(req.needsPhotographyTraditional).toBe(true);
     expect(req.needsVideographyTraditional).toBe(true);
-    expect(req.needsAerialPhoto).toBe(true);
+    expect(req.needsAerial).toBe(true);
     expect(req.needsLedWall).toBe(true);
     expect(req.needsWebLive).toBe(true);
   });
@@ -235,8 +233,7 @@ describe("core service + Drone/Aerial add-on transitions", () => {
     expect(req.needsPhotographyCandid).toBe(false);
     expect(req.needsVideographyTraditional).toBe(false);
     expect(req.needsVideographyCandid).toBe(false);
-    expect(req.needsAerialPhoto).toBe(false);
-    expect(req.needsAerialVideo).toBe(false);
+    expect(req.needsAerial).toBe(false);
   });
 
   test("duplicate day keeps service selections and still clears the event date", () => {

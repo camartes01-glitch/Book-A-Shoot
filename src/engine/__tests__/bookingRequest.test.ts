@@ -70,18 +70,18 @@ describe("toCamartesBookingRequest", () => {
     expect(body.service_type).toBe("photography_firm");
   });
 
-  test("Photography + Drone/Aerial serializes aerial counts in the request message", () => {
+  test("Photography + Drone/Aerial serializes the drone count in the request message", () => {
     const day = setAerialEnabled(setPhotographySelected(completeDay(1), true), true);
     const body = toCamartesBookingRequest(bookingWith([day]), null);
     expect(body.message).toContain("Aerial:");
-    expect(body.message).toContain("photo drone");
+    expect(body.message).toContain("drone");
     expect(catalogServiceTypes([day])).toContain("photography_firm");
   });
 
-  test("Videography + Drone/Aerial serializes video drones", () => {
+  test("Videography + Drone/Aerial serializes the drone count", () => {
     const day = setAerialEnabled(setVideographySelected(completeDay(1), true), true);
     const body = toCamartesBookingRequest(bookingWith([day]), null);
-    expect(body.message).toContain("video drone");
+    expect(body.message).toContain("drone");
     expect(catalogServiceTypes([day])).toContain("photography_firm");
   });
 

@@ -136,7 +136,7 @@ describe("core services remain required; add-ons stay optional", () => {
 
   test("Drone, LED Wall and Web Live do not satisfy the core-service rule", () => {
     const addOnsOnly = day({
-      aerial: { photographyDrones: 1, videographyDrones: 0 },
+      aerial: { drones: 1 },
       ledWall: { enabled: true, size: "8 x 12", screenCount: 1 },
       webLive: { enabled: true, quality: "HD", cameraCount: 1, streamingPlatform: "", accessType: "private" },
     });

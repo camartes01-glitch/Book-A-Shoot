@@ -32,6 +32,7 @@ import {
 } from "@/src/services/pushNotificationService";
 import { selectionFeedback } from "@/src/utils/haptics";
 import type { AppNotification, AppNotificationCategory } from "@/src/types/booking";
+import { resolveNotificationRoute } from "@/src/domain/notificationRouting";
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -110,64 +111,11 @@ export default function NotificationsScreen() {
       }
     }
 
-    const titleLower = (n.title || "").toLowerCase();
-    const bodyLower = (n.body || "").toLowerCase();
-
-    const isChatMessage =
-      n.category === "message" ||
-      n.type === "message" ||
-      Boolean(n.userId) ||
-      Boolean(n.firmId) ||
-      titleLower.includes("message") ||
-      titleLower.includes("chat") ||
-      titleLower.includes("text") ||
-      bodyLower.includes("texted") ||
-      bodyLower.includes("messaged") ||
-      bodyLower.includes("sent a message");
-
-    let targetUserId = n.userId || n.firmId;
-    let targetFirmName = n.firmName;
-    let targetFirmPicture: string | undefined = undefined;
-
-    if (!targetUserId && n.bookingId) {
-      const matchBooking = bookings.find((b) => b.bookingId === n.bookingId);
-      if (matchBooking) {
-        const assigned = matchBooking.assigned_photographers || [];
-        const matchedFirm = assigned.find(
-          (f) =>
-            (f.name &&
-              (titleLower.includes(f.name.toLowerCase()) || bodyLower.includes(f.name.toLowerCase()))) ||
-            f.has_accepted,
-        );
-        if (matchedFirm) {
-          targetUserId = matchedFirm.provider_id || matchedFirm.id;
-          targetFirmName = matchedFirm.name;
-          targetFirmPicture = matchedFirm.profile_image || undefined;
-        }
-      }
-    }
-
-    if (isChatMessage) {
-      if (targetUserId) {
-        router.push({
-          pathname: "/chat/[userId]",
-          params: {
-            userId: targetUserId,
-            name: targetFirmName || "Photography Firm",
-            picture: targetFirmPicture || "",
-            accepted: "true",
-          },
-        });
-        return;
-      }
-      router.push("/(tabs)/messages");
-      return;
-    }
-
-    if (n.bookingId) {
-      router.push(`/bookings/${n.bookingId}`);
+    const route = resolveNotificationRoute(n, bookings);
+    if (route.params) {
+      router.push({ pathname: route.pathname as any, params: route.params });
     } else {
-      router.push("/(tabs)/bookings");
+      router.push(route.pathname as any);
     }
   };
 
@@ -245,11 +193,14 @@ export default function NotificationsScreen() {
       ) : (
         <View style={styles.listContainer}>
           {filteredNotifications.map((n, idx) => {
-            const isMsg = n.category === "message" || n.type === "message";
-            const isReminder = n.category === "reminder" || n.type === "reminder";
+            const isMsg = n.category === "message" || n.type === "message" || n.type === "chat_message";
+            const isReminder = n.category === "reminder" || n.type === "reminder" || n.type === "event_reminder";
             const isMatch = n.type === "match";
-            const isReject = (n.title || "").toLowerCase().includes("unavailable") || (n.body || "").toLowerCase().includes("unavailable");
-            const isAccept = (n.title || "").toLowerCase().includes("accepted");
+            const isReject =
+              n.type === "vendor_rejected" ||
+              (n.title || "").toLowerCase().includes("unavailable") ||
+              (n.body || "").toLowerCase().includes("unavailable");
+            const isAccept = n.type === "vendor_accepted" || (n.title || "").toLowerCase().includes("accepted");
 
             return (
               <Pressable

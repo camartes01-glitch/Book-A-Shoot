@@ -182,7 +182,7 @@ describe("Pooja is an event type, not a service", () => {
   test("Pooja + Drone follows existing add-on rules", () => {
     const poojaOnly = completeDay({
       photography: { traditional: false, traditionalCount: 1, candid: false, candidCount: 1 },
-      aerial: { photographyDrones: 1, videographyDrones: 0 },
+      aerial: { drones: 1 },
     });
     expect(validateDay(poojaOnly).some((i) => i.code === "CORE_SERVICE_REQUIRED")).toBe(true);
     const withPhoto = setAerialEnabled(setPhotographySelected(completeDay(), true), true);

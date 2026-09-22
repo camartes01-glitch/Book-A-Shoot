@@ -39,8 +39,7 @@ export function sanitizeDayAddOns(day: EventDay): EventDay {
   return applyAerialGate({
     ...day,
     aerial: {
-      photographyDrones: Math.max(0, day.aerial?.photographyDrones ?? 0),
-      videographyDrones: Math.max(0, day.aerial?.videographyDrones ?? 0),
+      drones: Math.max(0, day.aerial?.drones ?? 0),
     },
     ledWall: ledEnabled ? { ...day.ledWall, enabled: true } : { ...DISABLED_LED_WALL },
     webLive: webEnabled ? { ...day.webLive, enabled: true } : { ...DISABLED_WEB_LIVE },
@@ -112,7 +111,7 @@ export function createEmptyDay(order: number): EventDay {
     overnight: false,
     photography: { traditional: false, traditionalCount: 1, candid: false, candidCount: 1 },
     videography: { traditional: false, traditionalCount: 1, candid: false, candidCount: 1 },
-    aerial: { photographyDrones: 0, videographyDrones: 0 },
+    aerial: { drones: 0 },
     ledWall: { ...DISABLED_LED_WALL },
     webLive: { ...DISABLED_WEB_LIVE },
   });

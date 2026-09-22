@@ -23,7 +23,8 @@ import {
   toCamartesBookingRequest,
   mapCamartesBookingStatus,
 } from "@/src/domain/bookingRequest";
-import { isCompletedBooking } from "@/src/domain/bookingFilters";
+import { getBookingEventTitle, isCompletedBooking } from "@/src/domain/bookingFilters";
+import { buildNotificationContent, categoryForType } from "@/src/domain/notificationContent";
 import { checkBudgetFeasibility, generatePackageOptions } from "@/src/engine/pricing";
 import { matchVendors } from "@/src/engine/matching";
 import { defaultExpectedDeliveryDate, validateBooking, validateBudget } from "@/src/engine/validation";
@@ -35,6 +36,29 @@ import { addNotification } from "@/src/services/notificationsStore";
 import { isDemoAuthMode } from "@/src/config/authMode";
 
 const BOOKINGS_KEY = "camartes-customer:bookings:v1";
+
+/**
+ * A "Search Again" retry (booking.replacedBookingId set) dispatches to freshly
+ * found firms, which reads differently from a first-time request — same trigger
+ * point, different copy/type per docs/VENDOR_APP_BACKEND_CHANGES.md's contract.
+ */
+function buildDispatchNotification(
+  booking: Booking,
+  assignedProviderIds: string[],
+  profile: CustomerProfile,
+): { type: "request_sent" | "new_search_dispatched"; title: string; body: string } {
+  const firmNames = assignedProviderIds
+    .map((id) => booking.matches?.find((m) => m.vendorId === id)?.studioName)
+    .filter((n): n is string => Boolean(n));
+  const type: "request_sent" | "new_search_dispatched" = booking.replacedBookingId ? "new_search_dispatched" : "request_sent";
+  const { title, body } = buildNotificationContent(type, {
+    customerName: profile.name,
+    eventName: getBookingEventTitle(booking),
+    firmCount: assignedProviderIds.length,
+    firmNames,
+  });
+  return { type, title, body };
+}
 
 export async function readAllBookings(): Promise<Booking[]> {
   try {
@@ -157,7 +181,7 @@ function remoteOnlyBooking(customerId: string, remote: ReturnType<typeof parseRe
   if (remote.addOns?.length) {
     const aLower = remote.addOns.map((a) => a.toLowerCase());
     if (aLower.some((a) => a.includes("drone") || a.includes("aerial"))) {
-      day.aerial.photographyDrones = 1;
+      day.aerial.drones = 1;
     }
   }
 
@@ -234,6 +258,13 @@ function remoteOnlyBooking(customerId: string, remote: ReturnType<typeof parseRe
   };
 }
 
+/** True when `remoteId` is a replacement-wave id already folded into some
+ * local booking (see `dispatchReplacementFirms`) — such a row must never be
+ * adopted as its own separate booking card. */
+function isKnownWaveId(local: Booking[], remoteId: string): boolean {
+  return local.some((b) => b.replacementWaveIds?.includes(remoteId));
+}
+
 export function mergeLocalWithRemote(local: Booking[], remotePayload: unknown, customerId: string): Booking[] {
   const remote = parseRemoteBookingList(remotePayload);
   const used = new Set<string>();
@@ -255,7 +286,7 @@ export function mergeLocalWithRemote(local: Booking[], remotePayload: unknown, c
   }
 
   for (const row of remote) {
-    if (used.has(row.id) || seenKeys.has(row.id)) continue;
+    if (used.has(row.id) || seenKeys.has(row.id) || isKnownWaveId(local, row.id)) continue;
     seenKeys.add(row.id);
     merged.push(remoteOnlyBooking(customerId, row));
   }
@@ -321,6 +352,55 @@ export async function getBooking(bookingId: string): Promise<Booking | null> {
   return all.find((b) => b.bookingId === bookingId || b.remoteBookingId === bookingId) ?? null;
 }
 
+const TERMINAL_WAVE_STATUSES = new Set(["rejected", "declined", "vendor_rejected", "expired", "cancelled", "vendor_cancelled"]);
+
+/** Once a wave's own remote status goes terminal, every firm in it that never
+ * individually accepted is effectively dead — the customer just never hears
+ * "accepted" from them. Firms that DID accept are untouched. */
+function markDeadIfWaveTerminal(firms: AssignedPhotographer[], remoteStatus: string): AssignedPhotographer[] {
+  if (!TERMINAL_WAVE_STATUSES.has(remoteStatus)) return firms;
+  return firms.map((f) => (f.has_accepted ? f : { ...f, has_rejected: true }));
+}
+
+/** Fetches one *replacement wave's* remote booking row (see
+ * `dispatchReplacementFirms`) and returns just its firms, dead-marked if the
+ * wave itself has gone terminal. Deliberately minimal — unlike the primary
+ * fetch in `refreshRemoteBookingStatus`, a wave never owns package/budget/
+ * deliverables state, only a slice of `assigned_photographers`. */
+async function fetchWaveFirms(remoteId: string): Promise<AssignedPhotographer[]> {
+  try {
+    const res = await camartesFetch<any>(`/api/bookings/${encodeURIComponent(remoteId)}`, {}, { auth: true, requireAuth: false });
+    if (!res) return [];
+    const bData = res.booking || res;
+    const snap = parseRemoteBookingRow(res) || parseRemoteBookingRow(bData);
+    const firms: AssignedPhotographer[] = snap?.assignedPhotographers || res.assigned_photographers || bData.assigned_photographers || [];
+    const remoteStatus = String(bData.status || res.status || "pending").toLowerCase();
+    return markDeadIfWaveTerminal(firms, remoteStatus);
+  } catch {
+    return [];
+  }
+}
+
+/** Merges every replacement wave's firms into the primary's, by provider id
+ * (a firm only ever belongs to one wave, so this is a plain union, not a
+ * conflict resolution). No-op when there are no waves — every booking today. */
+async function mergeReplacementWaves(booking: Booking, primaryFirms: AssignedPhotographer[]): Promise<AssignedPhotographer[]> {
+  if (!booking.replacementWaveIds?.length) return primaryFirms;
+  const waveResults = await Promise.all(booking.replacementWaveIds.map(fetchWaveFirms));
+  const byId = new Map<string, AssignedPhotographer>();
+  for (const f of primaryFirms) {
+    const id = f.provider_id || f.id;
+    if (id) byId.set(id, f);
+  }
+  for (const waveFirms of waveResults) {
+    for (const f of waveFirms) {
+      const id = f.provider_id || f.id;
+      if (id) byId.set(id, f);
+    }
+  }
+  return Array.from(byId.values());
+}
+
 export async function refreshRemoteBookingStatus(bookingId: string): Promise<Booking | null> {
   const booking = await getBooking(bookingId);
   if (!booking?.remoteBookingId) return booking;
@@ -335,12 +415,13 @@ export async function refreshRemoteBookingStatus(bookingId: string): Promise<Boo
     if (res?.booking || res?.id || res?.booking_id) {
       const bData = res.booking || res;
       const snap = parseRemoteBookingRow(res) || parseRemoteBookingRow(bData);
-      const assignedPhotographers: AssignedPhotographer[] =
+      let assignedPhotographers: AssignedPhotographer[] =
         snap?.assignedPhotographers ||
         res.assigned_photographers ||
         bData.assigned_photographers ||
         [];
       const remoteStatus = String(bData.status || res.status || "pending").toLowerCase();
+      assignedPhotographers = markDeadIfWaveTerminal(assignedPhotographers, remoteStatus);
       const hasAccepted =
         assignedPhotographers.some((f) => f.has_accepted) ||
         remoteStatus === "accepted" ||
@@ -426,6 +507,8 @@ export async function refreshRemoteBookingStatus(bookingId: string): Promise<Boo
           assignedPhotographers.length || snap?.assignedCount || booking.assigned_count,
         contactMasked: !hasAccepted && !isConfirmed,
       };
+      updatedBooking.assigned_photographers = await mergeReplacementWaves(booking, updatedBooking.assigned_photographers || []);
+      updatedBooking.assigned_count = updatedBooking.assigned_photographers.length || updatedBooking.assigned_count;
       return await saveBooking(updatedBooking);
     }
   } catch (err) {
@@ -786,15 +869,13 @@ export async function submitVendorRequest(bookingId: string): Promise<Booking> {
     await writeAllBookings(remaining);
     await saveBooking(submitted);
 
-    const assignedCountText = assignedCount > 0 ? `${assignedCount} verified photography firms` : "Camartes";
-    const notificationBody = firmsStatusMessage
-      ? `${firmsStatusMessage} Contact details remain masked until a firm accepts.`
-      : `Your request ${submitted.bookingId} was dispatched to ${assignedCountText}. Contact details remain masked until accepted.`;
-
+    const dispatchNotif = buildDispatchNotification(submitted, assigned, profile);
     await addNotification({
       id: makeId("ntf"),
-      title: "Lead request dispatched",
-      body: notificationBody,
+      title: dispatchNotif.title,
+      body: dispatchNotif.body,
+      type: dispatchNotif.type,
+      category: categoryForType(dispatchNotif.type),
       createdAt: new Date().toISOString(),
       read: false,
       bookingId: submitted.bookingId,
@@ -869,15 +950,13 @@ export async function submitVendorRequest(bookingId: string): Promise<Booking> {
   await writeAllBookings(remaining);
   await saveBooking(submitted);
 
-  const assignedCountText = assignedCount > 0 ? `${assignedCount} verified photography firms` : "Camartes";
-  const notificationBody = firmsStatusMessage
-    ? `${firmsStatusMessage} Contact details remain masked until a firm accepts.`
-    : `Your request ${submitted.bookingId} was dispatched to ${assignedCountText}. Contact details remain masked until accepted.`;
-
+  const dispatchNotif = buildDispatchNotification(submitted, assigned, profile);
   await addNotification({
     id: makeId("ntf"),
-    title: "Lead request dispatched",
-    body: notificationBody,
+    title: dispatchNotif.title,
+    body: dispatchNotif.body,
+    type: dispatchNotif.type,
+    category: categoryForType(dispatchNotif.type),
     createdAt: new Date().toISOString(),
     read: false,
     bookingId: submitted.bookingId,
@@ -1090,5 +1169,104 @@ export async function cloneBookingForSearchAgain(booking: Booking): Promise<Book
   } catch (e) {
     return cloned;
   }
+}
+
+/**
+ * Automatically finds up to `count` new photography firms this booking has
+ * never seen (across every prior wave) and sends them a real request via the
+ * same `POST /api/bookings` dispatch `submitVendorRequest` already uses —
+ * scoped to just these new provider ids and tracked as a "replacement wave"
+ * (`Booking.replacementWaveIds`) so it folds back into this same booking
+ * instead of appearing as a separate one. Called by the notification engine
+ * when a firm rejects or times out and an open slot needs filling — never
+ * waits for customer approval, per the automatic-replacement requirement.
+ */
+export async function dispatchReplacementFirms(
+  booking: Booking,
+  count: number,
+): Promise<{ booking: Booking; addedFirmNames: string[] }> {
+  if (count <= 0) return { booking, addedFirmNames: [] };
+
+  const excludedSet = new Set<string>(booking.excludedVendorIds || []);
+  (booking.assignedProviderIds || []).forEach((id) => excludedSet.add(id));
+  (booking.assigned_photographers || []).forEach((f) => {
+    if (f.provider_id) excludedSet.add(f.provider_id);
+    if (f.id) excludedSet.add(f.id);
+  });
+  (booking.matches || []).forEach((m) => excludedSet.add(m.vendorId));
+
+  const first = [...booking.days].sort((a, b) => a.order - b.order)[0];
+  const { vendors } = await fetchVendorCatalog({
+    city: booking.providerLocationPreference?.city || first?.location?.city || null,
+    eventDate: first?.eventDate || null,
+    serviceTypes: catalogServiceTypes(booking.days),
+    latitude: first?.location?.latitude,
+    longitude: first?.location?.longitude,
+  });
+  const candidates = matchVendors(
+    booking,
+    vendors,
+    booking.selectedPackage || "signature",
+    booking.budget ?? 0,
+    Array.from(excludedSet),
+  );
+  const chosen = candidates.slice(0, count);
+
+  if (chosen.length === 0) {
+    const updated = await saveBooking({
+      ...booking,
+      firms_status_message: "We searched for more suitable photography firms but couldn't find any additional matches right now.",
+    });
+    return { booking: updated, addedFirmNames: [] };
+  }
+
+  const newProviderIds = chosen.map((m) => m.vendorId);
+  const newFirms: AssignedPhotographer[] = chosen.map((m) => ({
+    id: m.vendorId,
+    provider_id: m.vendorId,
+    name: m.studioName,
+    rating: m.rating,
+    city: m.city,
+    profile_image: m.imageUrl,
+    has_accepted: false,
+    is_confirmed: false,
+    can_confirm: false,
+    contact_unlocked: false,
+    contact_phone: m.contactPhone,
+    contact_email: m.contactEmail,
+  }));
+
+  let waveRemoteId: string;
+  if (isDemoAuthMode()) {
+    waveRemoteId = `bk_demo_${makeId("wave")}`;
+  } else {
+    const profile = await getStoredProfile();
+    const waveView: Booking = { ...booking, assignedProviderIds: newProviderIds, selectedVendorId: newProviderIds[0] };
+    try {
+      const body = toCamartesBookingRequest(waveView, profile);
+      const response = await camartesFetch<unknown>(
+        "/api/bookings",
+        { method: "POST", body: JSON.stringify(body) },
+        { auth: true, requireAuth: false },
+      );
+      waveRemoteId = remoteBookingIdOf(response) || `bk_${makeId("wave")}`;
+    } catch (err) {
+      if (err instanceof CamartesApiError && (err.status === 400 || err.status === 403 || err.status === 500)) {
+        throw err;
+      }
+      waveRemoteId = `bk_${makeId("wave")}`;
+    }
+  }
+
+  const updated = await saveBooking({
+    ...booking,
+    replacementWaveIds: [...(booking.replacementWaveIds || []), waveRemoteId],
+    assignedProviderIds: [...(booking.assignedProviderIds || []), ...newProviderIds],
+    assigned_photographers: [...(booking.assigned_photographers || []), ...newFirms],
+    assigned_count: (booking.assigned_photographers?.length || 0) + newFirms.length,
+    firms_status_message: null,
+  });
+
+  return { booking: updated, addedFirmNames: newFirms.map((f) => f.name) };
 }
 

@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { Check, Compass, MapPin, Navigation } from "lucide-react-native";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { Button, Card, Field, Muted, SectionTitle } from "@/src/components/ui";
+import { PlaceAutocompleteField } from "@/src/components/PlaceAutocompleteField";
 import { useAppStore } from "@/src/state/AppProvider";
 import { colors, radius, spacing } from "@/src/constants/theme";
 import type { ProviderLocationPreference } from "@/src/types/booking";
@@ -18,27 +19,45 @@ export default function ProviderLocationPreferenceScreen() {
     activeDraft?.providerLocationPreference?.mode ?? "event_location",
   );
   const [customCity, setCustomCity] = useState(
-    activeDraft?.providerLocationPreference?.city ?? (mode !== "event_location" ? defaultCity : ""),
+    activeDraft?.providerLocationPreference?.mode === "preferred_area"
+      ? activeDraft.providerLocationPreference.city ?? ""
+      : "",
+  );
+  const [anotherCity, setAnotherCity] = useState<{ city: string; formattedAddress: string } | null>(
+    activeDraft?.providerLocationPreference?.mode === "another_area" && activeDraft.providerLocationPreference.city
+      ? {
+          city: activeDraft.providerLocationPreference.city,
+          formattedAddress: activeDraft.providerLocationPreference.formattedAddress || activeDraft.providerLocationPreference.city,
+        }
+      : null,
   );
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (activeDraft?.providerLocationPreference) {
-      setMode(activeDraft.providerLocationPreference.mode);
-      if (activeDraft.providerLocationPreference.city) {
-        setCustomCity(activeDraft.providerLocationPreference.city);
-      }
+    const pref = activeDraft?.providerLocationPreference;
+    if (!pref) return;
+    setMode(pref.mode);
+    if (pref.mode === "preferred_area" && pref.city) {
+      setCustomCity(pref.city);
+    }
+    if (pref.mode === "another_area" && pref.city) {
+      setAnotherCity({ city: pref.city, formattedAddress: pref.formattedAddress || pref.city });
     }
   }, [activeDraft?.providerLocationPreference]);
 
   const onContinue = async () => {
     setLoading(true);
     try {
-      const pref: ProviderLocationPreference = {
-        mode,
-        city: mode === "event_location" ? (firstDay?.location.city || defaultCity) : (customCity.trim() || defaultCity),
-        formattedAddress: mode === "event_location" ? defaultAddress : customCity.trim(),
-      };
+      const pref: ProviderLocationPreference =
+        mode === "event_location"
+          ? { mode, city: firstDay?.location.city || defaultCity, formattedAddress: defaultAddress }
+          : mode === "another_area"
+            ? {
+                mode,
+                city: anotherCity?.city || defaultCity,
+                formattedAddress: anotherCity?.formattedAddress || anotherCity?.city || "",
+              }
+            : { mode, city: customCity.trim() || defaultCity, formattedAddress: customCity.trim() };
       await setProviderLocationPreference(pref);
       router.push("/booking/matches");
     } finally {
@@ -150,13 +169,20 @@ export default function ProviderLocationPreferenceScreen() {
         </View>
 
         {mode === "another_area" ? (
-          <View style={{ marginTop: spacing.sm }}>
-            <Field
+          <View style={{ marginTop: spacing.sm, gap: 4 }}>
+            <PlaceAutocompleteField
               label="City name"
-              value={customCity}
               placeholder="e.g. Mumbai, Bengaluru, Delhi"
-              onChangeText={setCustomCity}
+              restrictToCities
+              clearQueryOnSelect={false}
+              onSelect={(location) =>
+                setAnotherCity({
+                  city: location.city || location.formattedAddress,
+                  formattedAddress: location.formattedAddress,
+                })
+              }
             />
+            {anotherCity ? <Muted>Selected: {anotherCity.formattedAddress || anotherCity.city}</Muted> : null}
           </View>
         ) : null}
       </Pressable>

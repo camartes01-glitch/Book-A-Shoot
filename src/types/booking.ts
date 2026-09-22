@@ -46,8 +46,7 @@ export type VideographyRequirement = {
 };
 
 export type AerialRequirement = {
-  photographyDrones: number;
-  videographyDrones: number;
+  drones: number;
 };
 
 export type LedWallRequirement = {
@@ -209,6 +208,10 @@ export type AssignedPhotographer = {
   contact_email?: string;
   contact_whatsapp?: string;
   accepted_at?: string | null;
+  /** Set by the backend once a firm has declined/timed out on this lead. */
+  has_rejected?: boolean;
+  is_rejected?: boolean;
+  status?: "REJECTED" | "TIMED_OUT" | "EXPIRED" | string;
   portfolio_items?: any[];
   social_unlocked?: boolean;
   instagram_url?: string;
@@ -261,6 +264,14 @@ export type Booking = {
   eventName?: string | null;
   replacedBookingId?: string | null;
   excludedVendorIds?: string[];
+  /**
+   * Remote booking ids from automatic per-slot replacement dispatches (see
+   * `dispatchReplacementFirms`) — each is its own `POST /api/bookings` row
+   * server-side (there's no "add providers to an existing booking" endpoint),
+   * but stays folded into this same local Booking/card, never surfaced as a
+   * separate one. Empty for every booking created before this feature.
+   */
+  replacementWaveIds?: string[];
 };
 
 export type CustomerProfile = {
@@ -274,6 +285,29 @@ export type CustomerProfile = {
 
 export type AppNotificationCategory = "all" | "booking" | "message" | "reminder";
 
+/**
+ * Canonical notification types the client can generate/display.
+ * Legacy values ("message" | "booking" | "system" | "reminder" | "match") are kept
+ * for backward compatibility with whatever the Camartes backend already sends,
+ * since it has no shared enum with the client today (see notificationsStore.ts).
+ * There is deliberately no "payment" type — see notificationContent.isPaymentRelated().
+ */
+export type AppNotificationType =
+  | "welcome"
+  | "request_sent"
+  | "vendor_accepted"
+  | "vendor_rejected"
+  | "new_search_dispatched"
+  | "chat_message"
+  | "event_reminder"
+  | "draft_resume_nudge"
+  | "marketing_nudge"
+  | "message"
+  | "booking"
+  | "system"
+  | "reminder"
+  | "match";
+
 export type AppNotification = {
   id: string;
   title: string;
@@ -284,7 +318,7 @@ export type AppNotification = {
   userId?: string;
   firmId?: string;
   firmName?: string;
-  type?: "message" | "booking" | "system" | "reminder" | "match";
+  type?: AppNotificationType;
   category?: AppNotificationCategory;
   actionType?: "reply" | "view_booking" | "view_matches";
   data?: Record<string, unknown>;

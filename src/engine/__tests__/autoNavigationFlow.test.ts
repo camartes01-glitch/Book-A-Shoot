@@ -159,7 +159,7 @@ describe("Automatic Navigation & Validation Gates", () => {
     test("add-ons alone (Drone, LED Wall, Web Live) cannot satisfy the core service requirement", () => {
       const day = sanitizeEventDay({
         ...createEmptyDay(1),
-        aerial: { photographyDrones: 1, videographyDrones: 0 },
+        aerial: { drones: 1 },
         ledWall: { enabled: true, size: "8 x 12", screenCount: 1 },
         webLive: { enabled: true, quality: "HD", cameraCount: 1, streamingPlatform: "", accessType: "private" },
       });

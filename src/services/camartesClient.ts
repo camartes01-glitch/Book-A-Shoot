@@ -54,19 +54,9 @@ export class CamartesApiError extends Error {
 export async function getAuthToken(): Promise<string | null> {
   try {
     const direct = await AsyncStorage.getItem(TOKEN_KEY);
-    if (direct && direct.trim()) return direct.trim();
-
-    // Check active Supabase session
-    try {
-      const { supabase } = await import("./supabaseClient");
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.access_token) {
-        return data.session.access_token;
-      }
-    } catch {
-      // Non-blocking
+    if (direct && direct.trim()) {
+      return direct.trim();
     }
-
     return null;
   } catch {
     return null;
@@ -196,8 +186,8 @@ export async function camartesFetch<T>(
     // Non-blocking
   }
   const needsAuth = opts.auth !== false;
-  const token = needsAuth ? await getAuthToken() : null;
-  const hasUserAuth = Boolean(token) || headers.has("X-User-Id") || headers.has("X-Guest-Id");
+  const token = isDemoAuthMode() ? null : needsAuth ? await getAuthToken() : null;
+  const hasUserAuth = Boolean(token) || (!isDemoAuthMode() && (headers.has("X-User-Id") || headers.has("X-Guest-Id")));
   if (opts.requireAuth && !hasUserAuth) {
     throw new CamartesApiError("Sign in to your Book A Shoot account to continue.", 401);
   }

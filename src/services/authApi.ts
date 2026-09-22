@@ -376,31 +376,96 @@ export async function restoreSession(): Promise<CustomerProfile | null> {
     return restoreDemoSession();
   }
   const token = await getAuthToken();
-  if (token && !token.startsWith("google-session-")) {
+  if (token) {
     try {
       const me = await camartesFetch<unknown>("/api/auth/me", {}, { requireAuth: true });
       const existing = await getStoredProfile();
       return persistProfile(profileFromCamartesUser(me, existing ?? {}));
     } catch (error) {
       if (error instanceof CamartesApiError && error.status === 401) {
-        await clearLocalSession();
-        return null;
+        let hasSupabaseSession = false;
+        try {
+          const { supabase } = await import("./supabaseClient");
+          const { data } = await supabase.auth.getSession();
+          if (data?.session?.user) {
+            hasSupabaseSession = true;
+          }
+        } catch {
+          // Ignore
+        }
+        await setAuthToken(null);
+        if (!hasSupabaseSession) {
+          await AsyncStorage.removeItem(PROFILE_KEY);
+          return null;
+        }
       }
     }
   }
+
   const stored = await getStoredProfile();
   if (stored) {
     return stored;
   }
+
+  // Safety net: restore from active Supabase Google OAuth session if stored profile was cleared
+  try {
+    const { supabase } = await import("./supabaseClient");
+    const { data } = await supabase.auth.getSession();
+    if (data?.session?.user) {
+      const { extractUserInfoFromSupabaseUser } = await import("./supabaseAuth");
+      const userInfo = extractUserInfoFromSupabaseUser(data.session.user);
+      const remembered = userInfo.email ? await getProfileFromRegistry(userInfo.email) : null;
+      const profile: CustomerProfile = {
+        customerId: remembered?.customerId || (userInfo.google_id ? `google-${userInfo.google_id}` : makeId("cust")),
+        name: userInfo.name || remembered?.name || userInfo.email.split("@")[0] || "Customer",
+        email: userInfo.email || remembered?.email || "",
+        mobile: userInfo.mobile || remembered?.mobile || "",
+        avatarInitials: initialsOf(userInfo.name || remembered?.name || userInfo.email),
+        savedAddresses: remembered?.savedAddresses ?? [],
+      };
+      const reconciled = await reconcileProfileByEmail(profile);
+      return persistProfile(reconciled);
+    }
+  } catch {
+    // Non-blocking
+  }
+
   return null;
 }
 
 export async function updateProfile(patch: Partial<CustomerProfile>): Promise<CustomerProfile> {
-  const existing = (await getStoredProfile()) ?? (patch.email ? await getProfileFromRegistry(patch.email) : null);
+  let existing = await getStoredProfile();
+  const lookupEmail = existing?.email || patch.email;
+  if (!existing && lookupEmail) {
+    existing = await getProfileFromRegistry(lookupEmail);
+  }
+  if (!existing) {
+    // Safety net: check active Supabase OAuth session
+    try {
+      const { supabase } = await import("./supabaseClient");
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.user) {
+        const { extractUserInfoFromSupabaseUser } = await import("./supabaseAuth");
+        const userInfo = extractUserInfoFromSupabaseUser(data.session.user);
+        const email = patch.email || userInfo.email;
+        const remembered = email ? await getProfileFromRegistry(email) : null;
+        existing = {
+          customerId: remembered?.customerId || (userInfo.google_id ? `google-${userInfo.google_id}` : makeId("cust")),
+          name: patch.name || userInfo.name || remembered?.name || "Customer",
+          email: email || remembered?.email || "",
+          mobile: patch.mobile || userInfo.mobile || remembered?.mobile || "",
+          avatarInitials: initialsOf(patch.name || userInfo.name || "Customer"),
+          savedAddresses: remembered?.savedAddresses ?? [],
+        };
+      }
+    } catch {
+      // Non-blocking
+    }
+  }
   if (!existing) throw new Error("No signed-in customer.");
   
   const token = await getAuthToken();
-  if (token && !isDemoAuthMode() && !token.startsWith("google-session-")) {
+  if (token && !isDemoAuthMode()) {
     try {
       await camartesFetch(
         "/api/profile",
@@ -422,8 +487,12 @@ export async function updateProfile(patch: Partial<CustomerProfile>): Promise<Cu
     }
   }
 
-  const next = { ...existing, ...patch };
+  const next: CustomerProfile = { ...existing, ...patch };
   if (patch.name) next.avatarInitials = initialsOf(patch.name);
+  if (patch.email) next.email = patch.email;
+  if (patch.mobile) next.mobile = patch.mobile;
+
+  await saveProfileToRegistry(next);
   return persistProfile(next);
 }
 

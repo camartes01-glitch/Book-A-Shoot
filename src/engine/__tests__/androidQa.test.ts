@@ -43,8 +43,7 @@ describe("Android QA — fresh booking / add-on defaults", () => {
     const day = createEmptyDay(1);
     expect(day.ledWall.enabled).toBe(false);
     expect(day.webLive.enabled).toBe(false);
-    expect(day.aerial.photographyDrones).toBe(0);
-    expect(day.aerial.videographyDrones).toBe(0);
+    expect(day.aerial.drones).toBe(0);
     expect(isDayComplete(day)).toBe(false);
   });
 
@@ -94,7 +93,7 @@ describe("Android QA — add-on validation", () => {
     }],
     ["Aerial only", (d: EventDay) => {
       d.photography = { traditional: false, traditionalCount: 1, candid: false, candidCount: 1 };
-      d.aerial = { photographyDrones: 1, videographyDrones: 0 };
+      d.aerial = { drones: 1 };
     }],
   ])("%s is rejected with the core-service message", (_name, setup) => {
     const day = completeDay(1);

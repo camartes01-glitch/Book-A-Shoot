@@ -31,14 +31,23 @@ export function isGooglePlacesConfigured(): boolean {
   return GOOGLE_PLACES_API_KEY.length > 0;
 }
 
-export async function searchPlaceSuggestions(query: string): Promise<PlaceSuggestion[]> {
+export type PlaceSearchOptions = {
+  /** Restrict Google Places Autocomplete results to city-level places only
+   * (e.g. the "Another city" provider-location search, as opposed to a full
+   * street-address search). No-op against the offline city dataset, which is
+   * already city-only. */
+  restrictToCities?: boolean;
+};
+
+export async function searchPlaceSuggestions(query: string, options: PlaceSearchOptions = {}): Promise<PlaceSuggestion[]> {
   if (!query.trim()) return [];
 
   if (isGooglePlacesConfigured()) {
     try {
+      const typesParam = options.restrictToCities ? "&types=(cities)" : "";
       const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
         query,
-      )}&components=country:in&key=${GOOGLE_PLACES_API_KEY}`;
+      )}&components=country:in${typesParam}&key=${GOOGLE_PLACES_API_KEY}`;
       const res = await fetch(url);
       const json = (await res.json()) as { predictions?: Array<{ place_id: string; description: string; structured_formatting?: { main_text?: string; secondary_text?: string } }> };
       return (json.predictions ?? []).map((p) => ({

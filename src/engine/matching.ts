@@ -33,16 +33,14 @@ type AggregatedRequirement = {
   needsPhotographyCandid: boolean;
   needsVideographyTraditional: boolean;
   needsVideographyCandid: boolean;
-  needsAerialPhoto: boolean;
-  needsAerialVideo: boolean;
+  needsAerial: boolean;
   needsLedWall: boolean;
   needsWebLive: boolean;
   maxTraditionalPhotographers: number;
   maxCandidPhotographers: number;
   maxTraditionalVideographers: number;
   maxCandidVideographers: number;
-  maxPhotoDrones: number;
-  maxVideoDrones: number;
+  maxDrones: number;
   maxLedScreens: number;
   maxWebLiveCameras: number;
 };
@@ -56,16 +54,14 @@ export function aggregateRequirement(days: EventDay[]): AggregatedRequirement {
       needsPhotographyCandid: acc.needsPhotographyCandid || day.photography.candid,
       needsVideographyTraditional: acc.needsVideographyTraditional || day.videography.traditional,
       needsVideographyCandid: acc.needsVideographyCandid || day.videography.candid,
-      needsAerialPhoto: acc.needsAerialPhoto || day.aerial.photographyDrones > 0,
-      needsAerialVideo: acc.needsAerialVideo || day.aerial.videographyDrones > 0,
+      needsAerial: acc.needsAerial || day.aerial.drones > 0,
       needsLedWall: acc.needsLedWall || day.ledWall.enabled,
       needsWebLive: acc.needsWebLive || day.webLive.enabled,
       maxTraditionalPhotographers: Math.max(acc.maxTraditionalPhotographers, day.photography.traditional ? day.photography.traditionalCount : 0),
       maxCandidPhotographers: Math.max(acc.maxCandidPhotographers, day.photography.candid ? day.photography.candidCount : 0),
       maxTraditionalVideographers: Math.max(acc.maxTraditionalVideographers, day.videography.traditional ? day.videography.traditionalCount : 0),
       maxCandidVideographers: Math.max(acc.maxCandidVideographers, day.videography.candid ? day.videography.candidCount : 0),
-      maxPhotoDrones: Math.max(acc.maxPhotoDrones, day.aerial.photographyDrones),
-      maxVideoDrones: Math.max(acc.maxVideoDrones, day.aerial.videographyDrones),
+      maxDrones: Math.max(acc.maxDrones, day.aerial.drones),
       maxLedScreens: Math.max(acc.maxLedScreens, day.ledWall.enabled ? day.ledWall.screenCount : 0),
       maxWebLiveCameras: Math.max(acc.maxWebLiveCameras, day.webLive.enabled ? day.webLive.cameraCount : 0),
     }),
@@ -74,16 +70,14 @@ export function aggregateRequirement(days: EventDay[]): AggregatedRequirement {
       needsPhotographyCandid: false,
       needsVideographyTraditional: false,
       needsVideographyCandid: false,
-      needsAerialPhoto: false,
-      needsAerialVideo: false,
+      needsAerial: false,
       needsLedWall: false,
       needsWebLive: false,
       maxTraditionalPhotographers: 0,
       maxCandidPhotographers: 0,
       maxTraditionalVideographers: 0,
       maxCandidVideographers: 0,
-      maxPhotoDrones: 0,
-      maxVideoDrones: 0,
+      maxDrones: 0,
       maxLedScreens: 0,
       maxWebLiveCameras: 0,
     },

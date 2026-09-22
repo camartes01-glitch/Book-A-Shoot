@@ -11,7 +11,7 @@ export default function Splash() {
 
   useEffect(() => {
     const getDestination = () => {
-      if (!profile) return "/(auth)/login";
+      if (!profile) return "/landing";
       const hasMobile = Boolean(profile.mobile && profile.mobile.length >= 10);
       return hasMobile ? "/(tabs)" : "/(auth)/complete-profile";
     };

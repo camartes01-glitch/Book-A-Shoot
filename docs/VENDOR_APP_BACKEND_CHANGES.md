@@ -251,3 +251,75 @@ In the vendor app's Bookings tab (`Incoming Requests`):
 * **Zero Contact Leakage**: Customer contacts are masked server-side in `GET /api/bookings/requests` until `POST /api/bookings/{id}/accept` succeeds.
 * **Top 6 Freelancer Photographers**: Only verified photographers matching the selected location and budget receive the lead.
 * **First-to-Accept Confirmation**: The first photographer to accept secures the booking, instantly notifying the customer and unlocking direct communication.
+
+---
+
+## 3. Customer App Notification Contract
+
+The customer app (`bookashoot`) currently derives all of the notifications below **client-side**, from booking state it already polls (see `src/services/notificationEngine.ts`, `src/domain/notificationContent.ts`), so the product behavior described here already works today without any backend change. This section is the contract for when Camartes' `send_push_notification(...)` calls (§1) are updated to send the same notifications server-side — copy and payload should match exactly so the client's rendering/routing (which trusts an explicit `type` first, see `src/domain/notificationRouting.ts`) stays correct either way.
+
+**Hard rule: never send a payment-related notification to the customer app.** Payments for Book A Shoot are handled entirely outside the app; the client also enforces this defensively (`notificationContent.isPaymentRelated()` drops anything payment/Razorpay/invoice-shaped before it can render), but the backend should not rely on that filter and must not send one in the first place.
+
+### Notification types, copy, and required `data` payload
+
+Every push should set `data.type` to one of the values below, plus the listed fields (all customer-facing values must be the exact, accurate strings — real customer name, real firm name, real event name/date/time/place; never a placeholder or the raw record id).
+
+| `type` | Fires when | Title / body template | Required `data` fields |
+|---|---|---|---|
+| `welcome` | Customer's first successful login/signup | "Welcome, {customer_name}! 👋" / "Ready to book an event with the best photography & videography firms in the city?" | `customer_name` |
+| `request_sent` | `POST /api/bookings` succeeds (first-time request, not a Search Again retry) | "Request sent! 📮" / "We've sent your {event_name} request to {firm_count} photography firms. Tap to view their portfolios and see their work while you wait." | `booking_id`, `event_name`, `firm_count` |
+| `vendor_accepted` | `POST /api/bookings/{id}/accept` succeeds | "Yayy! {firm_name} accepted your request! 🎉" / "{firm_name} accepted your request for {event_name} on {event_date}. Tap to view their contact and social links — now you can chat with them to lock in your event." | `booking_id`, `firm_id`, `firm_name`, `event_name`, `event_date`, `event_place` (optional) |
+| `vendor_rejected` | A photographer declines, or a lead times out unclaimed | "{firm_name} can't make it this time" / "{firm_name} rejected your request for {event_name} on {event_date}. Don't worry, we're on a mission to search new and better firms for you." (omit `{firm_name}` and use a booking-level variant if no single firm is known) | `booking_id`, `firm_id`/`firm_name` (when known), `event_name`, `event_date` |
+| `new_search_dispatched` | The system auto re-matches and re-sends a Search Again retry to new firms | "Hey {customer_name}, we found more firms! 🔍" / "We sent a request to the newly searched firms: {firm_names}. Tap to view their portfolio and status." | `booking_id`, `customer_name`, `firm_names` (array) |
+| `chat_message` | A firm sends a customer a DM | "{firm_name} texted you 💬" / "\"{message_preview}\"" | `sender_id` (the firm's id), `firm_name`, `message_preview` |
+| `event_reminder` | One day before a confirmed event | "Tomorrow's the big day! 📸" / "Hey {customer_name}, get ready for your {event_name} on {event_date} with {firm_name}." | `booking_id`, `customer_name`, `event_name`, `event_date`, `firm_name` |
+
+`draft_resume_nudge` and `marketing_nudge` (idle re-engagement) are intentionally client-only — they depend on on-device draft/idle state the backend doesn't track, and are locally scheduled via `expo-notifications` so they still arrive while the app is closed.
+
+### Tap routing (client-side, already implemented)
+
+Whatever sends the notification, tapping it must land the customer on:
+
+* `chat_message` → the chat thread with that firm.
+* `vendor_accepted` → the booking's detail screen, opened directly to that firm's status/timeline card (contact + socials).
+* `vendor_rejected`, `request_sent`, `new_search_dispatched`, `event_reminder` → the booking's detail screen.
+* `welcome`, `marketing_nudge` → the home screen.
+
+### Example: updated `send_push_notification` calls
+
+```python
+# on POST /api/bookings (lead broadcast) — customer-facing confirmation, not the vendor-facing lead alert above
+await send_push_notification(
+    user_id=customer_id,
+    title="Request sent! 📮",
+    body=f"We've sent your {event_name} request to {len(providers)} photography firms. Tap to view their portfolios and see their work while you wait.",
+    data={"type": "request_sent", "booking_id": booking_id, "event_name": event_name, "firm_count": len(providers)},
+)
+
+# on POST /api/bookings/{id}/accept
+await send_push_notification(
+    user_id=booking["customer_id"],
+    title=f"Yayy! {current_user.get('name', 'A photographer')} accepted your request! 🎉",
+    body=f"{current_user.get('name', 'A photographer')} accepted your request for {booking['lead_details']['eventType']} on {booking['event_date']}. Tap to view their contact and social links — now you can chat with them to lock in your event.",
+    data={"type": "vendor_accepted", "booking_id": booking_id, "firm_id": vendor_id, "firm_name": current_user.get("name"), "event_name": booking["lead_details"]["eventType"], "event_date": booking["event_date"]},
+)
+
+# on a decline / unclaimed lead timeout (currently missing server-side — today "Decline" only removes the lead from the vendor's own feed, with no customer-facing notify)
+await send_push_notification(
+    user_id=booking["customer_id"],
+    title=f"{current_user.get('name', 'This firm')} can't make it this time",
+    body=f"{current_user.get('name', 'This firm')} rejected your request for {booking['lead_details']['eventType']} on {booking['event_date']}. Don't worry, we're on a mission to search new and better firms for you.",
+    data={"type": "vendor_rejected", "booking_id": booking_id, "firm_id": vendor_id, "firm_name": current_user.get("name"), "event_name": booking["lead_details"]["eventType"], "event_date": booking["event_date"]},
+)
+```
+
+---
+
+## 4. Automatic Replacement Dispatch (client-implemented today, no backend change required)
+
+The customer app now automatically keeps a booking topped up at **6 active candidate firms** — when a firm explicitly declines, or doesn't respond within its accept window, the client finds and dispatches a request to a replacement firm on its own, without the customer tapping anything. This already works today because it reuses `POST /api/bookings` exactly as described in §1 — a replacement dispatch is just another `POST /api/bookings` call scoped to only the new provider id(s), which the client tracks (`Booking.replacementWaveIds`) and folds back into the same booking the customer already sees, rather than surfacing it as a separate one.
+
+Two things worth knowing if/when the backend evolves this further:
+
+1. **1-hour accept window is currently a client-side assumption, not a verified backend contract.** The client starts its own 1-hour clock from the moment it first observes a firm assigned, and treats a firm as dead (triggering a replacement search) if that clock runs out with no `has_accepted`. If Camartes' vendor platform already enforces (or later enforces) its own lock at 1 hour server-side, reflecting that back explicitly — e.g. `assigned_photographers[].status: "timed_out"` — would let the client retire its own timer in favor of the authoritative one. The row shape already has room for this: the client parses `has_rejected` / `is_rejected` / `status` off each `assigned_photographers` entry today (`src/domain/bookingRequest.ts`), it just isn't sent yet.
+2. **A per-firm decline currently has no customer-visible signal at all** (per the note on §D above — "Decline" just removes the lead from that vendor's own feed). Sending `status: "rejected"` on that firm's row the next time the customer polls `GET /api/bookings/{id}` (instead of silently omitting it) is the single highest-value change here: it's what lets the client fire an accurate "**{firm_name}** rejected your request" notification and count that slot as open, instead of relying on the weaker "firm silently disappeared from the list" heuristic it falls back to today.

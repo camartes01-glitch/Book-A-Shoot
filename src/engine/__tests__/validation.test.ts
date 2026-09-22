@@ -44,7 +44,7 @@ describe("core photography/videography add-on rule (spec section 2 / rules 7-9)"
       name: "Photography + Drone",
       setup: (d) => {
         d.photography = { traditional: true, traditionalCount: 1, candid: false, candidCount: 1 };
-        d.aerial = { photographyDrones: 1, videographyDrones: 0 };
+        d.aerial = { drones: 1 };
       },
       allowed: true,
     },
@@ -64,7 +64,7 @@ describe("core photography/videography add-on rule (spec section 2 / rules 7-9)"
       },
       allowed: true,
     },
-    { name: "Drone only", setup: (d) => { d.aerial = { photographyDrones: 1, videographyDrones: 0 }; }, allowed: false },
+    { name: "Drone only", setup: (d) => { d.aerial = { drones: 1 }; }, allowed: false },
     { name: "LED Wall only", setup: (d) => { d.ledWall = { enabled: true, size: "8 x 12", screenCount: 1 }; }, allowed: false },
     {
       name: "Web Live only",
@@ -74,7 +74,7 @@ describe("core photography/videography add-on rule (spec section 2 / rules 7-9)"
     {
       name: "Drone + LED Wall",
       setup: (d) => {
-        d.aerial = { photographyDrones: 1, videographyDrones: 0 };
+        d.aerial = { drones: 1 };
         d.ledWall = { enabled: true, size: "8 x 12", screenCount: 1 };
       },
       allowed: false,
@@ -198,8 +198,7 @@ describe("validateDay", () => {
     expect(isDayComplete(day)).toBe(false);
     expect(day.ledWall.enabled).toBe(false);
     expect(day.webLive.enabled).toBe(false);
-    expect(day.aerial.photographyDrones).toBe(0);
-    expect(day.aerial.videographyDrones).toBe(0);
+    expect(day.aerial.drones).toBe(0);
     expect(validateDay(day).some((i) => i.code === "CORE_SERVICE_REQUIRED")).toBe(true);
     expect(dayMissingLabels(day)).toEqual([
       "Date",

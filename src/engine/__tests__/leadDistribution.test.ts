@@ -83,8 +83,7 @@ function makeBooking(locationPref?: ProviderLocationPreference): Booking {
       candidCount: 0,
     },
     aerial: {
-      photographyDrones: 0,
-      videographyDrones: 0,
+      drones: 0,
     },
     ledWall: {
       enabled: false,

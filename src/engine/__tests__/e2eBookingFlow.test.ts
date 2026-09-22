@@ -69,7 +69,7 @@ describe("Start Booking is a genuine fresh draft", () => {
     expect(fresh.days).toHaveLength(1);
     expect(fresh.days[0].eventTypeIds).toEqual([]);
     expect(fresh.days[0].photography.traditional).toBe(false);
-    expect(fresh.days[0].aerial).toEqual({ photographyDrones: 0, videographyDrones: 0 });
+    expect(fresh.days[0].aerial).toEqual({ drones: 0 });
     expect(fresh.days[0].ledWall.enabled).toBe(false);
     expect(fresh.days[0].webLive.enabled).toBe(false);
     expect(fresh.budget).toBeNull();
@@ -317,7 +317,7 @@ describe("day identity and location persist", () => {
     expect(after.days[0].startTime).toBe("20:00");
     expect(after.days[0].endTime).toBe("02:00");
     expect(after.days[0].photography.traditional).toBe(true);
-    expect(after.days[0].aerial.photographyDrones).toBe(1);
+    expect(after.days[0].aerial.drones).toBe(1);
     expect(after.days[0].ledWall.enabled).toBe(true);
     expect(after.days[0].webLive.enabled).toBe(true);
     expect(after.days[0].location.formattedAddress).toBe("Hyderabad, Telangana");

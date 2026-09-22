@@ -118,9 +118,7 @@ export function toCamartesBookingRequest(booking: Booking, profile: CustomerProf
       payload.photography.candid ? `Candid photographers: ${payload.photography.candidCount}` : null,
       payload.videography.traditional ? `Traditional videographers: ${payload.videography.traditionalCount}` : null,
       payload.videography.candid ? `Candid videographers: ${payload.videography.candidCount}` : null,
-      payload.aerial.enabled
-        ? `Aerial: ${payload.aerial.photographyDrones} photo drone(s), ${payload.aerial.videographyDrones} video drone(s)`
-        : null,
+      payload.aerial.enabled ? `Aerial: ${payload.aerial.drones} drone(s)` : null,
       payload.ledWall.enabled ? `LED Wall: ${payload.ledWall.size} × ${payload.ledWall.screenCount}` : null,
       payload.webLive.enabled ? `Web Live: ${payload.webLive.quality} × ${payload.webLive.cameraCount}` : null,
     ]
@@ -349,6 +347,9 @@ function parseAssignedPhotographers(raw: unknown): AssignedPhotographer[] | unde
       const city = stringField(r, ["city", "location"]) || "Bangalore";
       const profileImage = stringField(r, ["profile_image", "profileImage", "image_url", "imageUrl", "avatar"]);
       const hasAccepted = Boolean(r.has_accepted ?? r.hasAccepted ?? r.accepted);
+      const hasRejected = Boolean(r.has_rejected ?? r.hasRejected);
+      const isRejected = Boolean(r.is_rejected ?? r.isRejected);
+      const status = typeof r.status === "string" ? r.status : undefined;
       const isConfirmed = Boolean(r.is_confirmed ?? r.isConfirmed ?? r.confirmed);
       const canConfirm = Boolean(r.can_confirm ?? r.canConfirm ?? (hasAccepted && !isConfirmed));
       const contactUnlocked = Boolean(r.contact_unlocked ?? r.contactUnlocked ?? hasAccepted);
@@ -381,6 +382,9 @@ function parseAssignedPhotographers(raw: unknown): AssignedPhotographer[] | unde
         city,
         profile_image: profileImage,
         has_accepted: hasAccepted,
+        has_rejected: hasRejected,
+        is_rejected: isRejected,
+        status,
         is_confirmed: isConfirmed,
         can_confirm: canConfirm,
         contact_unlocked: contactUnlocked,

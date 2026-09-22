@@ -43,12 +43,8 @@ function DaySummary({ day }: { day: EventDay }) {
           {day.videography.candid ? `Candid ${day.videography.candidCount}` : ""}
         </Muted>
       ) : null}
-      {day.aerial.photographyDrones > 0 || day.aerial.videographyDrones > 0 ? (
-        <Muted style={{ fontWeight: "700", color: colors.ink }}>
-          Aerial: {day.aerial.photographyDrones > 0 ? `Photography ${day.aerial.photographyDrones} drone(s)` : ""}
-          {day.aerial.photographyDrones > 0 && day.aerial.videographyDrones > 0 ? " · " : ""}
-          {day.aerial.videographyDrones > 0 ? `Videography ${day.aerial.videographyDrones} drone(s)` : ""}
-        </Muted>
+      {day.aerial.drones > 0 ? (
+        <Muted style={{ fontWeight: "700", color: colors.ink }}>Aerial: {day.aerial.drones} drone(s)</Muted>
       ) : null}
       {day.ledWall.enabled ? (
         <Muted style={{ fontWeight: "700", color: colors.ink }}>

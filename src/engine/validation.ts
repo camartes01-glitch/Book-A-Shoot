@@ -29,12 +29,7 @@ export function hasCoreService(day: Pick<EventDay, "photography" | "videography"
 }
 
 function hasAnyAddOn(day: Pick<EventDay, "aerial" | "ledWall" | "webLive">): boolean {
-  return (
-    day.aerial.photographyDrones > 0 ||
-    day.aerial.videographyDrones > 0 ||
-    day.ledWall.enabled ||
-    day.webLive.enabled
-  );
+  return day.aerial.drones > 0 || day.ledWall.enabled || day.webLive.enabled;
 }
 
 function hasAnyServiceSelected(day: EventDay): boolean {

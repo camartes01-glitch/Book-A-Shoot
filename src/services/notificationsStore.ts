@@ -15,6 +15,7 @@ import {
   markAsRead as apiMarkAsRead,
   type BackendNotification,
 } from "@/src/services/notificationsApi";
+import { categoryForType, isPaymentRelated } from "@/src/domain/notificationContent";
 
 const KEY = "camartes-customer:notifications:v1";
 const READ_IDS_KEY = "camartes-customer:read_notification_ids:v1";
@@ -79,6 +80,43 @@ function mapBackendNotification(n: BackendNotification): AppNotification {
 
   const titleLower = (n.title || "").toLowerCase();
   const msgLower = (n.message || "").toLowerCase();
+
+  // Backend already speaking the canonical contract (see notificationContent.ts /
+  // docs/VENDOR_APP_BACKEND_CHANGES.md) — trust it directly, no need to sniff copy.
+  const CANONICAL_TYPES = new Set([
+    "welcome",
+    "request_sent",
+    "vendor_accepted",
+    "vendor_rejected",
+    "new_search_dispatched",
+    "chat_message",
+    "event_reminder",
+    "draft_resume_nudge",
+    "marketing_nudge",
+  ]);
+  if (n.type && CANONICAL_TYPES.has(n.type)) {
+    const canonicalType = n.type as AppNotification["type"];
+    const category = categoryForType(canonicalType);
+    return {
+      id: notifId,
+      title: n.title,
+      body: n.message,
+      createdAt: n.created_at || new Date().toISOString(),
+      read: Boolean(n.read),
+      bookingId:
+        (data.booking_id as string | undefined) ||
+        (data.request_id as string | undefined) ||
+        (data.bookingId as string | undefined) ||
+        undefined,
+      userId,
+      firmId: userId,
+      firmName,
+      type: canonicalType,
+      category,
+      actionType: canonicalType === "chat_message" ? "reply" : data.booking_id || data.bookingId ? "view_booking" : undefined,
+      data: data as Record<string, unknown>,
+    };
+  }
 
   const isMsg =
     n.type === "chat" ||
@@ -174,19 +212,24 @@ export async function getNotifications(): Promise<AppNotification[]> {
   }
 
   // Enforce read status override for locally read items
-  const updated = list.map((n) => {
-    const stringId = String(n.id);
-    if (readIds.has(stringId) || n.read) {
-      return { ...n, read: true };
-    }
-    return n;
-  });
+  const updated = list
+    .filter((n) => !isPaymentRelated({ type: n.type, title: n.title, body: n.body }))
+    .map((n) => {
+      const stringId = String(n.id);
+      if (readIds.has(stringId) || n.read) {
+        return { ...n, read: true };
+      }
+      return n;
+    });
 
   await AsyncStorage.setItem(KEY, JSON.stringify(updated));
   return updated.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
 export async function addNotification(notification: AppNotification): Promise<void> {
+  if (isPaymentRelated({ type: notification.type, title: notification.title, body: notification.body })) {
+    return;
+  }
   const list = await getNotifications();
   await AsyncStorage.setItem(KEY, JSON.stringify([notification, ...list].slice(0, 100)));
   notifyListeners();

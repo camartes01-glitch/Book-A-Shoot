@@ -170,7 +170,7 @@ export default function AllEventsScreen() {
           // Aerial drone specialty coverage
           await bookingApi.updateDay(booking.bookingId, firstDay.dayId, {
             eventTypeIds: ["corporate_event"],
-            aerial: { photographyDrones: 1, videographyDrones: 1 },
+            aerial: { drones: 1 },
           });
         } else if (item.id === "led_wall") {
           // Live stage LED wall specialty

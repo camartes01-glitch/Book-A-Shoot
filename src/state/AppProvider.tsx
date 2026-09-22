@@ -1,9 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { AppNotification, Booking, EventDay, PackageTierId, ProviderLocationPreference } from "@/src/types/booking";
 import type { CustomerProfile } from "@/src/types/booking";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as authApi from "@/src/services/authApi";
 import * as bookingApi from "@/src/services/bookingApi";
-import { getNotifications, markAllRead, subscribeNotifications } from "@/src/services/notificationsStore";
+import { addNotification, getNotifications, markAllRead, subscribeNotifications } from "@/src/services/notificationsStore";
+import { runEngineTick, runReplacementTick } from "@/src/services/notificationEngine";
+import { resolveNotificationRoute } from "@/src/domain/notificationRouting";
+import { buildNotificationContent, categoryForType } from "@/src/domain/notificationContent";
 import { isLocalWizardBooking, selectActiveWizardDraft } from "@/src/domain/bookingRequest";
 import { isCompletedBooking } from "@/src/domain/bookingFilters";
 import type { BudgetFeasibilityResult } from "@/src/engine/pricing";
@@ -13,6 +17,30 @@ import { pushNotificationService } from "@/src/services/pushNotificationService"
 import { markNotificationRead } from "@/src/services/notificationsStore";
 import { selectionFeedback } from "@/src/utils/haptics";
 import { normalizeRouteParam } from "@/src/utils/routeParam";
+import { makeId } from "@/src/utils/id";
+
+const WELCOME_SHOWN_KEY_PREFIX = "camartes-customer:welcome_shown:";
+
+async function maybeSendWelcomeNotification(profile: CustomerProfile): Promise<void> {
+  const key = `${WELCOME_SHOWN_KEY_PREFIX}${profile.customerId}`;
+  try {
+    const already = await AsyncStorage.getItem(key);
+    if (already) return;
+    await AsyncStorage.setItem(key, "1");
+  } catch {
+    return;
+  }
+  const { title, body } = buildNotificationContent("welcome", { customerName: profile.name });
+  await addNotification({
+    id: makeId("ntf"),
+    title,
+    body,
+    type: "welcome",
+    category: categoryForType("welcome"),
+    createdAt: new Date().toISOString(),
+    read: false,
+  });
+}
 
 type AppContextValue = {
   ready: boolean;
@@ -74,12 +102,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const initialLoadDoneRef = useRef(false);
   const activeDraftRef = useRef<Booking | null>(null);
   const bookingsRef = useRef<Booking[]>(bookings);
+  const profileRef = useRef<CustomerProfile | null>(profile);
   useEffect(() => {
     activeDraftRef.current = activeDraft;
   }, [activeDraft]);
   useEffect(() => {
     bookingsRef.current = bookings;
   }, [bookings]);
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
 
   const upsertLocalBooking = useCallback((updated: Booking) => {
     setActiveDraft((prev) => {
@@ -186,6 +218,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const poll = async () => {
       try {
+        if (profileRef.current) {
+          await refreshBookings();
+          await runEngineTick(bookingsRef.current, profileRef.current);
+        }
+
         const fresh = await getNotifications();
         setNotifications(fresh);
 
@@ -219,31 +256,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(timer);
   }, []);
 
+  // Separate, slower-cadence tick for automatic firm-replacement dispatch —
+  // it makes its own per-booking network calls (wave-aware refresh + vendor
+  // matching), so it runs far less often than the lightweight notification
+  // poll above to avoid unnecessary calls.
+  useEffect(() => {
+    const tick = async () => {
+      if (!profileRef.current) return;
+      try {
+        await runReplacementTick(bookingsRef.current, profileRef.current);
+      } catch {
+        // Non-fatal — retried next cycle.
+      }
+    };
+    const timer = setInterval(() => void tick(), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
   const handleToastPress = useCallback((notif: AppNotification) => {
     setActiveToastNotification(null);
     if (notif.id) {
       void markNotificationRead(notif.id);
     }
-    if (notif.userId || notif.firmId || notif.category === "message" || notif.type === "message") {
-      const targetId = notif.userId || notif.firmId;
-      if (targetId) {
-        router.push({
-          pathname: "/chat/[userId]",
-          params: {
-            userId: targetId,
-            name: notif.firmName || "Photography Partner",
-          },
-        });
-        return;
-      }
-      router.push("/(tabs)/messages");
-      return;
-    }
-    if (notif.bookingId) {
-      router.push(`/bookings/${notif.bookingId}`);
-      return;
-    }
-    router.push("/(tabs)/notifications");
+    const route = resolveNotificationRoute(notif, bookingsRef.current);
+    router.push(route.params ? { pathname: route.pathname as any, params: route.params } : (route.pathname as any));
   }, []);
 
   const login = useCallback(
@@ -251,6 +287,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const result = await authApi.login(emailOrPhone, password);
       setProfile(result);
       await adoptAuthenticatedBookings(result.customerId);
+      void maybeSendWelcomeNotification(result);
     },
     [adoptAuthenticatedBookings],
   );
@@ -260,6 +297,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const result = await authApi.signup(input);
       setProfile(result);
       await adoptAuthenticatedBookings(result.customerId);
+      void maybeSendWelcomeNotification(result);
     },
     [adoptAuthenticatedBookings],
   );
@@ -269,6 +307,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const result = await authApi.loginWithGoogle(idTokenOrUserInfo);
       setProfile(result);
       await adoptAuthenticatedBookings(result.customerId);
+      void maybeSendWelcomeNotification(result);
       return result;
     },
     [adoptAuthenticatedBookings],
