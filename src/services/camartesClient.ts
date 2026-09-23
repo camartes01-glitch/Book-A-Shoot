@@ -194,7 +194,7 @@ export async function camartesFetch<T>(
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
   const controller = new AbortController();
-  const timeoutMs = opts.timeoutMs ?? 5000;
+  const timeoutMs = opts.timeoutMs ?? 20000;
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   let res: Response;

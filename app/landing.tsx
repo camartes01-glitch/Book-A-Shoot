@@ -29,7 +29,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Path, Polygon } from "react-native-svg";
 import {
   ArrowRight,
   Clock,
@@ -43,6 +43,7 @@ import {
 } from "lucide-react-native";
 import { colors, radius, radiusSm, spacing } from "@/src/constants/theme";
 import { categoryImageFor } from "@/src/constants/homeMedia";
+import { useAppStore } from "@/src/state/AppProvider";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Data
@@ -182,12 +183,12 @@ const HOMEPAGE_BLOGS = [
   },
 ];
 
-// Navbar without "Bundle Events"
+// Navbar ordered: How It Works -> About Us -> Services -> Blogs -> Partner with Us
 const NAV_ITEMS = [
-  { id: "services", label: "Services" },
   { id: "how-it-works", label: "How It Works" },
-  { id: "blogs", label: "Blogs" },
   { id: "about", label: "About Us" },
+  { id: "services", label: "Services" },
+  { id: "blogs", label: "Blogs" },
   { id: "partner", label: "Partner with Us" },
 ] as const;
 
@@ -247,6 +248,44 @@ export default function LandingPage() {
     }
   }, []);
 
+  // Splash Screen Intro Animation (centered zoom-in logo)
+  const [showSplash, setShowSplash] = useState(true);
+  const splashScale = useRef(new Animated.Value(0.5)).current;
+  const splashOpacity = useRef(new Animated.Value(0)).current;
+  const splashContainerOpacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(splashScale, {
+          toValue: 1.1,
+          duration: 750,
+          useNativeDriver: Platform.OS !== "web",
+        }),
+        Animated.timing(splashOpacity, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: Platform.OS !== "web",
+        }),
+      ]),
+      Animated.delay(300),
+      Animated.parallel([
+        Animated.timing(splashScale, {
+          toValue: 1.4,
+          duration: 450,
+          useNativeDriver: Platform.OS !== "web",
+        }),
+        Animated.timing(splashContainerOpacity, {
+          toValue: 0,
+          duration: 450,
+          useNativeDriver: Platform.OS !== "web",
+        }),
+      ]),
+    ]).start(() => {
+      setShowSplash(false);
+    });
+  }, []);
+
   const navBgOpacity = scrollY.interpolate({
     inputRange: [0, 90],
     outputRange: [0, 1],
@@ -259,6 +298,16 @@ export default function LandingPage() {
   });
   const navBorderOpacity = scrollY.interpolate({
     inputRange: [60, 90],
+    outputRange: [0, 1],
+    extrapolate: "clamp",
+  });
+  const whiteLogoOpacity = scrollY.interpolate({
+    inputRange: [0, 70],
+    outputRange: [1, 0],
+    extrapolate: "clamp",
+  });
+  const colorLogoOpacity = scrollY.interpolate({
+    inputRange: [0, 70],
     outputRange: [0, 1],
     extrapolate: "clamp",
   });
@@ -294,7 +343,25 @@ export default function LandingPage() {
     resetAutoPlay();
   };
 
-  const goToLogin = () => router.push("/(auth)/login");
+  const { profile } = useAppStore();
+  const isLoggedIn = Boolean(profile);
+
+  const goToLogin = () => {
+    if (isLoggedIn) {
+      router.push("/(tabs)");
+    } else {
+      router.push("/(auth)/login");
+    }
+  };
+
+  const goToBooking = () => {
+    if (isLoggedIn) {
+      router.push("/booking/new");
+    } else {
+      router.push("/(auth)/login");
+    }
+  };
+
   const goToServices = () => router.push("/services");
   const goToAbout = () => router.push("/about");
   const goToBlogs = () => router.push("/blogs");
@@ -334,7 +401,7 @@ export default function LandingPage() {
         <View style={styles.heroCtas}>
           <Pressable
             id={`hero-book-now-${idx}`}
-            onPress={goToLogin}
+            onPress={goToBooking}
             style={({ pressed }) => [styles.heroPrimaryBtn, pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel="Book a photographer now"
@@ -358,6 +425,30 @@ export default function LandingPage() {
 
   return (
     <View style={styles.root}>
+      {/* ── Initial Opening Splash Animation ───────────────────────────── */}
+      {showSplash && (
+        <Animated.View
+          style={[styles.splashContainer, { opacity: splashContainerOpacity }]}
+          pointerEvents="none"
+        >
+          <Animated.Image
+            source={
+              Platform.OS === "web"
+                ? { uri: "/logo-white.png" }
+                : require("@/assets/images/logo-white.png")
+            }
+            style={[
+              styles.splashLogo,
+              {
+                opacity: splashOpacity,
+                transform: [{ scale: splashScale }],
+              },
+            ]}
+            resizeMode="contain"
+          />
+        </Animated.View>
+      )}
+
       {/* ── Floating Navbar ─────────────────────────────────────────────── */}
       <View style={[styles.navbar, { paddingTop: insets.top }]}>
         <Animated.View
@@ -370,16 +461,27 @@ export default function LandingPage() {
         <Animated.View style={[styles.navBorder, { opacity: navBorderOpacity }]} />
 
         <View style={[styles.navInner, isWide && styles.navInnerWide]}>
-          {/* Logo */}
+          {/* Logo with White-to-Color Crossfade */}
           <Pressable
             id="nav-logo"
             onPress={() => mainScrollRef.current?.scrollTo({ y: 0, animated: true })}
+            style={styles.navLogoContainer}
             accessibilityRole="link"
             accessibilityLabel="Book A Shoot home"
           >
-            <Image
+            <Animated.Image
+              source={
+                Platform.OS === "web"
+                  ? { uri: "/logo-white.png" }
+                  : require("@/assets/images/logo-white.png")
+              }
+              style={[styles.navLogo, { opacity: whiteLogoOpacity }]}
+              resizeMode="contain"
+              accessibilityLabel="Book A Shoot"
+            />
+            <Animated.Image
               source={require("@/assets/images/book-a-shoot-wordmark.png")}
-              style={styles.navLogo}
+              style={[styles.navLogo, styles.navLogoOverlay, { opacity: colorLogoOpacity }]}
               resizeMode="contain"
               accessibilityLabel="Book A Shoot"
             />
@@ -411,15 +513,15 @@ export default function LandingPage() {
               onPress={goToLogin}
               style={({ pressed }) => [styles.navLoginBtn, pressed && styles.pressed]}
               accessibilityRole="button"
-              accessibilityLabel="Log in"
+              accessibilityLabel={isLoggedIn ? "Go to Dashboard" : "Log in"}
             >
               <Animated.Text style={[styles.navLoginText, { color: navTextColor }]}>
-                Log in
+                {isLoggedIn ? "Dashboard" : "Log in"}
               </Animated.Text>
             </Pressable>
             <Pressable
               id="nav-book-btn"
-              onPress={goToLogin}
+              onPress={goToBooking}
               style={({ pressed }) => [styles.navBookBtn, pressed && styles.pressed]}
               accessibilityRole="button"
               accessibilityLabel="Book Now"
@@ -574,38 +676,88 @@ export default function LandingPage() {
           </View>
         </View>
 
-        {/* ── MULTI-EVENT SECTION (Redesigned: Left Heading, Right Description & Button; No 4 Cards) ── */}
+        {/* ── MULTI-EVENT SECTION (Authentic Swiggy-Style Feature Showcase) ── */}
         <View style={[styles.multiEventSection, isWide && styles.multiEventSectionWide]}>
           <View style={[styles.multiEventCard, isWide && styles.multiEventCardWide]}>
             <View style={[styles.multiEventRow, isWide && styles.multiEventRowWide]}>
-              {/* Left Column: Heading */}
+              {/* Left Column: Clear, High-Intent Product Pitch */}
               <View style={[styles.multiEventLeft, isWide && styles.multiEventLeftWide]}>
                 <Text style={[styles.multiEventHeadline, isWide && styles.multiEventHeadlineWide]}>
-                  Why Fall in Love for Just One Night?{"\n"}
-                  <Text style={{ color: colors.primaryDark }}>Lock Us Down for the Whole Season.</Text>
+                  Have multiple events?{"\n"}
+                  <Text style={{ color: colors.primaryDark }}>Well, you can book all of them at a time.</Text>
                 </Text>
-              </View>
 
-              {/* Right Column: Clear Description & Button */}
-              <View style={[styles.multiEventRight, isWide && styles.multiEventRightWide]}>
                 <Text style={styles.multiEventSub}>
-                  Not just one event. From your secret sunset proposal and sun-drenched Haldi to the 3 AM Sangeet
-                  dance battles and the grand wedding pheras — why play the field with different vendors?
-                  {"\n\n"}
-                  Bundle your celebrations together to lock the exact same elite photography and cinematography crew
-                  across every event. Enjoy unified multi-event bundle pricing, consistent signature color science,
-                  and guarantee that your favorite studio is exclusively yours in your city.
+                  Lock the best photographers in your city before anyone else does. Auspicious dates fill up fast—reserve one verified crew across your entire celebration calendar.
                 </Text>
+
+                <View style={styles.perksList}>
+                  <View style={styles.perkItem}>
+                    <View style={styles.perkDot} />
+                    <Text style={styles.perkText}>
+                      <Text style={styles.perkTitle}>Same Verified Crew: </Text>
+                      One production team from Haldi to Reception ensures seamless chemistry and identical color grading.
+                    </Text>
+                  </View>
+
+                  <View style={styles.perkItem}>
+                    <View style={styles.perkDot} />
+                    <Text style={styles.perkText}>
+                      <Text style={styles.perkTitle}>Beat the Date Rush: </Text>
+                      Top studios in Hyderabad and Bengaluru accept only one anchor wedding per weekend. Secure yours early.
+                    </Text>
+                  </View>
+
+                  <View style={styles.perkItem}>
+                    <View style={styles.perkDot} />
+                    <Text style={styles.perkText}>
+                      <Text style={styles.perkTitle}>Bundled Pricing: </Text>
+                      One consolidated booking with milestone escrow protection and multi-event package rates.
+                    </Text>
+                  </View>
+                </View>
 
                 <Pressable
                   id="bundle-events-cta-btn"
-                  onPress={goToLogin}
+                  onPress={goToBooking}
                   style={({ pressed }) => [styles.multiEventBtn, pressed && styles.pressed]}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.multiEventBtnText}>Bundle Your Events & Lock Your Crew</Text>
+                  <Text style={styles.multiEventBtnText}>Book Multiple Events</Text>
                   <ArrowRight size={18} color={colors.white} />
                 </Pressable>
+              </View>
+
+              {/* Right Column: Multiple Events Showcase Image (Flush top-to-bottom, diagonal slant) */}
+              <View style={[styles.multiEventRight, isWide && styles.multiEventRightWide]}>
+                <Image
+                  source={
+                    Platform.OS === "web"
+                      ? { uri: "/multipleevents.png" }
+                      : require("@/assets/images/multipleevents.png")
+                  }
+                  style={[
+                    styles.multipleEventsImg,
+                    Platform.OS === "web"
+                      ? ({
+                          clipPath: isWide
+                            ? "polygon(90px 0%, 100% 0%, 100% 100%, 0% 100%)"
+                            : "polygon(0% 24px, 100% 0%, 100% 100%, 0% 100%)",
+                        } as any)
+                      : null,
+                  ]}
+                  resizeMode="cover"
+                  accessibilityLabel="Multiple Events Photography Showcase"
+                />
+                {isWide && (
+                  <Svg
+                    style={styles.diagonalSvgOverlay}
+                    viewBox="0 0 100 100"
+                    preserveAspectRatio="none"
+                  >
+                    <Polygon points="0,0 100,0 0,100" fill={colors.white} />
+                  </Svg>
+                )}
               </View>
             </View>
           </View>
@@ -658,7 +810,7 @@ export default function LandingPage() {
                 <Pressable
                   key={city}
                   id={`city-chip-${city.toLowerCase().replace(/ /g, "-")}`}
-                  onPress={goToLogin}
+                  onPress={goToBooking}
                   style={({ pressed }) => [styles.cityChipOnOrange, pressed && styles.pressed]}
                   accessibilityRole="button"
                   accessibilityLabel={`Book photographers in ${city}`}
@@ -751,7 +903,7 @@ export default function LandingPage() {
 
             <Pressable
               id="cta-banner-get-started"
-              onPress={goToLogin}
+              onPress={goToBooking}
               style={({ pressed }) => [styles.ctaBtnOrange, pressed && styles.pressed]}
               accessibilityRole="button"
               accessibilityLabel="Get started with Book A Shoot"
@@ -865,6 +1017,23 @@ const styles = StyleSheet.create({
   },
   scroll: { flex: 1 },
 
+  // ── Splash Screen Intro ────────────────────────────────────────────────
+  splashContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+    backgroundColor: "#111827",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  splashLogo: {
+    width: 320,
+    height: 95,
+  },
+
   // ── Navbar ─────────────────────────────────────────────────────────────
 
   navbar: {
@@ -886,7 +1055,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   navInner: {
-    height: 66,
+    height: 80,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -895,9 +1064,20 @@ const styles = StyleSheet.create({
   navInnerWide: {
     paddingHorizontal: 56,
   },
+  navLogoContainer: {
+    width: 220,
+    height: 56,
+    position: "relative",
+    justifyContent: "center",
+  },
   navLogo: {
-    width: 154,
-    height: 40,
+    width: 220,
+    height: 56,
+  },
+  navLogoOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
   },
   navLinks: {
     flexDirection: "row",
@@ -1245,10 +1425,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // ── Multi-Event Section (Redesigned: 2-Column Row without 4 cards) ─────
+  // ── Multi-Event Section (Swiggy-Grade Feature Spotlight) ─────────────────────
 
   multiEventSection: {
-    paddingVertical: 60,
+    paddingVertical: 72,
     paddingHorizontal: spacing.xl,
     backgroundColor: colors.bg,
   },
@@ -1257,79 +1437,133 @@ const styles = StyleSheet.create({
   },
   multiEventCard: {
     backgroundColor: colors.white,
-    borderRadius: radius,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: colors.peachBorder,
-    padding: spacing.xl,
+    borderColor: "#E5E7EB",
+    padding: 0,
+    overflow: "hidden",
     shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-    maxWidth: 1040,
+    shadowOpacity: 0.05,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+    maxWidth: 1120,
     alignSelf: "center",
     width: "100%",
   },
   multiEventCardWide: {
-    padding: 40,
+    padding: 0,
   },
   multiEventRow: {
-    gap: spacing.xl,
+    flexDirection: "column",
   },
   multiEventRowWide: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "stretch",
     justifyContent: "space-between",
+    minHeight: 480,
   },
   multiEventLeft: {
     width: "100%",
+    padding: 24,
+    paddingBottom: 32,
   },
   multiEventLeftWide: {
-    width: "45%",
+    width: "52%",
+    paddingVertical: 48,
+    paddingLeft: 48,
+    paddingRight: 24,
+    justifyContent: "center",
   },
   multiEventHeadline: {
     fontSize: 28,
     fontWeight: "600",
-    color: colors.text,
+    color: "#111827",
     lineHeight: 38,
-    letterSpacing: -0.4,
+    letterSpacing: -0.5,
   },
   multiEventHeadlineWide: {
-    fontSize: 36,
+    fontSize: 38,
     lineHeight: 46,
-  },
-  multiEventRight: {
-    width: "100%",
-    gap: spacing.lg,
-  },
-  multiEventRightWide: {
-    width: "50%",
   },
   multiEventSub: {
     fontSize: 15,
-    color: colors.muted,
-    lineHeight: 24,
+    color: "#4B5563",
+    lineHeight: 25,
+    marginTop: 14,
+  },
+  perksList: {
+    marginTop: 24,
+    gap: 14,
+  },
+  perkItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  perkDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primaryDark,
+    marginTop: 8,
+  },
+  perkText: {
+    fontSize: 14,
+    color: "#4B5563",
+    lineHeight: 22,
+    flex: 1,
+  },
+  perkTitle: {
+    fontWeight: "700",
+    color: "#111827",
   },
   multiEventBtn: {
     backgroundColor: colors.primary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    paddingHorizontal: 28,
+    gap: 10,
+    paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: radius,
     alignSelf: "flex-start",
+    marginTop: 28,
     shadowColor: colors.primaryDark,
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    elevation: 2,
   },
   multiEventBtnText: {
     color: colors.white,
     fontSize: 15,
     fontWeight: "700",
+  },
+  multiEventRight: {
+    width: "100%",
+    height: 260,
+    position: "relative",
+    overflow: "hidden",
+    backgroundColor: colors.bgWarm,
+  },
+  multiEventRightWide: {
+    width: "48%",
+    height: "auto",
+    alignSelf: "stretch",
+  },
+  multipleEventsImg: {
+    width: "100%",
+    height: "100%",
+  },
+  diagonalSvgOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: 90,
+    height: "100%",
+    zIndex: 5,
   },
 
   // ── Why Us (River Flow Lines at Top) ──────────────────────────────────
@@ -1657,8 +1891,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   footerLogo: {
-    width: 120,
-    height: 32,
+    width: 220,
+    height: 56,
   },
   footerTagline: {
     fontSize: 13,

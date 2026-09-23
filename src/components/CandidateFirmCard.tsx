@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { Check, CheckCircle2, ChevronRight, Clock, Lock, MapPin, MessageCircle, MessageSquare, Phone, Star } from "lucide-react-native";
+import { Check, CheckCircle2, X, XCircle, ChevronRight, Clock, Lock, MapPin, MessageCircle, MessageSquare, Phone, Star } from "lucide-react-native";
 import type { AssignedPhotographer } from "@/src/types/booking";
 import { maskPhoneNumber } from "@/src/domain/bookingRequest";
 
@@ -39,8 +39,9 @@ export function CandidateFirmCard({
   testID,
 }: CandidateFirmCardProps) {
   const isConfirmed = Boolean(firm.is_confirmed);
-  const hasAccepted = Boolean(firm.has_accepted);
-  const canConfirm = Boolean(firm.can_confirm) && !isConfirmed;
+  const isRejected = Boolean(firm.has_rejected || firm.is_rejected || firm.status === "rejected" || (firm as any).status === "timed_out");
+  const hasAccepted = Boolean(firm.has_accepted) && !isRejected;
+  const canConfirm = Boolean(firm.can_confirm) && !isConfirmed && !isRejected;
 
   const rawPhone = firm.contact_phone || "";
   const digitsOnly = (firm.contact_whatsapp || rawPhone).replace(/\D/g, "");
@@ -127,6 +128,11 @@ export function CandidateFirmCard({
             <Check size={11} color="#EA580C" strokeWidth={3} />
             <Text style={styles.confirmedBadgeText}>Confirmed Partner</Text>
           </View>
+        ) : isRejected ? (
+          <View style={styles.rejectedBadge}>
+            <XCircle size={11} color="#DC2626" />
+            <Text style={styles.rejectedBadgeText}>Declined</Text>
+          </View>
         ) : hasAccepted ? (
           <View style={styles.acceptedBadge}>
             <CheckCircle2 size={11} color="#EA580C" />
@@ -140,11 +146,23 @@ export function CandidateFirmCard({
         )}
       </Pressable>
 
-      {/* Response Status Statement */}
+            {/* Response Status Statement */}
       {isConfirmed ? (
         <View style={styles.confirmedBanner}>
           <Text style={styles.confirmedBannerText}>
             Confirmed Photography Partner ✓
+          </Text>
+        </View>
+      ) : isRejected ? (
+        <View style={styles.rejectedBanner}>
+          <View style={styles.maskedRow}>
+            <XCircle size={12} color="#DC2626" />
+            <Text style={styles.rejectedBannerText}>
+              Firm is unavailable for this date
+            </Text>
+          </View>
+          <Text style={styles.rejectedHintText}>
+            Declined · Exploring more verified partners in your area
           </Text>
         </View>
       ) : hasAccepted ? (
@@ -336,6 +354,41 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     color: "#EA580C",
+  },
+  rejectedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  rejectedBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#DC2626",
+  },
+  rejectedBanner: {
+    backgroundColor: "#FEF2F2",
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    gap: 2,
+  },
+  rejectedBannerText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#991B1B",
+  },
+  rejectedHintText: {
+    fontSize: 11,
+    color: "#B91C1C",
+    fontWeight: "500",
   },
   awaitingBadge: {
     flexDirection: "row",

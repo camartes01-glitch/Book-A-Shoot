@@ -29,6 +29,8 @@ export function maskEmail(email: string | null | undefined): string {
 
 /** Body for POST /api/bookings (Camartes BookingRequestModel). */
 export type CamartesBookingRequest = {
+  client_booking_id?: string;
+  booking_id?: string;
   provider_id: string;
   provider_profile_id: string | null;
   assigned_provider_ids?: string[];
@@ -200,6 +202,8 @@ export function toCamartesBookingRequest(booking: Booking, profile: CustomerProf
       };
 
   return {
+    client_booking_id: booking.bookingId,
+    booking_id: booking.bookingId,
     assigned_provider_ids: assignedIds,
     provider_id: primaryId,
     provider_profile_id: primaryId,

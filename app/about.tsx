@@ -200,11 +200,10 @@ export default function AboutPage() {
         </View>
 
         {/* ── Brand Narrative ─────────────────────────────────────────── */}
-        <View style={[styles.section, isWide && styles.sectionWide]}>
-          <View style={[styles.contentCard, isWide && styles.contentCardWide]}>
-            <Text style={styles.contentPill}>Our Mission</Text>
-            <Text style={styles.contentTitle}>Why We Built Book A Shoot</Text>
-            <Text style={styles.bodyParagraph}>
+        <View style={styles.narrativeSection}>
+          <View style={[styles.narrativeInner, isWide && styles.narrativeInnerWide]}>
+            <Text style={styles.narrativeTitle}>Why We Built Book A Shoot</Text>
+            <Text style={styles.narrativeLead}>
               For decades, hiring a wedding or event photographer in India was fraught with uncertainty.
               Clients faced opaque pricing, sudden vendor cancellations, unverified freelancers, and
               endless delays in receiving albums and cinematic films.
@@ -219,51 +218,53 @@ export default function AboutPage() {
         </View>
 
         {/* ── Four Core Pillars ─────────────────────────────────────────── */}
-        <View style={[styles.section, isWide && styles.sectionWide]}>
-          <View style={styles.sectionHead}>
-            <Text style={styles.sectionPill}>Built for Excellence</Text>
-            <Text style={styles.sectionHeading}>How We Protect Your Moments</Text>
-            <Text style={styles.sectionSub}>
-              From booking confirmation to final 4K video export, our operating model ensures absolute peace of mind.
-            </Text>
-          </View>
+        <View style={styles.pillarsSection}>
+          <View style={[styles.pillarsInner, isWide && styles.pillarsInnerWide]}>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionHeading}>How We Protect Your Moments</Text>
+              <Text style={styles.sectionSub}>
+                From booking confirmation to final 4K video export, our operating model ensures absolute peace of mind.
+              </Text>
+            </View>
 
-          <View style={[styles.pillarsGrid, isWide && styles.pillarsGridWide]}>
-            {PILLARS.map((p) => {
-              const IconComp = p.icon;
-              return (
-                <View key={p.title} style={[styles.pillarCard, isWide && styles.pillarCardWide]}>
-                  <View style={styles.pillarIconWrap}>
-                    <IconComp size={22} color={colors.primary} />
+            <View style={[styles.pillarsGrid, isWide && styles.pillarsGridWide]}>
+              {PILLARS.map((p) => {
+                const IconComp = p.icon;
+                return (
+                  <View key={p.title} style={[styles.pillarCard, isWide && styles.pillarCardWide]}>
+                    <View style={styles.pillarIconWrap}>
+                      <IconComp size={22} color={colors.primary} />
+                    </View>
+                    <Text style={styles.pillarTitle}>{p.title}</Text>
+                    <Text style={styles.pillarDesc}>{p.desc}</Text>
                   </View>
-                  <Text style={styles.pillarTitle}>{p.title}</Text>
-                  <Text style={styles.pillarDesc}>{p.desc}</Text>
-                </View>
-              );
-            })}
+                );
+              })}
+            </View>
           </View>
         </View>
 
         {/* ── Verification Process ─────────────────────────────────────── */}
-        <View style={[styles.sectionAlt, isWide && styles.sectionWide]}>
-          <View style={styles.sectionHead}>
-            <Text style={styles.sectionPill}>Quality Assurance</Text>
-            <Text style={styles.sectionHeading}>Our 4-Stage Studio Verification</Text>
-            <Text style={styles.sectionSub}>
-              Only the top 15% of applicant photography firms meet our quality, equipment, and reliability standards.
-            </Text>
-          </View>
+        <View style={styles.verificationSection}>
+          <View style={[styles.verificationInner, isWide && styles.verificationInnerWide]}>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionHeading}>Our 4-Stage Studio Verification</Text>
+              <Text style={styles.sectionSub}>
+                Only the top 15% of applicant photography firms meet our quality, equipment, and reliability standards.
+              </Text>
+            </View>
 
-          <View style={[styles.stepsContainer, isWide && styles.stepsContainerWide]}>
-            {ONBOARDING_STEPS.map((step) => (
-              <View key={step.num} style={[styles.stepItem, isWide && styles.stepItemWide]}>
-                <View style={styles.stepNumBadge}>
-                  <Text style={styles.stepNumText}>{step.num}</Text>
+            <View style={[styles.stepsContainer, isWide && styles.stepsContainerWide]}>
+              {ONBOARDING_STEPS.map((step) => (
+                <View key={step.num} style={[styles.stepItem, isWide && styles.stepItemWide]}>
+                  <View style={styles.stepNumBadge}>
+                    <Text style={styles.stepNumText}>{step.num}</Text>
+                  </View>
+                  <Text style={styles.stepItemTitle}>{step.title}</Text>
+                  <Text style={styles.stepItemDesc}>{step.desc}</Text>
                 </View>
-                <Text style={styles.stepItemTitle}>{step.title}</Text>
-                <Text style={styles.stepItemDesc}>{step.desc}</Text>
-              </View>
-            ))}
+              ))}
+            </View>
           </View>
         </View>
 
@@ -314,6 +315,12 @@ export default function AboutPage() {
 
         {/* ── Footer ──────────────────────────────────────────────────── */}
         <View style={styles.footer}>
+          <Image
+            source={require("@/assets/images/book-a-shoot-wordmark.png")}
+            style={styles.footerLogo}
+            resizeMode="contain"
+            accessibilityLabel="Book A Shoot"
+          />
           <Text style={styles.footerBrand}>© 2025 Book A Shoot · Powered by Camartes</Text>
           <View style={styles.footerLinks}>
             <Pressable onPress={goToHome}><Text style={styles.footerLinkText}>Home</Text></Pressable>
@@ -351,7 +358,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   navInner: {
-    height: 66,
+    height: 80,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -377,8 +384,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   navLogo: {
-    width: 154,
-    height: 40,
+    width: 220,
+    height: 56,
   },
   navActions: {
     flexDirection: "row",
@@ -506,11 +513,16 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     backgroundColor: colors.white,
     marginHorizontal: spacing.xl,
-    marginTop: spacing.xxl,
+    marginVertical: 64,
     borderRadius: radius,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingVertical: spacing.lg,
+    paddingVertical: 32,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   statsStripWide: {
     marginHorizontal: 56,
@@ -537,77 +549,79 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  // ── Content ──────────────────────────────────────────────────────────
-  section: {
+  // ── Narrative Section ────────────────────────────────────────────────
+  narrativeSection: {
+    paddingVertical: 84,
     paddingHorizontal: spacing.xl,
-    paddingTop: 54,
-  },
-  sectionWide: {
-    paddingHorizontal: 56,
-  },
-  contentCard: {
     backgroundColor: colors.white,
-    borderRadius: radius,
-    padding: spacing.xl,
-    borderWidth: 1,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
     borderColor: colors.border,
-    gap: spacing.md,
   },
-  contentCardWide: {
-    padding: 36,
+  narrativeInner: {
     maxWidth: 960,
     alignSelf: "center",
     width: "100%",
+    gap: spacing.md,
   },
-  contentPill: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.primaryDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
+  narrativeInnerWide: {
+    paddingHorizontal: 24,
   },
-  contentTitle: {
-    fontSize: 24,
+  narrativeTitle: {
+    fontSize: 32,
     fontWeight: "600",
     color: colors.primaryDark,
-    letterSpacing: -0.4,
+    letterSpacing: -0.5,
+    marginBottom: spacing.xs,
+  },
+  narrativeLead: {
+    fontSize: 17,
+    color: "#1f2937",
+    lineHeight: 28,
+    fontWeight: "500",
   },
   bodyParagraph: {
     fontSize: 15,
-    color: "#374151",
-    lineHeight: 24,
+    color: "#4b5563",
+    lineHeight: 26,
   },
   boldText: {
     fontWeight: "700",
     color: colors.primaryDark,
   },
 
-  // ── Pillars ──────────────────────────────────────────────────────────
+  // ── Pillars Section ──────────────────────────────────────────────────
+  pillarsSection: {
+    paddingVertical: 84,
+    paddingHorizontal: spacing.xl,
+    backgroundColor: colors.bg,
+  },
+  pillarsInner: {
+    maxWidth: 960,
+    alignSelf: "center",
+    width: "100%",
+  },
+  pillarsInnerWide: {
+    paddingHorizontal: 24,
+  },
   sectionHead: {
     alignItems: "center",
-    marginBottom: 32,
+    marginBottom: 44,
     gap: spacing.xs,
   },
-  sectionPill: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.primaryDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
   sectionHeading: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "600",
     color: colors.primaryDark,
     textAlign: "center",
-    letterSpacing: -0.4,
+    letterSpacing: -0.5,
   },
   sectionSub: {
     fontSize: 15,
     color: colors.muted,
     textAlign: "center",
-    maxWidth: 540,
-    lineHeight: 22,
+    maxWidth: 580,
+    lineHeight: 23,
   },
   pillarsGrid: {
     gap: spacing.lg,
@@ -621,10 +635,15 @@ const styles = StyleSheet.create({
   pillarCard: {
     backgroundColor: colors.white,
     borderRadius: radius,
-    padding: spacing.xl,
+    padding: 32,
     borderWidth: 1,
     borderColor: colors.border,
     gap: spacing.sm,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   pillarCardWide: {
     width: "48%",
@@ -650,10 +669,22 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
 
-  // ── Steps ────────────────────────────────────────────────────────────
-  sectionAlt: {
+  // ── Verification Section ─────────────────────────────────────────────
+  verificationSection: {
+    paddingVertical: 84,
     paddingHorizontal: spacing.xl,
-    paddingTop: 54,
+    backgroundColor: colors.white,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+  },
+  verificationInner: {
+    maxWidth: 960,
+    alignSelf: "center",
+    width: "100%",
+  },
+  verificationInnerWide: {
+    paddingHorizontal: 24,
   },
   stepsContainer: {
     gap: spacing.md,
@@ -665,11 +696,11 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   stepItem: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.bgWarm,
     borderRadius: radius,
-    padding: spacing.lg,
+    padding: 26,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.peachBorder,
     gap: spacing.xs,
   },
   stepItemWide: {
@@ -707,7 +738,8 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     minHeight: 460,
     justifyContent: "center",
-    marginTop: 64,
+    marginTop: 84,
+    marginBottom: 40,
   },
   ctaBackgroundImage: {
     position: "absolute",
@@ -789,10 +821,16 @@ const styles = StyleSheet.create({
 
   // ── Footer ───────────────────────────────────────────────────────────
   footer: {
-    marginTop: 50,
+    marginTop: 64,
+    marginBottom: 40,
     alignItems: "center",
     gap: spacing.sm,
     paddingHorizontal: spacing.xl,
+  },
+  footerLogo: {
+    width: 220,
+    height: 56,
+    marginBottom: 8,
   },
   footerBrand: {
     fontSize: 13,

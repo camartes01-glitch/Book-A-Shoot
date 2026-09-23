@@ -96,7 +96,7 @@ async function saveState(state: EngineState): Promise<void> {
 }
 
 function firmId(firm: AssignedPhotographer): string | undefined {
-  return firm.provider_id || firm.id || undefined;
+  return firm.provider_id || firm.id || (firm as any).firm_id || (firm as any).user_id || undefined;
 }
 
 function isFirmRejected(firm: AssignedPhotographer): boolean {
@@ -219,7 +219,7 @@ async function processAcceptRejectDiff(booking: Booking, profile: CustomerProfil
   // rejected flag (backend removes them once the lead moves on) still count
   // as a rejection the customer should hear about.
   for (const id of bstate.knownFirmIds) {
-    if (currentIds.has(id) || bstate.acceptedFirmIds.includes(id) || bstate.rejectedFirmIds.includes(id)) continue;
+    if (!id || currentIds.has(id) || bstate.acceptedFirmIds.includes(id) || bstate.rejectedFirmIds.includes(id)) continue;
     await fire(
       "vendor_rejected",
       { firmName: bstate.firmNames[id], eventName, eventDate, eventPlace },

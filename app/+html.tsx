@@ -19,9 +19,9 @@ export default function Root({ children }: PropsWithChildren) {
           property="og:description"
           content="India's trusted event photography platform. Weddings, Sangeet, Pre-weddings, Birthdays, and Custom Celebrations."
         />
-        <meta property="og:type" content="website" />
         <link rel="icon" type="image/png" href="/favicon.png" />
-        <link rel="shortcut icon" href="/favicon.ico" />
+        <link rel="shortcut icon" type="image/png" href="/favicon.png" />
+        <link rel="apple-touch-icon" href="/favicon.png" />
         <meta name="theme-color" content="#EA580C" />
 
         {/* Reset web ScrollView to prevent duplicate scrollbars */}

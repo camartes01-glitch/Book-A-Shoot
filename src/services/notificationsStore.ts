@@ -57,6 +57,34 @@ async function saveReadNotificationIds(set: Set<string>): Promise<void> {
   }
 }
 
+function deduplicateNotifications(items: AppNotification[]): AppNotification[] {
+  const seen = new Set<string>();
+  const result: AppNotification[] = [];
+
+  for (const n of items) {
+    if (!n) continue;
+    const notifId = String(n.id || "");
+    const titleNorm = (n.title || "").trim();
+    const bodyNorm = (n.body || "").trim();
+
+    const contentKey = `${n.type || ""}:${n.bookingId || ""}:${n.firmId || ""}:${titleNorm}:${bodyNorm}`;
+
+    let key = contentKey;
+    if (notifId && !notifId.startsWith("ntf_") && !notifId.startsWith("ntf")) {
+      key = `id:${notifId}`;
+    }
+
+    if (seen.has(key) || (contentKey && seen.has(contentKey))) {
+      continue;
+    }
+    seen.add(key);
+    if (contentKey) seen.add(contentKey);
+    result.push(n);
+  }
+
+  return result;
+}
+
 function mapBackendNotification(n: BackendNotification): AppNotification {
   const notifId = String(n.id || (n as any).notification_id || (n as any)._id || Math.random());
   const data = (n.data as Record<string, unknown> | null) || {};
@@ -89,13 +117,14 @@ function mapBackendNotification(n: BackendNotification): AppNotification {
     "vendor_accepted",
     "vendor_rejected",
     "new_search_dispatched",
+    "new_match",
     "chat_message",
     "event_reminder",
     "draft_resume_nudge",
     "marketing_nudge",
   ]);
   if (n.type && CANONICAL_TYPES.has(n.type)) {
-    const canonicalType = n.type as AppNotification["type"];
+    const canonicalType = (n.type === "new_match" ? "new_search_dispatched" : n.type) as AppNotification["type"];
     const category = categoryForType(canonicalType);
     return {
       id: notifId,
@@ -202,14 +231,15 @@ export async function getNotifications(): Promise<AppNotification[]> {
     }
   }
 
-  if (list.length === 0) {
-    try {
-      const raw = await AsyncStorage.getItem(KEY);
-      list = raw ? (JSON.parse(raw) as AppNotification[]) : [];
-    } catch {
-      list = [];
-    }
+  let localList: AppNotification[] = [];
+  try {
+    const raw = await AsyncStorage.getItem(KEY);
+    localList = raw ? (JSON.parse(raw) as AppNotification[]) : [];
+  } catch {
+    localList = [];
   }
+
+  list = deduplicateNotifications([...list, ...localList]);
 
   // Enforce read status override for locally read items
   const updated = list
@@ -231,7 +261,8 @@ export async function addNotification(notification: AppNotification): Promise<vo
     return;
   }
   const list = await getNotifications();
-  await AsyncStorage.setItem(KEY, JSON.stringify([notification, ...list].slice(0, 100)));
+  const updated = deduplicateNotifications([notification, ...list]).slice(0, 100);
+  await AsyncStorage.setItem(KEY, JSON.stringify(updated));
   notifyListeners();
 }
 

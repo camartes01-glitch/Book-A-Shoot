@@ -230,6 +230,14 @@ export default function BlogsPage() {
 
         {/* ── Footer ────────────────────────────────────────────────────── */}
         <View style={styles.footer}>
+          <Pressable onPress={goToHome} style={styles.footerLogoContainer}>
+            <Image
+              source={require("@/assets/images/book-a-shoot-wordmark.png")}
+              style={styles.footerLogo}
+              resizeMode="contain"
+              accessibilityLabel="Book A Shoot"
+            />
+          </Pressable>
           <Text style={styles.footerBrand}>© 2025 Book A Shoot · Powered by Camartes Technologies</Text>
           <View style={styles.footerLinks}>
             <Pressable onPress={goToHome}><Text style={styles.footerLinkText}>Home</Text></Pressable>
@@ -267,7 +275,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   navInner: {
-    height: 66,
+    height: 80,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -293,8 +301,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   navLogo: {
-    width: 154,
-    height: 40,
+    width: 220,
+    height: 56,
   },
   navActions: {
     flexDirection: "row",
@@ -603,6 +611,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
     paddingHorizontal: spacing.xl,
+  },
+  footerLogoContainer: {
+    marginBottom: spacing.xs,
+  },
+  footerLogo: {
+    width: 220,
+    height: 56,
   },
   footerBrand: {
     fontSize: 13,

@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   navInner: {
-    height: 66,
+    height: 80,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -217,8 +217,8 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   navLogo: {
-    width: 154,
-    height: 40,
+    width: 220,
+    height: 56,
   },
   container: {
     paddingHorizontal: spacing.xl,

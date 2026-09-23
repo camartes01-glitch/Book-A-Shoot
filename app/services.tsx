@@ -419,24 +419,11 @@ export default function ServicesPage() {
                     <View style={styles.cardIconFloating}>
                       <IconComp size={16} color={colors.white} />
                     </View>
-                    <View style={styles.cardKycBadgeFloating}>
-                      <ShieldCheck size={12} color={colors.white} />
-                      <Text style={styles.cardKycTextFloating}>KYC Verified</Text>
-                    </View>
                   </View>
 
                   <Text style={styles.cardTitle}>{svc.title}</Text>
                   <Text style={styles.cardTagline}>{svc.tagline}</Text>
                   <Text style={styles.cardDesc}>{svc.desc}</Text>
-
-                  {/* Badges */}
-                  <View style={styles.cardBadgesRow}>
-                    {svc.badges.map((b) => (
-                      <View key={b} style={styles.cardBadge}>
-                        <Text style={styles.cardBadgeText}>{b}</Text>
-                      </View>
-                    ))}
-                  </View>
 
                   {/* Action CTA */}
                   <Pressable
@@ -524,6 +511,12 @@ export default function ServicesPage() {
 
         {/* ── Footer ────────────────────────────────────────────────────── */}
         <View style={styles.footer}>
+          <Image
+            source={require("@/assets/images/book-a-shoot-wordmark.png")}
+            style={styles.footerLogo}
+            resizeMode="contain"
+            accessibilityLabel="Book A Shoot"
+          />
           <Text style={styles.footerBrand}>© 2025 Book A Shoot · Powered by Camartes</Text>
           <View style={styles.footerLinks}>
             <Pressable onPress={goToHome}><Text style={styles.footerLinkText}>Home</Text></Pressable>
@@ -561,7 +554,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   navInner: {
-    height: 66,
+    height: 80,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -587,8 +580,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   navLogo: {
-    width: 154,
-    height: 40,
+    width: 220,
+    height: 56,
   },
   navActions: {
     flexDirection: "row",
@@ -1035,10 +1028,16 @@ const styles = StyleSheet.create({
 
   // ── Footer ───────────────────────────────────────────────────────────
   footer: {
-    marginTop: 50,
+    marginTop: 64,
+    marginBottom: 40,
     alignItems: "center",
     gap: spacing.sm,
     paddingHorizontal: spacing.xl,
+  },
+  footerLogo: {
+    width: 220,
+    height: 56,
+    marginBottom: 8,
   },
   footerBrand: {
     fontSize: 13,
