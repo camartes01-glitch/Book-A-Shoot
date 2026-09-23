@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { CheckCircle2, Clock, Lock, Mail, Phone, XCircle } from "lucide-react-native";
+import { Calendar, Camera, CheckCircle2, Clapperboard, Clock, Film, Image as ImageLucide, Lock, Mail, MapPin, Phone, Sparkles, Video, XCircle } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ProgressHeader } from "@/src/components/ProgressHeader";
 import { Badge, Button, Card, Muted, ScreenTitle, SectionTitle } from "@/src/components/ui";
@@ -9,16 +9,17 @@ import { CandidateFirmCard } from "@/src/components/CandidateFirmCard";
 import { FirmDetailModal } from "@/src/components/FirmDetailModal";
 import * as bookingApi from "@/src/services/bookingApi";
 import * as paymentApi from "@/src/services/paymentApi";
-import type { AssignedPhotographer, Booking, PackageTierId } from "@/src/types/booking";
+import type { AssignedPhotographer, Booking, EventDay, PackageTierId } from "@/src/types/booking";
 import { STATUS_LABEL, STATUS_TONE } from "@/src/domain/statusLabels";
 import { selectedAddOnLabels, selectedCoreServiceLabels } from "@/src/domain/dayServices";
-import { eventTypeLabels } from "@/src/constants/eventCategories";
+import { DEFAULT_EVENT_CATEGORIES, eventTypeLabels } from "@/src/constants/eventCategories";
 import { canSearchAgain, getBookingEventTitle, getEffectiveBookingStatus, isCompletedBooking } from "@/src/domain/bookingFilters";
 import { resolvePackageOptions, selectedPackageQuote } from "@/src/engine/pricing";
 import { PACKAGE_TIER_META } from "@/src/config/approvedBudget";
 import { defaultExpectedDeliveryDate } from "@/src/engine/validation";
-import { formatDateLong, formatInr, formatInrRange, formatPackageOverallLabel } from "@/src/utils/format";
-import { colors, spacing } from "@/src/constants/theme";
+import { formatDateLong, formatInr, formatInrRange, formatPackageOverallLabel, formatTime12h } from "@/src/utils/format";
+import { durationMinutes, formatDuration } from "@/src/utils/dateTime";
+import { colors, radius, radiusSm, spacing } from "@/src/constants/theme";
 import { useAppStore } from "@/src/state/AppProvider";
 import { normalizeRouteParam } from "@/src/utils/routeParam";
 
@@ -27,6 +28,30 @@ import { isLocalWizardBooking, getDraftResumeRoute } from "@/src/domain/bookingR
 
 const TERMINAL_ALTERNATE = new Set(["VENDOR_REJECTED", "CUSTOMER_CANCELLED", "VENDOR_CANCELLED", "EXPIRED"]);
 const CONTACT_UNLOCKED = new Set(["VENDOR_ACCEPTED", "CUSTOMER_CONFIRMED", "PAYMENT_PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED"]);
+
+function getDayEventTitle(day: EventDay): string {
+  const labels = (day.eventTypeIds || [])
+    .map((id) => DEFAULT_EVENT_CATEGORIES.find((c) => c.id === id)?.label ?? id)
+    .filter(Boolean);
+  return labels.length ? labels.join(" · ") : `Event Day ${day.order}`;
+}
+
+function getDayServicesText(day: EventDay): string {
+  const parts: string[] = [];
+  if (day.photography?.traditional) parts.push(`Traditional Photo ×${day.photography.traditionalCount}`);
+  if (day.photography?.candid) parts.push(`Candid Photo ×${day.photography.candidCount}`);
+  if (day.videography?.traditional) parts.push(`Traditional Video ×${day.videography.traditionalCount}`);
+  if (day.videography?.candid) parts.push(`Cinematic Video ×${day.videography.candidCount}`);
+  return parts.length ? parts.join(" · ") : "No core coverage selected";
+}
+
+function getDayAddOnsText(day: EventDay): string {
+  const parts: string[] = [];
+  if (day.aerial?.drones > 0) parts.push(`Drone ×${day.aerial.drones}`);
+  if (day.ledWall?.enabled) parts.push(`LED Wall (${day.ledWall.size}, ${day.ledWall.screenCount} screen${day.ledWall.screenCount > 1 ? "s" : ""})`);
+  if (day.webLive?.enabled) parts.push(`Web Live (${day.webLive.quality}, ${day.webLive.cameraCount} cam)`);
+  return parts.length ? parts.join(" · ") : "None";
+}
 
 export default function BookingDetailScreen() {
   const { bookingId: bookingIdParam, focusFirmId: focusFirmIdParam } = useLocalSearchParams<{
@@ -411,63 +436,179 @@ export default function BookingDetailScreen() {
           </Card>
         ) : null}
 
-        <Card>
-          <SectionTitle>Booking summary</SectionTitle>
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Muted>Event type</Muted>
-            <Muted style={{ fontWeight: "700", flex: 1, textAlign: "right" }}>
-              {eventTypeLabels(booking.days.flatMap((day) => day.eventTypeIds)) || "—"}
-            </Muted>
+        {/* EXECUTIVE BOOKING SPECIFICATION & MULTI-EVENT BREAKDOWN */}
+        <View style={{ gap: 12, marginTop: 4 }}>
+          <View style={{ gap: 4 }}>
+            <SectionTitle>Shoot Specification & Requirements</SectionTitle>
+            <Muted>Complete breakdown of scheduled event days, crew requirements, and post-production deliverables.</Muted>
           </View>
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Muted>Services</Muted>
-            <Muted style={{ fontWeight: "700", flex: 1, textAlign: "right" }}>{services.join(" · ") || "—"}</Muted>
-          </View>
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Muted>Add-ons</Muted>
-            <Muted style={{ fontWeight: "700", flex: 1, textAlign: "right" }}>{addOns.join(" · ") || "None"}</Muted>
-          </View>
-          {deliverablesSummary.length > 0 ? (
-            <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-              <Muted>Deliverables</Muted>
-              <Muted style={{ fontWeight: "700", flex: 1, textAlign: "right", flexShrink: 1 }}>
-                {deliverablesSummary.join(" · ")}
-              </Muted>
+
+          {/* Scheduled Event Days Cards */}
+          {booking.days.map((day) => {
+            const minutes = day?.startTime && day?.endTime ? durationMinutes(day.startTime, day.endTime, day.overnight) : null;
+            const eventTitle = getDayEventTitle(day);
+            const servicesText = getDayServicesText(day);
+            const addOnsText = getDayAddOnsText(day);
+
+            return (
+              <Card key={day.dayId} style={styles.eventDayCard}>
+                {/* Event Header */}
+                <View style={styles.eventCardHeader}>
+                  <View style={styles.eventCardTitleGroup}>
+                    <View style={styles.dayBadge}>
+                      <Text style={styles.dayBadgeText}>Day {day.order}</Text>
+                    </View>
+                    <Text style={styles.eventCardTitle} numberOfLines={1}>
+                      {eventTitle}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.divider} />
+
+                {/* Date & Timings */}
+                <View style={styles.detailRow}>
+                  <Calendar size={15} color="#EA580C" style={styles.detailIcon} />
+                  <View style={{ flex: 1, gap: 1 }}>
+                    <Text style={styles.detailLabel}>Date & Schedule</Text>
+                    <Text style={styles.detailValueText}>
+                      {day.eventDate ? formatDateLong(day.eventDate) : "Date pending"}
+                    </Text>
+                    <Text style={styles.detailSubValueText}>
+                      {day.startTime ? formatTime12h(day.startTime) : "--"} – {day.endTime ? formatTime12h(day.endTime) : "--"}
+                      {day.overnight ? " · Overnight (ends next day)" : ""}
+                      {minutes != null ? ` · ${formatDuration(minutes)}` : ""}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Venue Location */}
+                <View style={styles.detailRow}>
+                  <MapPin size={15} color="#EA580C" style={styles.detailIcon} />
+                  <View style={{ flex: 1, gap: 1 }}>
+                    <Text style={styles.detailLabel}>Venue Location</Text>
+                    <Text style={styles.detailValueText}>
+                      {day.location?.formattedAddress || day.location?.city || "Location pending"}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Coverage Requirements */}
+                <View style={styles.detailRow}>
+                  <Camera size={15} color="#EA580C" style={styles.detailIcon} />
+                  <View style={{ flex: 1, gap: 1 }}>
+                    <Text style={styles.detailLabel}>Photography & Videography Crew</Text>
+                    <Text style={styles.detailValueText}>{servicesText}</Text>
+                  </View>
+                </View>
+
+                {/* Add-ons */}
+                {addOnsText !== "None" ? (
+                  <View style={styles.detailRow}>
+                    <Sparkles size={15} color="#EA580C" style={styles.detailIcon} />
+                    <View style={{ flex: 1, gap: 1 }}>
+                      <Text style={styles.detailLabel}>Day Add-ons</Text>
+                      <Text style={styles.detailValueText}>{addOnsText}</Text>
+                    </View>
+                  </View>
+                ) : null}
+              </Card>
+            );
+          })}
+
+          {/* Common Deliverables Card */}
+          <Card>
+            <View style={styles.eventCardHeader}>
+              <View style={styles.eventCardTitleGroup}>
+                <View style={styles.dayBadge}>
+                  <Text style={styles.dayBadgeText}>Deliverables</Text>
+                </View>
+                <Text style={styles.eventCardTitle}>Post-Production & Handover</Text>
+              </View>
             </View>
-          ) : null}
-          <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-            <Muted>Package</Muted>
-            <Muted style={{ fontWeight: "700", flex: 1, textAlign: "right", flexShrink: 1 }}>
-              {effectiveQuoted
-                ? formatPackageOverallLabel(effectiveQuoted.label, effectiveQuoted.minPrice, effectiveQuoted.maxPrice)
-                : packageLabel}
-            </Muted>
-          </View>
-          {effectiveQuoted && effectiveQuoted.maxPrice > 0 ? (
-            <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-              <Muted>Package estimate</Muted>
-              <Muted style={{ fontWeight: "700", flex: 1, textAlign: "right", flexShrink: 1 }}>
-                {formatInrRange(effectiveQuoted.minPrice, effectiveQuoted.maxPrice)}
-              </Muted>
+
+            <View style={styles.divider} />
+
+            {booking.deliverables?.video?.teaserCinematicEnabled ? (
+              <View style={styles.detailRow}>
+                <Clapperboard size={15} color="#EA580C" style={styles.detailIcon} />
+                <View style={{ flex: 1, gap: 1 }}>
+                  <Text style={styles.detailLabel}>Teaser Highlight</Text>
+                  <Text style={styles.detailValueText}>
+                    Cinematic Teaser ({booking.deliverables.video?.teaserDurationMinutes || 1} min)
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+
+            <View style={styles.detailRow}>
+              <ImageLucide size={15} color="#EA580C" style={styles.detailIcon} />
+              <View style={{ flex: 1, gap: 1 }}>
+                <Text style={styles.detailLabel}>Photo Deliverables</Text>
+                <Text style={styles.detailValueText}>
+                  {booking.deliverables?.photo?.editedPhotosOption === "custom"
+                    ? `${booking.deliverables.photo.editedPhotosCustomCount ?? 0} edited photos`
+                    : `${booking.deliverables?.photo?.editedPhotosOption || 200} edited photos`}
+                  {booking.deliverables?.photo?.album
+                    ? ` · Printed Album (${booking.deliverables.photo.albumPagesOption === "custom" ? booking.deliverables.photo.albumPagesCustomCount : booking.deliverables.photo.albumPagesOption || 20} pages)`
+                    : ""}
+                  {booking.deliverables?.photo?.rawPhotos ? " · All raw files" : ""}
+                </Text>
+              </View>
             </View>
-          ) : null}
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Muted>Event days</Muted>
-            <Muted style={{ fontWeight: "700" }}>{booking.days.length}</Muted>
-          </View>
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Muted>Location</Muted>
-            <Muted style={{ fontWeight: "700", flex: 1, textAlign: "right" }}>
-              {booking.days[0]?.location.formattedAddress || booking.days[0]?.location.city || "—"}
+
+            <View style={styles.detailRow}>
+              <Video size={15} color="#EA580C" style={styles.detailIcon} />
+              <View style={{ flex: 1, gap: 1 }}>
+                <Text style={styles.detailLabel}>Video Deliverables</Text>
+                <Text style={styles.detailValueText}>
+                  {booking.deliverables?.video?.editedTraditionalVideoCount || 1} traditional film(s) · {booking.deliverables?.video?.editedCinematicVideoCount || 1} cinematic story
+                  {booking.deliverables?.video?.rawVideo ? " · All raw video footage" : ""}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.detailRow}>
+              <Clock size={15} color="#EA580C" style={styles.detailIcon} />
+              <View style={{ flex: 1, gap: 1 }}>
+                <Text style={styles.detailLabel}>Target Delivery Date</Text>
+                <Text style={styles.detailValueText}>
+                  {formatDateLong(booking.expectedDeliveryDate || defaultExpectedDeliveryDate(booking.days))}
+                </Text>
+              </View>
+            </View>
+          </Card>
+
+          {/* Package Tier & Estimate Card */}
+          <Card>
+            <View style={styles.eventCardHeader}>
+              <View style={styles.eventCardTitleGroup}>
+                <View style={[styles.dayBadge, { backgroundColor: "#FEF3C7" }]}>
+                  <Text style={[styles.dayBadgeText, { color: "#D97706" }]}>Package</Text>
+                </View>
+                <Text style={styles.eventCardTitle}>
+                  {effectiveQuoted?.label || packageLabel}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.divider} />
+
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+              <Muted style={{ fontWeight: "700" }}>Approved Estimate Range</Muted>
+              <Text style={{ fontSize: 16, fontWeight: "800", color: "#EA580C" }}>
+                {effectiveQuoted && effectiveQuoted.maxPrice > 0
+                  ? formatInrRange(effectiveQuoted.minPrice, effectiveQuoted.maxPrice)
+                  : booking.budget
+                    ? formatInr(booking.budget)
+                    : "Standard Tier"}
+              </Text>
+            </View>
+            <Muted style={{ fontSize: 11.5, marginTop: 4 }}>
+              Customer-approved milestone budget covering {booking.days.length} event day{booking.days.length > 1 ? "s" : ""} & selected post-production deliverables.
             </Muted>
-          </View>
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Muted>Expected delivery</Muted>
-            <Muted style={{ fontWeight: "700" }}>
-              {formatDateLong(booking.expectedDeliveryDate || defaultExpectedDeliveryDate(booking.days))}
-            </Muted>
-          </View>
-        </Card>
+          </Card>
+        </View>
 
         {!isCompletedBooking(booking) ? (
           <View style={{ gap: spacing.sm, marginVertical: spacing.md }}>
@@ -646,6 +787,70 @@ const styles = StyleSheet.create({
   },
   firmsStatusTextPurple: {
     color: colors.primaryDark,
+  },
+  eventDayCard: {
+    gap: 10,
+    backgroundColor: colors.white,
+  },
+  eventCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  eventCardTitleGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  eventCardTitle: {
+    fontSize: 15.5,
+    fontWeight: "800",
+    color: "#0F172A",
+    flex: 1,
+  },
+  dayBadge: {
+    backgroundColor: "#FFEDD5",
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 99,
+  },
+  dayBadgeText: {
+    fontSize: 11.5,
+    fontWeight: "800",
+    color: "#EA580C",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 4,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  detailIcon: {
+    marginTop: 3,
+  },
+  detailLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: colors.muted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  detailValueText: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: colors.ink,
+    marginTop: 1,
+  },
+  detailSubValueText: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 1,
   },
 });
 

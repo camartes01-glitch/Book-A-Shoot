@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { PackageTierCard } from "@/src/components/PackageTierCard";
 import { Button, Muted } from "@/src/components/ui";
@@ -8,6 +8,8 @@ import type { PackageTierId } from "@/src/types/booking";
 import { resolvePackageOptions, bookingPricingInputKey } from "@/src/engine/pricing";
 
 export default function PackagesScreen() {
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const isEditMode = params.mode === "edit";
   const { activeDraft, selectPackage } = useAppStore();
   const [selected, setSelected] = useState<PackageTierId | null>(activeDraft?.selectedPackage ?? null);
   const [loading, setLoading] = useState(false);
@@ -24,18 +26,11 @@ export default function PackagesScreen() {
   }, [activeDraft?.selectedPackage]);
 
   const onSelectPackage = async (tier: PackageTierId) => {
-    if (transitionLockRef.current) return;
-    transitionLockRef.current = true;
     setSelected(tier);
-    setLoading(true);
     try {
       await selectPackage(tier);
-      router.push("/booking/location-preference");
-    } finally {
-      setLoading(false);
-      setTimeout(() => {
-        transitionLockRef.current = false;
-      }, 500);
+    } catch {
+      // non-blocking optimistic update
     }
   };
 
@@ -54,19 +49,55 @@ export default function PackagesScreen() {
     }
   };
 
+  const onSaveAndReturn = async () => {
+    if (!selected || transitionLockRef.current) return;
+    transitionLockRef.current = true;
+    setLoading(true);
+    try {
+      await selectPackage(selected);
+      router.replace("/booking/confirm");
+    } finally {
+      setLoading(false);
+      setTimeout(() => {
+        transitionLockRef.current = false;
+      }, 500);
+    }
+  };
+
+  const onBack = () => {
+    if (isEditMode) {
+      router.replace("/booking/confirm");
+    } else {
+      router.push("/booking/budget");
+    }
+  };
+
   return (
     <WizardScreen
-      title="Choose your package"
+      title={isEditMode ? "Edit Package Range" : "Choose your package"}
       step="packages"
-      onBack={() => router.push("/booking/budget")}
-      footer={<Button label="Continue to location" onPress={onContinue} disabled={!selected} loading={loading} flex={1} />}
+      onBack={onBack}
+      footer={
+        isEditMode ? (
+          <Button label="Save & Return to Review" onPress={onSaveAndReturn} disabled={!selected} loading={loading} flex={1} />
+        ) : (
+          <Button label="Continue to location" onPress={onContinue} disabled={!selected} loading={loading} flex={1} />
+        )
+      }
     >
       <Muted>
         Essential is BASIC, Signature is MEDIUM, Elite is HIGH. Each overall price is the combined approved range for every service and add-on you selected, across every event day. It is not your budget and not a provider quote.
       </Muted>
 
       {options.map((pkg) => (
-        <PackageTierCard key={pkg.id} pkg={pkg} selected={selected === pkg.id} onSelect={() => void onSelectPackage(pkg.id)} />
+        <PackageTierCard
+          key={pkg.id}
+          pkg={pkg}
+          selected={selected === pkg.id}
+          onSelect={() => void onSelectPackage(pkg.id)}
+          days={activeDraft?.days}
+          deliverables={activeDraft?.deliverables}
+        />
       ))}
     </WizardScreen>
   );

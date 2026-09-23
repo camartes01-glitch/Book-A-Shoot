@@ -6,13 +6,14 @@ import { WizardScreen } from "@/src/components/WizardScreen";
 import { Button, Card, Field, Muted, SectionTitle } from "@/src/components/ui";
 import { PlaceAutocompleteField } from "@/src/components/PlaceAutocompleteField";
 import { useAppStore } from "@/src/state/AppProvider";
-import { normalizeRouteParam } from "@/src/utils/routeParam";
+import { normalizeRouteParam, safeBack } from "@/src/utils/routeParam";
 import { getCurrentLocationDetails } from "@/src/services/placesApi";
 import type { EventLocation } from "@/src/types/booking";
 import { colors, radius, spacing } from "@/src/constants/theme";
 
 export default function LocationPickerScreen() {
-  const params = useLocalSearchParams<{ dayId: string | string[] }>();
+  const params = useLocalSearchParams<{ dayId: string | string[]; mode?: string }>();
+  const isEditMode = params.mode === "edit";
   const dayId = normalizeRouteParam(params.dayId);
   const { activeDraft, updateDay } = useAppStore();
   const day =
@@ -57,14 +58,32 @@ export default function LocationPickerScreen() {
     if (!selected?.formattedAddress || !persistId) return;
     try {
       await updateDay(persistId, { location: selected });
-      router.back();
+      if (isEditMode) {
+        router.replace(`/booking/day/${persistId}?step=event&mode=edit`);
+      } else {
+        safeBack(persistId ? `/booking/day/${persistId}` : "/(tabs)");
+      }
     } catch {
       setLocationError("Could not save the event location. Return to the event day and try again.");
     }
   };
 
+  const onBack = () => {
+    const persistId = day?.dayId || dayId;
+    if (isEditMode && persistId) {
+      router.replace(`/booking/day/${persistId}?step=event&mode=edit`);
+    } else {
+      safeBack(persistId ? `/booking/day/${persistId}` : "/(tabs)");
+    }
+  };
+
   return (
-    <WizardScreen title="Event location" step="event" footer={<Button label="Confirm location" onPress={onConfirm} disabled={!selected?.formattedAddress} flex={1} />}>
+    <WizardScreen
+      title="Event location"
+      step="event"
+      onBack={onBack}
+      footer={<Button label="Confirm location" onPress={onConfirm} disabled={!selected?.formattedAddress} flex={1} />}
+    >
       <Card>
         <SectionTitle>Where is your event?</SectionTitle>
         <PlaceAutocompleteField onSelect={(location) => setSelected(location)} />

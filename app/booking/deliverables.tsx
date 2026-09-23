@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Camera, Video } from "lucide-react-native";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { Button, Card, Field, Muted, SectionTitle } from "@/src/components/ui";
@@ -9,12 +9,15 @@ import { ToggleRow } from "@/src/components/ToggleRow";
 import { Stepper } from "@/src/components/Stepper";
 import { useAppStore } from "@/src/state/AppProvider";
 import { ALBUM_PAGE_OPTIONS, EDITED_PHOTO_OPTIONS } from "@/src/constants/limits";
+import { safeBack } from "@/src/utils/routeParam";
 import type { Deliverables } from "@/src/types/booking";
 import { colors, spacing } from "@/src/constants/theme";
 import { DELIVERABLES_PRICING, getBookingPricingModel } from "@/src/config/approvedBudget";
 import { formatInrRange } from "@/src/utils/format";
 
 export default function DeliverablesScreen() {
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const isEditMode = params.mode === "edit";
   const { activeDraft, updateDeliverables } = useAppStore();
   const [d, setD] = useState<Deliverables | null>(activeDraft?.deliverables ?? null);
 
@@ -72,13 +75,29 @@ export default function DeliverablesScreen() {
   const patchPhoto = (p: Partial<Deliverables["photo"]>) => setD((prev) => (prev ? { ...prev, photo: { ...prev.photo, ...p } } : prev));
   const patchVideo = (p: Partial<Deliverables["video"]>) => setD((prev) => (prev ? { ...prev, video: { ...prev.video, ...p } } : prev));
 
-  const onContinue = () => {
-    if (d) void updateDeliverables(d);
-    router.push("/booking/delivery-date");
+  const onContinue = async () => {
+    if (d) await updateDeliverables(d);
+    router.push(`/booking/delivery-date${isEditMode ? "?mode=edit" : ""}`);
+  };
+
+  const firstDayId = activeDraft?.days?.[0]?.dayId;
+
+  const onBack = () => {
+    if (isEditMode) {
+      if (d) void updateDeliverables(d);
+      router.replace("/booking/confirm");
+    } else {
+      safeBack(firstDayId ? `/booking/day/${firstDayId}?step=addons` : "/(tabs)");
+    }
   };
 
   return (
-    <WizardScreen title="What you'll receive" step="deliverables" onBack={() => router.back()} footer={<Button label="Continue" onPress={onContinue} flex={1} />}>
+    <WizardScreen
+      title={isEditMode ? "Edit Deliverables" : "What you'll receive"}
+      step="deliverables"
+      onBack={onBack}
+      footer={<Button label="Continue to Delivery Date" onPress={onContinue} flex={1} />}
+    >
       <Card>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Camera size={18} color={colors.primaryDark} />

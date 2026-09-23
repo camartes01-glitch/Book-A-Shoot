@@ -122,21 +122,32 @@ export const PACKAGE_TIER_ORDER: PackageTierId[] = ["essential", "signature", "e
 
 export type PricingModel = "wedding" | "outdoor" | "standard";
 
-export const OUTDOOR_EVENT_TYPE_IDS = [
+export const WEDDING_EVENT_TYPE_IDS = [
+  "wedding",
+  "engagement",
   "pre_wedding",
   "post_wedding",
+  "haldi",
+  "mehendi",
+  "sangeeth",
+  "groom_making",
+  "bride_making",
+  "reception",
+];
+
+export const OUTDOOR_EVENT_TYPE_IDS = [
   "baby_shoot",
   "corporate_event",
 ];
 
 export function getApplicablePricingModel(day: Pick<EventDay, "eventTypeIds">): PricingModel {
-  if (day.eventTypeIds.includes("wedding")) {
+  if (day.eventTypeIds.some((id) => WEDDING_EVENT_TYPE_IDS.includes(id))) {
     return "wedding";
   }
   if (day.eventTypeIds.some((id) => OUTDOOR_EVENT_TYPE_IDS.includes(id))) {
     return "outdoor";
   }
-  return "standard";
+  return "wedding";
 }
 
 /** Wedding Package rates from the supplied photography pricing sheet (8 hrs included schedule). */
@@ -583,6 +594,59 @@ export function detectDayOvertime(
     extendedMinutes: 0,
     extendedHours: 0,
     note: null,
+  };
+}
+
+export type EventBreakdownGroup = {
+  dayId: string;
+  order: number;
+  eventTitle: string;
+  lines: ApprovedServiceLine[];
+  subtotal: PriceRange;
+};
+
+export type DetailedPackageBreakdown = {
+  events: EventBreakdownGroup[];
+  deliverablesLines: ApprovedServiceLine[];
+  deliverablesSubtotal: PriceRange;
+  grandTotal: PriceRange;
+};
+
+export function getDetailedPackageBreakdown(
+  days: EventDay[] = [],
+  tier: PackageTierId,
+  deliverables?: Deliverables,
+): DetailedPackageBreakdown {
+  const events: EventBreakdownGroup[] = days.map((day) => {
+    const lines = approvedServiceLinesForDay(day, tier);
+    const subtotal = sumRange(lines);
+    const typeLabel = day.eventTypeIds.length
+      ? day.eventTypeIds.map((id) => {
+          const match = WEDDING_EVENT_TYPE_IDS.includes(id) || OUTDOOR_EVENT_TYPE_IDS.includes(id)
+            ? id.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+            : id;
+          return match;
+        }).join(" + ")
+      : "Event";
+    const eventTitle = `Day ${day.order}: ${typeLabel}`;
+    return {
+      dayId: day.dayId,
+      order: day.order,
+      eventTitle,
+      lines,
+      subtotal,
+    };
+  });
+
+  const deliverablesLines = approvedDeliverablesLines(deliverables, days, tier);
+  const deliverablesSubtotal = sumRange(deliverablesLines);
+  const grandTotal = overallApprovedRange(days, tier, deliverables);
+
+  return {
+    events,
+    deliverablesLines,
+    deliverablesSubtotal,
+    grandTotal,
   };
 }
 

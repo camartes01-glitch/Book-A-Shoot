@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { AlertTriangle } from "lucide-react-native";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { PackageTierCard } from "@/src/components/PackageTierCard";
@@ -13,6 +13,8 @@ import type { BudgetFeasibilityResult } from "@/src/engine/pricing";
 import type { PackageOption, PackageTierId } from "@/src/types/booking";
 
 export default function BudgetScreen() {
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const isEditMode = params.mode === "edit";
   const { activeDraft, submitBudget, selectPackage } = useAppStore();
   const [digits, setDigits] = useState(activeDraft?.budget ? String(activeDraft.budget) : "");
   const [selectedTier, setSelectedTier] = useState<PackageTierId | null>(activeDraft?.selectedPackage ?? null);
@@ -88,6 +90,31 @@ export default function BudgetScreen() {
     }
   };
 
+  const onSaveAndReturn = async () => {
+    if (numeric <= 0) {
+      Alert.alert("Enter your budget", "Budget must be greater than zero.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await submitBudget(numeric);
+      if (selectedTier) {
+        await selectPackage(selectedTier);
+      }
+      router.replace("/booking/confirm");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onBack = () => {
+    if (isEditMode) {
+      router.replace("/booking/confirm");
+    } else {
+      router.push("/booking/delivery-date");
+    }
+  };
+
   const onFooter = async () => {
     if (selectedTier && numeric > 0 && (!feasibility || !feasibility.isBelowEstimate)) {
       if (transitionLockRef.current) return;
@@ -118,12 +145,16 @@ export default function BudgetScreen() {
 
   return (
     <WizardScreen
-      title="What is your budget?"
+      title={isEditMode ? "Edit Budget" : "What is your budget?"}
       step="budget"
-      onBack={() => {
-        router.push("/booking/delivery-date");
-      }}
-      footer={<Button label={feasibility?.isBelowEstimate ? "Show closest options" : "Continue"} onPress={onFooter} loading={loading} flex={1} />}
+      onBack={onBack}
+      footer={
+        isEditMode ? (
+          <Button label="Save & Return to Review" onPress={onSaveAndReturn} loading={loading} flex={1} />
+        ) : (
+          <Button label={feasibility?.isBelowEstimate ? "Show closest options" : "Continue"} onPress={onFooter} loading={loading} flex={1} />
+        )
+      }
     >
       <SectionTitle>What's your budget?</SectionTitle>
       <Muted>Select an option to continue, or enter a custom amount. This amount is kept separate from the package ranges below.</Muted>
@@ -194,6 +225,8 @@ export default function BudgetScreen() {
           selected={selectedTier === pkg.id}
           onSelect={() => void onSelectPackageCard(pkg)}
           selectable={true}
+          days={activeDraft?.days}
+          deliverables={activeDraft?.deliverables}
         />
       ))}
     </WizardScreen>

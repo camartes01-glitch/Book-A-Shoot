@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Alert } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { Button, Card, Muted, SectionTitle } from "@/src/components/ui";
 import { DateField } from "@/src/components/DateField";
@@ -9,8 +9,12 @@ import { validateExpectedDelivery } from "@/src/engine/validation";
 import { formatDateLong } from "@/src/utils/format";
 import { latestDate } from "@/src/utils/dateTime";
 
+import { safeBack } from "@/src/utils/routeParam";
+
 export default function DeliveryDateScreen() {
-  const { activeDraft, updateExpectedDelivery } = useAppStore();
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const isEditMode = params.mode === "edit";
+  const { activeDraft, updateExpectedDelivery, loadVendorMatches } = useAppStore();
   const [date, setDate] = useState<string | null>(activeDraft?.expectedDeliveryDate ?? null);
 
   useEffect(() => {
@@ -32,12 +36,41 @@ export default function DeliveryDateScreen() {
     router.push("/booking/budget");
   };
 
+  const onSaveAndReturn = async () => {
+    const issues = validateExpectedDelivery(activeDraft.days, date);
+    if (issues.length) {
+      Alert.alert("Check the delivery date", issues[0].message);
+      return;
+    }
+    await updateExpectedDelivery(date!);
+    try {
+      await loadVendorMatches();
+    } catch {
+      // non-blocking
+    }
+    router.replace("/booking/confirm");
+  };
+
+  const onBack = () => {
+    if (isEditMode) {
+      router.replace("/booking/confirm");
+    } else {
+      safeBack("/booking/deliverables");
+    }
+  };
+
   return (
     <WizardScreen
-      title="When do you need them?"
+      title={isEditMode ? "Edit Delivery Date" : "When do you need them?"}
       step="deliverables"
-      onBack={() => router.back()}
-      footer={<Button label="Continue to budget" onPress={onContinue} flex={1} />}
+      onBack={onBack}
+      footer={
+        isEditMode ? (
+          <Button label="Save & Return to Review" onPress={onSaveAndReturn} flex={1} />
+        ) : (
+          <Button label="Continue to budget" onPress={onContinue} flex={1} />
+        )
+      }
     >
       <Card>
           <SectionTitle>When do you need your photos & videos?</SectionTitle>

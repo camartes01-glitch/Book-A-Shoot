@@ -66,6 +66,19 @@ function emptyBookingState(): BookingEngineState {
   };
 }
 
+function getBState(state: EngineState, booking: Booking): BookingEngineState {
+  return (
+    state.bookings[booking.bookingId] ||
+    (booking.remoteBookingId ? state.bookings[booking.remoteBookingId] : undefined) ||
+    emptyBookingState()
+  );
+}
+
+function setBState(state: EngineState, booking: Booking, bstate: BookingEngineState): void {
+  if (booking.bookingId) state.bookings[booking.bookingId] = bstate;
+  if (booking.remoteBookingId) state.bookings[booking.remoteBookingId] = bstate;
+}
+
 /** 9am local time, one day before the given yyyy-MM-dd event date. */
 function dayBeforeAt9am(dateYmd: string | null | undefined): Date | null {
   if (!dateYmd || !dateYmd.trim()) return null;
@@ -348,10 +361,10 @@ async function runReplacementTickInner(bookings: Booking[], profile: CustomerPro
   let persisted = false;
 
   for (const booking of candidates) {
-    const bstate = state.bookings[booking.bookingId] || emptyBookingState();
+    const bstate = getBState(state, booking);
 
     if (bstate.replacementExhaustedAt && hoursSince(bstate.replacementExhaustedAt) < REPLACEMENT_RETRY_COOLDOWN_HOURS) {
-      state.bookings[booking.bookingId] = bstate;
+      setBState(state, booking, bstate);
       persisted = true;
       continue;
     }
@@ -393,7 +406,8 @@ async function runReplacementTickInner(bookings: Booking[], profile: CustomerPro
       }
     }
 
-    state.bookings[booking.bookingId] = bstate;
+    setBState(state, refreshed, bstate);
+    setBState(state, booking, bstate);
     persisted = true;
   }
 
@@ -426,7 +440,7 @@ async function runEngineTickInner(bookings: Booking[], profile: CustomerProfile 
   const state = await loadState();
 
   for (const booking of bookings) {
-    const bstate = state.bookings[booking.bookingId] || emptyBookingState();
+    const bstate = getBState(state, booking);
 
     if (isDraftBooking(booking)) {
       await processDraft(booking, profile, bstate);
@@ -439,7 +453,7 @@ async function runEngineTickInner(bookings: Booking[], profile: CustomerProfile 
     // every tick regardless of whether a notification fired this time, so the
     // full state is always persisted below rather than gated on a "changed"
     // flag — otherwise a quiet tick would drop the diff baseline entirely.
-    state.bookings[booking.bookingId] = bstate;
+    setBState(state, booking, bstate);
   }
 
   await processMarketingNudge(bookings, profile, state);

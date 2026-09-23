@@ -17,7 +17,10 @@ export const DEFAULT_EVENT_CATEGORIES: EventCategory[] = [
   { id: "post_wedding", group: "wedding", label: "Post-Wedding", enabled: true, order: 4 },
   { id: "haldi", group: "wedding", label: "Haldi", enabled: true, order: 5 },
   { id: "mehendi", group: "wedding", label: "Mehendi", enabled: true, order: 6 },
-  { id: "reception", group: "wedding", label: "Reception", enabled: true, order: 7 },
+  { id: "sangeeth", group: "wedding", label: "Sangeeth", enabled: true, order: 7 },
+  { id: "groom_making", group: "wedding", label: "Groom Making", enabled: true, order: 8 },
+  { id: "bride_making", group: "wedding", label: "Bride Making", enabled: true, order: 9 },
+  { id: "reception", group: "wedding", label: "Reception", enabled: true, order: 10 },
 
   { id: "birthday", group: "personal", label: "Birthday", enabled: true, order: 8 },
   { id: "get_together", group: "personal", label: "Get Together", enabled: true, order: 9 },
@@ -120,6 +123,19 @@ export const HOME_QUICK_PICKS = [
   "product_shoot",
 ];
 
+export const WEDDING_CATALOG_EVENT_IDS = [
+  "engagement",
+  "pre_wedding",
+  "wedding",
+  "post_wedding",
+  "haldi",
+  "mehendi",
+  "sangeeth",
+  "groom_making",
+  "bride_making",
+  "reception",
+];
+
 export const FEATURED_EVENT_TYPE_IDS = [
   "wedding",
   "engagement",
@@ -155,6 +171,9 @@ export const EVENT_TAGLINES: Record<string, string> = {
   post_wedding: "Intimate portraits post celebration",
   haldi: "Vibrant colors, joy & festive laughter",
   mehendi: "Intricate henna artistry & dance",
+  sangeeth: "Music, dance performances & grand stage celebrations",
+  groom_making: "Groom preparation, swag & royal getting-ready moments",
+  bride_making: "Bridal makeup, jewelry reveal & candid getting-ready grace",
   reception: "Grand evening, elegance & toast",
   birthday: "Milestone birthdays & celebrations",
   baby_shoot: "Precious smiles & tiny footprints",

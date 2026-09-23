@@ -42,6 +42,7 @@ export function PlaceAutocompleteField({
   useEffect(() => {
     if (!query.trim()) {
       setSuggestions([]);
+      setSearching(false);
       return;
     }
     setSearching(true);
@@ -56,6 +57,7 @@ export function PlaceAutocompleteField({
   const onPickSuggestion = async (s: PlaceSuggestion) => {
     const details = await getPlaceDetails(s.placeId);
     setSuggestions([]);
+    setSearching(false);
     setQuery(clearQueryOnSelect ? "" : s.label);
     onSelect(details, s);
   };
@@ -63,10 +65,7 @@ export function PlaceAutocompleteField({
   return (
     <View>
       <Field label={label} placeholder={placeholder} value={query} onChangeText={setQuery} returnKeyType="search" />
-      {!isGooglePlacesConfigured() ? (
-        <Muted>Searching Camartes' city directory. Add EXPO_PUBLIC_GOOGLE_PLACES_API_KEY for full address autocomplete.</Muted>
-      ) : null}
-      {searching ? <ActivityIndicator color={colors.primary} /> : null}
+      {searching && query.trim() ? <ActivityIndicator color={colors.primary} style={{ marginVertical: 8 }} /> : null}
       {suggestions.map((s) => (
         <Pressable key={s.placeId} style={styles.suggestionRow} onPress={() => onPickSuggestion(s)}>
           <MapPin size={16} color={colors.primaryDark} />

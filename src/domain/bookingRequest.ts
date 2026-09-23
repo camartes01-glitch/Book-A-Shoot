@@ -73,6 +73,7 @@ export type CamartesBookingRequest = {
     budget?: number | null;
     clientName?: string | null;
     clientContactMasked?: boolean;
+    days?: any[];
   };
 };
 
@@ -108,24 +109,29 @@ export function toCamartesBookingRequest(booking: Booking, profile: CustomerProf
 
   const lines = days.map((day) => {
     const payload = bookingRequirementPayload(day);
-    const cores = selectedCoreServiceLabels(day).join(", ") || "None";
-    const addOns = selectedAddOnLabels(day).join(", ") || "None";
+    const dayEvent = eventTypeLabels(day.eventTypeIds) || `Day ${day.order} Event`;
+    const photoDetails = [
+      payload.photography.candid ? `Candid Photo × ${payload.photography.candidCount}` : null,
+      payload.photography.traditional ? `Traditional Photo × ${payload.photography.traditionalCount}` : null,
+    ].filter(Boolean).join(", ") || "None";
+    const videoDetails = [
+      payload.videography.candid ? `Cinematic Video × ${payload.videography.candidCount}` : null,
+      payload.videography.traditional ? `Traditional Video × ${payload.videography.traditionalCount}` : null,
+    ].filter(Boolean).join(", ") || "None";
+    const addOnDetails = [
+      payload.aerial.enabled ? `Aerial Drone × ${payload.aerial.drones}` : null,
+      payload.ledWall.enabled ? `LED Wall (${payload.ledWall.size}, ${payload.ledWall.screenCount} screens)` : null,
+      payload.webLive.enabled ? `Web Live (${payload.webLive.quality}, ${payload.webLive.cameraCount} cams)` : null,
+    ].filter(Boolean).join(", ") || "None";
+
     return [
-      `Day ${day.order}: ${day.eventDate ?? "no date"} ${day.startTime ?? "--"}–${day.endTime ?? "--"}${day.overnight ? " (ends next day)" : ""}`,
-      `Location: ${day.location.formattedAddress || day.location.city || "not set"}`,
-      `Event type: ${eventTypeLabels(day.eventTypeIds) || "not set"}`,
-      `Services: ${cores}`,
-      `Add-ons: ${addOns}`,
-      payload.photography.traditional ? `Traditional photographers: ${payload.photography.traditionalCount}` : null,
-      payload.photography.candid ? `Candid photographers: ${payload.photography.candidCount}` : null,
-      payload.videography.traditional ? `Traditional videographers: ${payload.videography.traditionalCount}` : null,
-      payload.videography.candid ? `Candid videographers: ${payload.videography.candidCount}` : null,
-      payload.aerial.enabled ? `Aerial: ${payload.aerial.drones} drone(s)` : null,
-      payload.ledWall.enabled ? `LED Wall: ${payload.ledWall.size} × ${payload.ledWall.screenCount}` : null,
-      payload.webLive.enabled ? `Web Live: ${payload.webLive.quality} × ${payload.webLive.cameraCount}` : null,
-    ]
-      .filter(Boolean)
-      .join("\n");
+      `Day ${day.order}: ${dayEvent}`,
+      `• Date & Time: ${day.eventDate ?? "Date TBD"}, ${day.startTime ? (day.startTime.includes("M") ? day.startTime : formatTime12h(day.startTime)) : "--"} – ${day.endTime ? (day.endTime.includes("M") ? day.endTime : formatTime12h(day.endTime)) : "--"}${day.overnight ? " (Ends next day)" : ""}`,
+      `• Location: ${day.location.formattedAddress || day.location.city || "Venue TBD"}`,
+      `• Photography: ${photoDetails}`,
+      `• Videography: ${videoDetails}`,
+      `• Add-ons: ${addOnDetails}`,
+    ].join("\n");
   });
 
   const { photo, video } = booking.deliverables || { photo: {}, video: {} };
@@ -164,17 +170,20 @@ export function toCamartesBookingRequest(booking: Booking, profile: CustomerProf
 
   const quoted = selectedPackageQuote(booking);
   const message = [
-    `[Book A Shoot] Booking Request`,
-    `Package: ${booking.selectedPackage ?? "n/a"}`,
-    quoted && quoted.maxPrice > 0
-      ? `Package estimate: ${formatInrRange(quoted.minPrice, quoted.maxPrice)} (customer-side approved range, not a provider quote)`
-      : null,
-    deliverablesSummary.length > 0 ? `Deliverables: ${deliverablesSummary.join(", ")}` : null,
-    booking.expectedDeliveryDate ? `Expected delivery: ${booking.expectedDeliveryDate}` : null,
+    `========================================`,
+    `      BOOK A SHOOT — SHOOT SPECIFICATION`,
+    `========================================`,
+    `Package Tier: ${quoted?.label || (booking.selectedPackage ? booking.selectedPackage.toUpperCase() : "PREMIUM")}`,
+    quoted && quoted.maxPrice > 0 ? `Budget Range: ${formatInrRange(quoted.minPrice, quoted.maxPrice)}` : (booking.budget ? `Budget: ₹${booking.budget}` : null),
+    `Total Scheduled Days: ${days.length}`,
+    booking.expectedDeliveryDate ? `Target Delivery: ${booking.expectedDeliveryDate}` : null,
+    deliverablesSummary.length > 0 ? `Deliverables: ${deliverablesSummary.join(" · ")}` : null,
+    `\n---------------- SCHEDULE & CREW BY EVENT DAY ----------------\n`,
     ...lines,
+    `\n========================================`,
   ]
     .filter(Boolean)
-    .join("\n\n");
+    .join("\n");
 
   const eventTypes = Array.from(new Set(days.flatMap((d) => d.eventTypeIds.map((id) => eventTypeLabels([id]) || id))));
   const cores = Array.from(new Set(days.flatMap((d) => selectedCoreServiceLabels(d))));
@@ -247,6 +256,22 @@ export function toCamartesBookingRequest(booking: Booking, profile: CustomerProf
       budget: booking.budget,
       clientName: profile?.name || "Customer",
       clientContactMasked: true,
+      days: days.map((d) => ({
+        dayOrder: d.order,
+        eventType: eventTypeLabels(d.eventTypeIds) || "Event Day",
+        eventDate: d.eventDate,
+        startTime: d.startTime ? formatTime12h(d.startTime) : null,
+        endTime: d.endTime ? formatTime12h(d.endTime) : null,
+        overnight: d.overnight,
+        venueAddress: d.location?.formattedAddress || d.location?.city || venueAddress,
+        city: d.location?.city || city,
+        services: selectedDetailedServiceLabels(d),
+        photography: d.photography,
+        videography: d.videography,
+        aerial: d.aerial,
+        ledWall: d.ledWall,
+        webLive: d.webLive,
+      })),
     },
   };
 }

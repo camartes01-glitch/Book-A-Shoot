@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Alert, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { router } from "expo-router";
-import { ChevronRight, Lock, MapPin, Pencil, ShieldCheck, Star } from "lucide-react-native";
+import { Calendar, Camera, ChevronRight, Clapperboard, Clock, Image as ImageLucide, Lock, MapPin, Pencil, ShieldCheck, Sparkles, Star, Video } from "lucide-react-native";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { Button, Card, Muted, SectionTitle } from "@/src/components/ui";
 import { BookingSuccessModal } from "@/src/components/BookingSuccessModal";
@@ -11,9 +11,9 @@ import { formatDateLong, formatInr, formatInrRange, formatPackageOverallLabel, f
 import { durationMinutes, formatDuration } from "@/src/utils/dateTime";
 import { colors } from "@/src/constants/theme";
 import { DEFAULT_EVENT_CATEGORIES } from "@/src/constants/eventCategories";
-import { selectedAddOnLabels, selectedCoreServiceLabels } from "@/src/domain/dayServices";
 import { CamartesApiError } from "@/src/services/camartesClient";
 import { detectDayOvertime, getBookingPricingModel } from "@/src/config/approvedBudget";
+import type { EventDay } from "@/src/types/booking";
 
 function initials(name: string) {
   return (
@@ -26,29 +26,49 @@ function initials(name: string) {
   );
 }
 
-function EditLink({ onPress, label }: { onPress: () => void; label: string }) {
-  return (
-    <Pressable onPress={onPress} hitSlop={8} accessibilityRole="button" accessibilityLabel={`Edit ${label}`}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-        <Pencil size={14} color={colors.primaryDark} />
-        <Muted style={{ color: colors.primaryDark, fontWeight: "800" }}>Edit</Muted>
-      </View>
-    </Pressable>
-  );
-}
-
 function SectionHead({ title, onEdit }: { title: string; onEdit: () => void }) {
   return (
-    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+    <View style={styles.sectionHeadRow}>
       <SectionTitle>{title}</SectionTitle>
-      <EditLink onPress={onEdit} label={title} />
+      <Pressable onPress={onEdit} hitSlop={8} style={styles.singleEditBtn} accessibilityRole="button" accessibilityLabel={`Edit ${title}`}>
+        <Pencil size={13} color="#EA580C" />
+        <Text style={styles.singleEditText}>Edit</Text>
+      </Pressable>
     </View>
   );
 }
 
+function getDayEventTitle(day: EventDay): string {
+  const labels = (day.eventTypeIds || [])
+    .map((id) => DEFAULT_EVENT_CATEGORIES.find((c) => c.id === id)?.label ?? id)
+    .filter(Boolean);
+  return labels.length ? labels.join(" · ") : `Event Day ${day.order}`;
+}
+
+function getDayServicesText(day: EventDay): string {
+  const parts: string[] = [];
+  if (day.photography?.traditional) parts.push(`Traditional Photo ×${day.photography.traditionalCount}`);
+  if (day.photography?.candid) parts.push(`Candid Photo ×${day.photography.candidCount}`);
+  if (day.videography?.traditional) parts.push(`Traditional Video ×${day.videography.traditionalCount}`);
+  if (day.videography?.candid) parts.push(`Cinematic Video ×${day.videography.candidCount}`);
+  return parts.length ? parts.join(" · ") : "No core coverage selected";
+}
+
+function getDayAddOnsText(day: EventDay): string {
+  const parts: string[] = [];
+  if (day.aerial?.drones > 0) parts.push(`Drone ×${day.aerial.drones}`);
+  if (day.ledWall?.enabled) parts.push(`LED Wall (${day.ledWall.size}, ${day.ledWall.screenCount} screen${day.ledWall.screenCount > 1 ? "s" : ""})`);
+  if (day.webLive?.enabled) parts.push(`Web Live (${day.webLive.quality}, ${day.webLive.cameraCount} cam)`);
+  return parts.length ? parts.join(" · ") : "None";
+}
+
 export default function ConfirmBookingScreen() {
-  const { activeDraft, submitVendorRequest, clearActiveDraft, profile } = useAppStore();
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 640;
+
+  const { activeDraft, loadVendorMatches, submitVendorRequest, clearActiveDraft, profile } = useAppStore();
   const [loading, setLoading] = useState(false);
+  const [fetchingMatches, setFetchingMatches] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successData, setSuccessData] = useState<{
     bookingId: string;
@@ -57,10 +77,26 @@ export default function ConfirmBookingScreen() {
     dateLabel?: string;
   } | null>(null);
 
+  useEffect(() => {
+    if (activeDraft && (!activeDraft.matches || activeDraft.matches.length === 0)) {
+      setFetchingMatches(true);
+      void loadVendorMatches().finally(() => setFetchingMatches(false));
+    }
+  }, [activeDraft?.bookingId, activeDraft?.matches?.length]);
+
   const matches = activeDraft?.matches ?? [];
   const primaryVendorId = activeDraft?.selectedVendorId || matches[0]?.vendorId;
 
-  if (!activeDraft || (!primaryVendorId && matches.length === 0)) {
+  if (!activeDraft) return null;
+
+  if (!primaryVendorId && matches.length === 0) {
+    if (fetchingMatches) {
+      return (
+        <WizardScreen title="Review your booking" step="review">
+          <Muted>Matching verified photography partners for your updated details…</Muted>
+        </WizardScreen>
+      );
+    }
     return (
       <WizardScreen title="Review your booking" step="review">
         <Muted>Match providers before sending a booking request.</Muted>
@@ -73,12 +109,11 @@ export default function ConfirmBookingScreen() {
   const pkg = selectedPackageQuote(activeDraft);
   const days = [...(activeDraft.days || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const firstDay = days[0];
-  const eventLabel = days
+
+  const overallEventLabel = days
     .flatMap((day) => day.eventTypeIds.map((id) => DEFAULT_EVENT_CATEGORIES.find((c) => c.id === id)?.label ?? id))
     .filter(Boolean)
     .join(" · ");
-  const services = Array.from(new Set(days.flatMap((day) => selectedCoreServiceLabels(day))));
-  const addOns = Array.from(new Set(days.flatMap((day) => selectedAddOnLabels(day))));
 
   const model = getBookingPricingModel(days);
   const teaserTitle =
@@ -104,7 +139,7 @@ export default function ConfirmBookingScreen() {
         statusMessage:
           submitted.firms_status_message ||
           "Dispatched to verified photography partners. You will be notified as partners accept.",
-        eventName: eventLabel || "Photography Booking",
+        eventName: overallEventLabel || "Photography Booking",
         dateLabel: firstDay?.eventDate ? formatDateLong(firstDay.eventDate) : undefined,
       });
     } catch (e) {
@@ -157,83 +192,181 @@ export default function ConfirmBookingScreen() {
       ) : null}
       <Muted>Sending this request dispatches your shoot to verified photography partners. It is not confirmed until a partner accepts and confirms.</Muted>
 
-      <Card>
-        <SectionHead title="Event" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}?step=event` : "/booking/new")} />
-        <Muted style={{ fontWeight: "800", color: colors.ink }}>{eventLabel || "Event"}</Muted>
-        <Muted>
-          {days.length} day{days.length === 1 ? "" : "s"} of coverage
-        </Muted>
-      </Card>
-
-      <Card>
-        <SectionHead title="Date and time" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}?step=event` : "/booking/new")} />
+      {/* Individual Per-Event Cards Container (Left/Right on Desktop, Stacked on Mobile) */}
+      <View style={isDesktop ? styles.desktopGrid : styles.mobileGrid}>
         {days.map((day) => {
           const minutes =
             day?.startTime && day?.endTime ? durationMinutes(day.startTime, day.endTime, day.overnight) : null;
           const overtime = day?.startTime && day?.endTime ? detectDayOvertime(day, durationMinutes) : { isExtended: false, note: null };
+          const eventTitle = getDayEventTitle(day);
+          const servicesText = getDayServicesText(day);
+          const addOnsText = getDayAddOnsText(day);
+
           return (
-            <View key={day?.dayId ?? Math.random()} style={{ gap: 2, marginBottom: 4 }}>
-              <Muted style={{ fontWeight: "700", color: colors.ink }}>
-                Day {day?.order}: {day?.eventDate ? formatDateLong(day.eventDate) : "Date pending"} · {day?.startTime ? formatTime12h(day.startTime) : "--"} – {day?.endTime ? formatTime12h(day.endTime) : "--"}
-                {day?.overnight ? " · Ends the next day" : ""}
-                {minutes != null ? ` · ${formatDuration(minutes)}` : ""}
-              </Muted>
-              {overtime?.isExtended && overtime?.note ? (
-                <Muted style={{ color: colors.primaryDark, fontWeight: "700", fontSize: 13 }}>
-                  ⚠️ {overtime.note} (standard included schedule is 8 hours)
-                </Muted>
-              ) : null}
-            </View>
+            <Card key={day.dayId} style={isDesktop ? styles.desktopCard : styles.mobileCard}>
+              {/* Event Card Header */}
+              <View style={styles.eventCardHeader}>
+                <View style={styles.eventCardTitleGroup}>
+                  <View style={styles.dayBadge}>
+                    <Text style={styles.dayBadgeText}>Day {day.order}</Text>
+                  </View>
+                  <Text style={styles.eventCardTitle} numberOfLines={1}>
+                    {eventTitle}
+                  </Text>
+                </View>
+                <Pressable
+                  style={styles.singleEditBtn}
+                  onPress={() => router.push(`/booking/day/${day.dayId}?step=event&mode=edit`)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit details for Day ${day.order} ${eventTitle}`}
+                >
+                  <Pencil size={13} color="#EA580C" />
+                  <Text style={styles.singleEditText}>Edit</Text>
+                </Pressable>
+              </View>
+
+              <View style={styles.divider} />
+
+              {/* Date & Time */}
+              <View style={styles.detailRow}>
+                <Calendar size={15} color="#EA580C" style={styles.detailIcon} />
+                <View style={{ flex: 1, gap: 1 }}>
+                  <Text style={styles.detailLabel}>Date & Time</Text>
+                  <Text style={styles.detailValueText}>
+                    {day.eventDate ? formatDateLong(day.eventDate) : "Date pending"}
+                  </Text>
+                  <Text style={styles.detailSubValueText}>
+                    {day.startTime ? formatTime12h(day.startTime) : "--"} – {day.endTime ? formatTime12h(day.endTime) : "--"}
+                    {day.overnight ? " · Ends next day" : ""}
+                    {minutes != null ? ` · ${formatDuration(minutes)}` : ""}
+                  </Text>
+                  {overtime?.isExtended && overtime?.note ? (
+                    <Text style={styles.overtimeText}>{overtime.note} (standard schedule is 8 hrs)</Text>
+                  ) : null}
+                </View>
+              </View>
+
+              {/* Location */}
+              <View style={styles.detailRow}>
+                <MapPin size={15} color="#EA580C" style={styles.detailIcon} />
+                <View style={{ flex: 1, gap: 1 }}>
+                  <Text style={styles.detailLabel}>Location</Text>
+                  <Text style={styles.detailValueText}>
+                    {day.location?.formattedAddress || day.location?.city || "Location pending"}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Coverage & Services */}
+              <View style={styles.detailRow}>
+                <Camera size={15} color="#EA580C" style={styles.detailIcon} />
+                <View style={{ flex: 1, gap: 1 }}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={styles.detailLabel}>Coverage & Services</Text>
+                    <Pressable
+                      onPress={() => router.push(`/booking/day/${day.dayId}?step=photography&mode=edit`)}
+                      hitSlop={8}
+                    >
+                      <Text style={{ fontSize: 11, fontWeight: "700", color: "#EA580C" }}>Edit</Text>
+                    </Pressable>
+                  </View>
+                  <Text style={styles.detailValueText}>{servicesText}</Text>
+                </View>
+              </View>
+
+              {/* Add-ons */}
+              <View style={styles.detailRow}>
+                <Sparkles size={15} color="#EA580C" style={styles.detailIcon} />
+                <View style={{ flex: 1, gap: 1 }}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={styles.detailLabel}>Event Add-ons</Text>
+                    <Pressable
+                      onPress={() => router.push(`/booking/day/${day.dayId}?step=addons&mode=edit`)}
+                      hitSlop={8}
+                    >
+                      <Text style={{ fontSize: 11, fontWeight: "700", color: "#EA580C" }}>Edit</Text>
+                    </Pressable>
+                  </View>
+                  <Text style={styles.detailValueText}>{addOnsText}</Text>
+                </View>
+              </View>
+            </Card>
           );
         })}
-      </Card>
+      </View>
 
-      <Card>
-        <SectionHead title="Location" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}/location` : "/booking/new")} />
-        {days.map((day) => (
-          <Muted key={day.dayId} style={{ fontWeight: "700", color: colors.ink }}>
-            Day {day.order}: {day.location.formattedAddress || day.location.city || "Location pending"}
-          </Muted>
-        ))}
-      </Card>
+      {/* Common Selections Displayed Separately AFTER the Event Cards */}
 
+      {/* Deliverables Card */}
       <Card>
-        <SectionHead title="Services" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}?step=photography` : "/booking/new")} />
-        <Muted style={{ fontWeight: "800", color: colors.ink }}>{services.join(" · ") || "Add coverage"}</Muted>
-      </Card>
+        <SectionHead title="Deliverables" onEdit={() => router.push("/booking/deliverables?mode=edit")} />
 
-      <Card>
-        <SectionHead title="Add-ons" onEdit={() => router.push(firstDay ? `/booking/day/${firstDay.dayId}?step=addons` : "/booking/new")} />
-        <Muted style={{ fontWeight: "700", color: colors.ink }}>{addOns.length ? addOns.join(" · ") : "None"}</Muted>
-      </Card>
+        <View style={styles.divider} />
 
-      <Card>
-        <SectionHead title="Deliverables" onEdit={() => router.push("/booking/deliverables")} />
+        {/* Teaser Highlight */}
         {teaserEnabled ? (
-          <Muted style={{ fontWeight: "700", color: colors.primaryDark }}>
-            🎬 {teaserTitle}: {teaserMins} min{teaserMins > 1 ? "s" : ""}
-          </Muted>
+          <View style={styles.detailRow}>
+            <Clapperboard size={15} color="#EA580C" style={styles.detailIcon} />
+            <View style={{ flex: 1, gap: 1 }}>
+              <Text style={styles.detailLabel}>Teaser Highlight</Text>
+              <Text style={styles.detailValueText}>
+                {teaserTitle} ({teaserMins} min{teaserMins > 1 ? "s" : ""})
+              </Text>
+            </View>
+          </View>
         ) : null}
-        <Muted>
-          Photos: {activeDraft.deliverables.photo.editedPhotosOption === "custom" ? `${activeDraft.deliverables.photo.editedPhotosCustomCount ?? 0} edited` : `${activeDraft.deliverables.photo.editedPhotosOption} edited`}
-          {activeDraft.deliverables.photo.album ? ` · Album (${activeDraft.deliverables.photo.albumPagesOption === "custom" ? activeDraft.deliverables.photo.albumPagesCustomCount : activeDraft.deliverables.photo.albumPagesOption} pages)` : ""}
-          {activeDraft.deliverables.photo.rawPhotos ? " · Raw files" : ""}
-        </Muted>
-        <Muted>
-          Videos: {activeDraft.deliverables.video.editedTraditionalVideoCount} traditional · {activeDraft.deliverables.video.editedCinematicVideoCount} cinematic
-          {activeDraft.deliverables.video.rawVideo ? " · Raw footage" : ""}
-        </Muted>
-        <Muted>Expected by {formatDateLong(activeDraft.expectedDeliveryDate)}</Muted>
+
+        {/* Photos Deliverables */}
+        <View style={styles.detailRow}>
+          <ImageLucide size={15} color="#EA580C" style={styles.detailIcon} />
+          <View style={{ flex: 1, gap: 1 }}>
+            <Text style={styles.detailLabel}>Photos</Text>
+            <Text style={styles.detailValueText}>
+              {activeDraft.deliverables.photo.editedPhotosOption === "custom"
+                ? `${activeDraft.deliverables.photo.editedPhotosCustomCount ?? 0} edited photos`
+                : `${activeDraft.deliverables.photo.editedPhotosOption} edited photos`}
+              {activeDraft.deliverables.photo.album
+                ? ` · Printed Album (${activeDraft.deliverables.photo.albumPagesOption === "custom" ? activeDraft.deliverables.photo.albumPagesCustomCount : activeDraft.deliverables.photo.albumPagesOption} pages)`
+                : ""}
+              {activeDraft.deliverables.photo.rawPhotos ? " · All raw files" : ""}
+            </Text>
+          </View>
+        </View>
+
+        {/* Videos Deliverables */}
+        <View style={styles.detailRow}>
+          <Video size={15} color="#EA580C" style={styles.detailIcon} />
+          <View style={{ flex: 1, gap: 1 }}>
+            <Text style={styles.detailLabel}>Videos</Text>
+            <Text style={styles.detailValueText}>
+              {activeDraft.deliverables.video.editedTraditionalVideoCount} traditional film{activeDraft.deliverables.video.editedTraditionalVideoCount !== 1 ? "s" : ""} · {activeDraft.deliverables.video.editedCinematicVideoCount} cinematic story{activeDraft.deliverables.video.editedCinematicVideoCount !== 1 ? "ies" : ""}
+              {activeDraft.deliverables.video.rawVideo ? " · All raw footage" : ""}
+            </Text>
+          </View>
+        </View>
+
+        {/* Expected Delivery Date */}
+        <View style={styles.detailRow}>
+          <Clock size={15} color="#EA580C" style={styles.detailIcon} />
+          <View style={{ flex: 1, gap: 1 }}>
+            <Text style={styles.detailLabel}>Expected Delivery Date</Text>
+            <Text style={styles.detailValueText}>
+              {activeDraft.expectedDeliveryDate ? formatDateLong(activeDraft.expectedDeliveryDate) : "Delivery date pending"}
+            </Text>
+          </View>
+        </View>
       </Card>
 
+      {/* Budget Card */}
       <Card>
-        <SectionHead title="Budget" onEdit={() => router.push("/booking/budget")} />
+        <SectionHead title="Budget" onEdit={() => router.push("/booking/budget?mode=edit")} />
         <Muted style={{ fontWeight: "800", color: colors.ink }}>{activeDraft.budget ? formatInr(activeDraft.budget) : "Not set"}</Muted>
-        <Muted>Approximate</Muted>
+        <Muted>Approximate overall budget</Muted>
       </Card>
 
+      {/* Approved Package Card */}
       <Card>
-        <SectionHead title="Package" onEdit={() => router.push("/booking/packages")} />
+        <SectionHead title="Approved Package Range" onEdit={() => router.push("/booking/packages?mode=edit")} />
         <Muted style={{ fontWeight: "800", color: colors.ink, flexShrink: 1 }}>
           {pkg ? formatPackageOverallLabel(pkg.label, pkg.minPrice, pkg.maxPrice) : (activeDraft.selectedPackage ?? "—")}
         </Muted>
@@ -242,7 +375,7 @@ export default function ConfirmBookingScreen() {
             {formatInrRange(pkg.minPrice, pkg.maxPrice)}
           </Muted>
         ) : null}
-        <Muted>Approved range for your selected services. Not a provider quote.</Muted>
+        <Muted>Approved range for your selected multi-event services. Not a provider quote.</Muted>
       </Card>
 
       {/* Selected Photography Firms Preview Card */}
@@ -364,6 +497,114 @@ export default function ConfirmBookingScreen() {
 }
 
 const styles = StyleSheet.create({
+  sectionHeadRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  desktopGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginVertical: 4,
+  },
+  mobileGrid: {
+    flexDirection: "column",
+    gap: 12,
+    marginVertical: 4,
+  },
+  desktopCard: {
+    flex: 1,
+    minWidth: 280,
+  },
+  mobileCard: {
+    width: "100%",
+  },
+  eventCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  eventCardTitleGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  dayBadge: {
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 99,
+  },
+  dayBadgeText: {
+    fontSize: 11.5,
+    fontWeight: "800",
+    color: "#EA580C",
+  },
+  eventCardTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: colors.ink,
+    flex: 1,
+  },
+  singleEditBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  singleEditText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#EA580C",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#F1F5F9",
+    marginVertical: 10,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginBottom: 10,
+  },
+  detailIcon: {
+    marginTop: 2,
+  },
+  detailLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#94A3B8",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  detailValueText: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: colors.ink,
+    lineHeight: 18,
+  },
+  detailSubValueText: {
+    fontSize: 12.5,
+    color: "#64748B",
+    fontWeight: "500",
+  },
+  overtimeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.primaryDark,
+    marginTop: 2,
+  },
   dispatchHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -530,4 +771,3 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 });
-

@@ -11,6 +11,7 @@ export function WizardScreen({
   onHome,
   footer,
   children,
+  scrollViewRef,
 }: {
   title: string;
   step: WizardStepId;
@@ -18,6 +19,7 @@ export function WizardScreen({
   onHome?: () => void;
   footer?: React.ReactNode;
   children: React.ReactNode;
+  scrollViewRef?: React.RefObject<ScrollView | null>;
 }) {
   const insets = useSafeAreaInsets();
 
@@ -26,6 +28,7 @@ export function WizardScreen({
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ProgressHeader title={title} step={step} onBack={onBack} onHome={onHome} />
         <ScrollView
+          ref={scrollViewRef}
           contentContainerStyle={[styles.content, footer ? { paddingBottom: spacing.xxl } : { paddingBottom: Math.max(insets.bottom, spacing.xl) }]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"

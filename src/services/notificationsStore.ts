@@ -261,6 +261,21 @@ export async function addNotification(notification: AppNotification): Promise<vo
     return;
   }
   const list = await getNotifications();
+  const titleNorm = (notification.title || "").trim();
+  const bodyNorm = (notification.body || "").trim();
+  const newContentKey = `${notification.type || ""}:${notification.bookingId || ""}:${notification.firmId || ""}:${titleNorm}:${bodyNorm}`;
+
+  const exists = list.some((n) => {
+    const tNorm = (n.title || "").trim();
+    const bNorm = (n.body || "").trim();
+    const existingContentKey = `${n.type || ""}:${n.bookingId || ""}:${n.firmId || ""}:${tNorm}:${bNorm}`;
+    return existingContentKey === newContentKey;
+  });
+
+  if (exists) {
+    return;
+  }
+
   const updated = deduplicateNotifications([notification, ...list]).slice(0, 100);
   await AsyncStorage.setItem(KEY, JSON.stringify(updated));
   notifyListeners();

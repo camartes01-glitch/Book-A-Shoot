@@ -139,15 +139,35 @@ function vendorHasCapabilities(vendor: CustomerVendor, req: AggregatedRequiremen
   return true;
 }
 
+export function isTwinCity(city: string): boolean {
+  const c = (city || "").trim().toLowerCase();
+  return c.includes("hyderabad") || c.includes("secunderabad") || c.includes("hyd") || c.includes("secunder");
+}
+
+export function isCityMatch(targetCity: string, candidateCityOrArea: string): boolean {
+  if (!targetCity || !targetCity.trim()) return true;
+  const target = targetCity.trim().toLowerCase();
+  const candidate = (candidateCityOrArea || "").trim().toLowerCase();
+  if (!candidate) return false;
+
+  if (target === candidate || target.includes(candidate) || candidate.includes(target)) {
+    return true;
+  }
+
+  // Twin city equivalence: Hyderabad and Secunderabad are twin cities and serve both locations
+  if (isTwinCity(target) && isTwinCity(candidate)) {
+    return true;
+  }
+
+  return false;
+}
+
 function vendorServesCity(vendor: CustomerVendor, city: string): boolean {
   if (!city || !city.trim()) return true;
-  const key = city.trim().toLowerCase();
-  const vCity = (vendor.city || "").trim().toLowerCase();
-  if (vCity && (vCity === key || vCity.includes(key) || key.includes(vCity))) return true;
-  return vendor.serviceAreas.some((area) => {
-    const a = area.trim().toLowerCase();
-    return a && (a === key || a.includes(key) || key.includes(a));
-  });
+  const target = city.trim();
+  const vCity = vendor.city || "";
+  if (vCity && isCityMatch(target, vCity)) return true;
+  return vendor.serviceAreas.some((area) => isCityMatch(target, area));
 }
 
 /** Check vendor availability based on minimum wallet balance (₹500). */
@@ -215,19 +235,16 @@ function vendorServesLocationPreference(
   if (!pref || pref.mode === "event_location") {
     return vendorServesCity(vendor, eventCity ?? "");
   }
-  const target = (pref.city || "").trim().toLowerCase();
+  const target = (pref.city || "").trim();
   if (!target) return vendorServesCity(vendor, eventCity ?? "");
 
-  if (vendor.city.trim().toLowerCase().includes(target) || target.includes(vendor.city.trim().toLowerCase())) {
+  if (isCityMatch(target, vendor.city)) {
     return true;
   }
-  if (vendor.area && (vendor.area.trim().toLowerCase().includes(target) || target.includes(vendor.area.trim().toLowerCase()))) {
+  if (vendor.area && isCityMatch(target, vendor.area)) {
     return true;
   }
-  return vendor.serviceAreas.some((area) => {
-    const a = area.trim().toLowerCase();
-    return a.includes(target) || target.includes(a);
-  });
+  return vendor.serviceAreas.some((area) => isCityMatch(target, area));
 }
 
 export function matchVendors(

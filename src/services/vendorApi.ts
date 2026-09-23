@@ -78,29 +78,25 @@ export type CatalogQuery = {
   longitude?: number | null;
 };
 
-async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): Promise<RawSearchHit[]> {
-  // Query photography firms endpoint: GET /api/providers/service/{service_type}
-  try {
-    const url = new URL(`${CAMARTES_API}/api/providers/service/${encodeURIComponent(serviceType)}`);
-    if (query.city?.trim()) {
-      url.searchParams.set("city", query.city.trim());
-    }
+function getTwinCity(city: string): string | null {
+  const c = (city || "").trim().toLowerCase();
+  if (c.includes("secunderabad") || c.includes("secunder")) return "Hyderabad";
+  if (c.includes("hyderabad") || c.includes("hyd")) return "Secunderabad";
+  return null;
+}
 
-    const res = await fetch(url.toString(), {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Client-App": "bookashoot",
-        "X-Booking-Source": "book_a_shoot",
-      },
-      signal: AbortSignal.timeout(15000),
-    });
-    if (res.ok) {
-      const rows = (await res.json()) as RawSearchHit[];
-      // If filtered by city but 0 results, fall back to broad search without city param
-      if (query.city?.trim() && Array.isArray(rows) && rows.length === 0) {
-        const broadUrl = new URL(`${CAMARTES_API}/api/providers/service/${encodeURIComponent(serviceType)}`);
-        const broadRes = await fetch(broadUrl.toString(), {
+async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): Promise<RawSearchHit[]> {
+  try {
+    const mainCity = query.city?.trim() || "";
+    const twinCity = mainCity ? getTwinCity(mainCity) : null;
+
+    const fetchForCity = async (cityStr: string | null): Promise<RawSearchHit[]> => {
+      try {
+        const url = new URL(`${CAMARTES_API}/api/providers/service/${encodeURIComponent(serviceType)}`);
+        if (cityStr) {
+          url.searchParams.set("city", cityStr);
+        }
+        const res = await fetch(url.toString(), {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -109,31 +105,30 @@ async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): 
           },
           signal: AbortSignal.timeout(15000),
         });
-        if (broadRes.ok) {
-          const broadRows = (await broadRes.json()) as RawSearchHit[];
-          return Array.isArray(broadRows) ? broadRows : [];
+        if (res.ok) {
+          const data = await res.json();
+          return Array.isArray(data) ? data : [];
         }
+      } catch {
+        /* best-effort sub-query */
       }
-      return Array.isArray(rows) ? rows : [];
+      return [];
+    };
+
+    const mainHits = await fetchForCity(mainCity || null);
+    let twinHits: RawSearchHit[] = [];
+    if (twinCity) {
+      twinHits = await fetchForCity(twinCity);
     }
 
-    // Fallback: If service endpoint returned 404, try GET /api/providers/search/{service_type}
-    if (res.status === 404) {
-      const fallbackUrl = new URL(`${CAMARTES_API}/api/providers/search/${encodeURIComponent(serviceType)}`);
-      if (query.city?.trim()) fallbackUrl.searchParams.set("city", query.city.trim());
-      const fallbackRes = await fetch(fallbackUrl.toString(), {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Client-App": "bookashoot",
-          "X-Booking-Source": "book_a_shoot",
-        },
-        signal: AbortSignal.timeout(15000),
-      });
-      if (fallbackRes.ok) {
-        const rows = (await fallbackRes.json()) as RawSearchHit[];
-        return Array.isArray(rows) ? rows : [];
-      }
+    const combined = [...mainHits, ...twinHits];
+    if (combined.length > 0) {
+      return combined;
+    }
+
+    // Broad fallback without city filter if both returned 0 hits
+    if (mainCity) {
+      return await fetchForCity(null);
     }
 
     return [];

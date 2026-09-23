@@ -632,10 +632,12 @@ export async function updateDay(bookingId: string, dayId: string | string[], pat
     const merged = mergeEventDayPatch(current, safePatch);
     const days = booking.days.map((d) => (d.dayId === current!.dayId ? merged : d));
     const servicesChanged = serviceFingerprint(current) !== serviceFingerprint(merged);
+    const selectedPackage = booking.selectedPackage ?? "signature";
     return saveBooking({
       ...booking,
       days,
       ...(servicesChanged ? invalidateStalePackageAndMatches(booking) : {}),
+      selectedPackage,
     });
   });
   dayWriteChain = write.then(
@@ -673,7 +675,13 @@ export async function reorderDays(bookingId: string, orderedDayIds: string[]): P
 export async function updateDeliverables(bookingId: string, patch: Partial<Booking["deliverables"]>): Promise<Booking> {
   const booking = await getBooking(bookingId);
   if (!booking) throw new Error("Booking not found");
-  return saveBooking({ ...booking, deliverables: { ...booking.deliverables, ...patch }, ...invalidateStalePackageAndMatches(booking) });
+  const selectedPackage = booking.selectedPackage ?? "signature";
+  return saveBooking({
+    ...booking,
+    deliverables: { ...booking.deliverables, ...patch },
+    ...invalidateStalePackageAndMatches(booking),
+    selectedPackage,
+  });
 }
 
 export async function updateExpectedDelivery(bookingId: string, date: string): Promise<Booking> {
@@ -743,7 +751,9 @@ export async function getVendorMatches(bookingId: string): Promise<Booking> {
   }
   const validationIssues = validateBooking(booking);
   if (validationIssues.length) throw new Error(validationIssues[0].message);
-  if (!booking.selectedPackage) throw new Error("Select a package before matching vendors.");
+  if (!booking.selectedPackage) {
+    booking = await saveBooking({ ...booking, selectedPackage: "signature" });
+  }
 
   const first = [...booking.days].sort((a, b) => a.order - b.order)[0];
   const queryCity = booking.providerLocationPreference?.city || first?.location?.city || null;
@@ -754,10 +764,11 @@ export async function getVendorMatches(bookingId: string): Promise<Booking> {
     latitude: first?.location?.latitude,
     longitude: first?.location?.longitude,
   });
+  const chosenPackage = booking.selectedPackage ?? "signature";
   const matches = matchVendors(
     booking,
     vendors,
-    booking.selectedPackage,
+    chosenPackage,
     booking.budget ?? 0,
     booking.excludedVendorIds,
   );

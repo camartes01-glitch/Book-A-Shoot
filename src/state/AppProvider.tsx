@@ -60,7 +60,7 @@ type AppContextValue = {
   startNewBooking: () => Promise<Booking>;
   loadDraft: (bookingId: string) => Promise<Booking | null>;
   clearActiveDraft: () => void;
-  addDay: () => Promise<void>;
+  addDay: () => Promise<Booking>;
   duplicateLastDay: () => Promise<void>;
   duplicateEventDay: (dayId: string) => Promise<void>;
   updateDay: (dayId: string | string[], patch: Partial<EventDay>) => Promise<void>;
@@ -378,7 +378,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addDay = useCallback(async () => {
-    await withDraft((id) => bookingApi.addDay(id));
+    return withDraft((id) => bookingApi.addDay(id));
   }, [withDraft]);
 
   const duplicateLastDay = useCallback(async () => {
