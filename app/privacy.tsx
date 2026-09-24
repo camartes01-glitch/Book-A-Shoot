@@ -50,7 +50,7 @@ export default function PrivacyPage() {
           <Pressable onPress={goToHome}>
             <Image
               source={require("@/assets/images/book-a-shoot-wordmark.png")}
-              style={styles.navLogo}
+              style={[styles.navLogo, !isWide && styles.navLogoPhone]}
               resizeMode="contain"
               accessibilityLabel="Book A Shoot"
             />
@@ -68,10 +68,6 @@ export default function PrivacyPage() {
       >
         <View style={[styles.container, isWide && styles.containerWide]}>
           <View style={styles.header}>
-            <View style={styles.pill}>
-              <Lock size={14} color={colors.primaryDark} />
-              <Text style={styles.pillText}>Privacy & Data Protection</Text>
-            </View>
             <Text style={styles.title}>Privacy Policy</Text>
             <Text style={styles.lastUpdated}>Effective Date: September 2025 · Camartes Technologies</Text>
           </View>
@@ -219,6 +215,10 @@ const styles = StyleSheet.create({
   navLogo: {
     width: 220,
     height: 56,
+  },
+  navLogoPhone: {
+    width: 135,
+    height: 34,
   },
   container: {
     paddingHorizontal: spacing.xl,

@@ -296,23 +296,29 @@ export default function ServicesPage() {
           <Pressable onPress={goToHome} style={styles.navLogoContainer}>
             <Image
               source={require("@/assets/images/book-a-shoot-wordmark.png")}
-              style={styles.navLogo}
+              style={[styles.navLogo, !isWide && styles.navLogoPhone]}
               resizeMode="contain"
               accessibilityLabel="Book A Shoot"
             />
           </Pressable>
 
           <View style={styles.navActions}>
-            <Pressable
-              onPress={goToAbout}
-              style={({ pressed }) => [styles.navGhostBtn, pressed && styles.pressed]}
-              accessibilityRole="link"
-            >
-              <Text style={styles.navGhostText}>About</Text>
-            </Pressable>
+            {isWide && (
+              <Pressable
+                onPress={goToAbout}
+                style={({ pressed }) => [styles.navGhostBtn, pressed && styles.pressed]}
+                accessibilityRole="link"
+              >
+                <Text style={styles.navGhostText}>About</Text>
+              </Pressable>
+            )}
             <Pressable
               onPress={goToLogin}
-              style={({ pressed }) => [styles.navPrimaryBtn, pressed && styles.pressed]}
+              style={({ pressed }) => [
+                styles.navPrimaryBtn,
+                !isWide && styles.navPrimaryBtnPhone,
+                pressed && styles.pressed,
+              ]}
               accessibilityRole="button"
             >
               <Text style={styles.navPrimaryText}>Book Now</Text>
@@ -324,16 +330,16 @@ export default function ServicesPage() {
       {/* ── Main Content Scroll ────────────────────────────────────────── */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingTop: insets.top + 70, paddingBottom: 60 }}
+        contentContainerStyle={{ paddingTop: insets.top + (isWide ? 70 : 60), paddingBottom: 60 }}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Header Banner ─────────────────────────────────────────────── */}
-        <View style={[styles.headerSection, isWide && styles.headerSectionWide]}>
+        <View style={[styles.headerSection, isWide ? styles.headerSectionWide : styles.headerSectionPhone]}>
           <View style={styles.pill}>
             <Sparkles size={14} color={colors.primaryDark} />
             <Text style={styles.pillText}>Complete Service Catalog</Text>
           </View>
-          <Text style={[styles.heading, isWide && styles.headingWide]}>
+          <Text style={[styles.heading, isWide ? styles.headingWide : styles.headingPhone]}>
             Dedicated Event Services
           </Text>
           <Text style={[styles.subheading, isWide && styles.subheadingWide]}>
@@ -394,7 +400,7 @@ export default function ServicesPage() {
         </View>
 
         {/* ── Services Grid ─────────────────────────────────────────────── */}
-        <View style={[styles.gridContainer, isWide && styles.gridContainerWide]}>
+        <View style={[styles.gridContainer, isWide ? styles.gridContainerWide : styles.gridContainerPhone]}>
           {filteredServices.length === 0 ? (
             <View style={styles.emptyCard}>
               <Search size={36} color={colors.muted} />
@@ -442,7 +448,7 @@ export default function ServicesPage() {
         </View>
 
         {/* ── SPECIAL MARKETING SECTION: CUSTOM EVENTS ───────────────────── */}
-        <View style={[styles.customEventSection, isWide && styles.customEventSectionWide]}>
+        <View style={[styles.customEventSection, isWide ? styles.customEventSectionWide : styles.customEventSectionPhone]}>
           <View style={styles.customEventCard}>
             <View style={styles.customEventPill}>
               <Sparkles size={14} color={colors.white} />
@@ -476,7 +482,7 @@ export default function ServicesPage() {
         </View>
 
         {/* ── UNIFIED CTA BANNER (cta.png as Whole Background) ─────────── */}
-        <View style={styles.ctaBannerWrapper}>
+        <View style={[styles.ctaBannerWrapper, !isWide && styles.ctaBannerWrapperPhone]}>
           <Image
             source={
               Platform.OS === "web"
@@ -488,8 +494,8 @@ export default function ServicesPage() {
             accessibilityLabel="Book A Shoot Call to Action Banner"
           />
 
-          <View style={[styles.ctaLeftContainer, isWide && styles.ctaLeftContainerWide]}>
-            <Text style={[styles.ctaTitleLeft, isWide && styles.ctaTitleLeftWide]}>
+          <View style={[styles.ctaLeftContainer, isWide ? styles.ctaLeftContainerWide : styles.ctaLeftContainerPhone]}>
+            <Text style={[styles.ctaTitleLeft, isWide ? styles.ctaTitleLeftWide : styles.ctaTitleLeftPhone]}>
               Found Your Event?{"\n"}
               <Text style={{ color: colors.primaryDark }}>Lock Your Verified Studio.</Text>
             </Text>
@@ -513,7 +519,7 @@ export default function ServicesPage() {
         <View style={styles.footer}>
           <Image
             source={require("@/assets/images/book-a-shoot-wordmark.png")}
-            style={styles.footerLogo}
+            style={[styles.footerLogo, !isWide && styles.footerLogoPhone]}
             resizeMode="contain"
             accessibilityLabel="Book A Shoot"
           />
@@ -583,6 +589,10 @@ const styles = StyleSheet.create({
     width: 220,
     height: 56,
   },
+  navLogoPhone: {
+    width: 135,
+    height: 34,
+  },
   navActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -603,6 +613,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: radius,
   },
+  navPrimaryBtnPhone: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+  },
   navPrimaryText: {
     color: colors.white,
     fontSize: 13,
@@ -617,6 +631,10 @@ const styles = StyleSheet.create({
   },
   headerSectionWide: {
     paddingHorizontal: 56,
+  },
+  headerSectionPhone: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.lg,
   },
   pill: {
     flexDirection: "row",
@@ -646,6 +664,10 @@ const styles = StyleSheet.create({
   },
   headingWide: {
     fontSize: 44,
+  },
+  headingPhone: {
+    fontSize: 26,
+    lineHeight: 34,
   },
   subheading: {
     fontSize: 15,
@@ -746,6 +768,10 @@ const styles = StyleSheet.create({
     maxWidth: 1040,
     alignSelf: "center",
     width: "100%",
+  },
+  gridContainerPhone: {
+    paddingHorizontal: spacing.md,
+    gap: spacing.md,
   },
   serviceCard: {
     backgroundColor: colors.white,
@@ -895,6 +921,10 @@ const styles = StyleSheet.create({
   customEventSectionWide: {
     paddingHorizontal: 56,
   },
+  customEventSectionPhone: {
+    paddingHorizontal: spacing.md,
+    paddingTop: 32,
+  },
   customEventCard: {
     backgroundColor: colors.primary,
     borderRadius: radius,
@@ -969,6 +999,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 64,
   },
+  ctaBannerWrapperPhone: {
+    minHeight: 380,
+    marginTop: 36,
+  },
   ctaBackgroundImage: {
     position: "absolute",
     top: 0,
@@ -988,6 +1022,10 @@ const styles = StyleSheet.create({
   ctaLeftContainerWide: {
     paddingLeft: 72,
   },
+  ctaLeftContainerPhone: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 40,
+  },
   ctaTitleLeft: {
     fontSize: 32,
     fontWeight: "600",
@@ -998,6 +1036,10 @@ const styles = StyleSheet.create({
   ctaTitleLeftWide: {
     fontSize: 40,
     lineHeight: 48,
+  },
+  ctaTitleLeftPhone: {
+    fontSize: 24,
+    lineHeight: 32,
   },
   ctaSubLeft: {
     fontSize: 16,
@@ -1038,6 +1080,10 @@ const styles = StyleSheet.create({
     width: 220,
     height: 56,
     marginBottom: 8,
+  },
+  footerLogoPhone: {
+    width: 140,
+    height: 36,
   },
   footerBrand: {
     fontSize: 13,

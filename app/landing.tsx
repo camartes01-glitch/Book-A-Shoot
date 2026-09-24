@@ -17,6 +17,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
+  Easing,
   Image,
   Linking,
   Platform,
@@ -32,13 +33,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path, Polygon } from "react-native-svg";
 import {
   ArrowRight,
+  ChevronRight,
   Clock,
   ExternalLink,
   Heart,
   MapPin,
+  Menu,
   RotateCcw,
   ShieldCheck,
   Sparkles,
+  X,
   Zap,
 } from "lucide-react-native";
 import { colors, radius, radiusSm, spacing } from "@/src/constants/theme";
@@ -49,7 +53,8 @@ import { useAppStore } from "@/src/state/AppProvider";
 // Data
 // ─────────────────────────────────────────────────────────────────────────────
 
-const HERO_SLIDES = [
+// Desktop hero slides — Completely unchanged
+const DESKTOP_HERO_SLIDES = [
   {
     id: "1",
     headline: "Every Moment\nDeserves to Be\nRemembered",
@@ -76,6 +81,37 @@ const HERO_SLIDES = [
       Platform.OS === "web"
         ? { uri: "/hero3.png" }
         : require("@/assets/images/home/category_wedding.jpg"),
+  },
+] as const;
+
+// Phone hero slides — Using phonehero1.png, phonehero2.png, phonehero3.png exclusively on mobile
+const PHONE_HERO_SLIDES = [
+  {
+    id: "1",
+    headline: "Every Moment\nDeserves to Be\nRemembered",
+    sub: "Book 100% KYC-verified photographers & cinematographers for your special day in minutes.",
+    image:
+      Platform.OS === "web"
+        ? { uri: "/phonehero1.png" }
+        : require("@/assets/images/phonehero1.png"),
+  },
+  {
+    id: "2",
+    headline: "Pre-Wedding\nStories That\nLast Forever",
+    sub: "Cinematic shoots, aerial drone coverage, and candid moments matched with top studios.",
+    image:
+      Platform.OS === "web"
+        ? { uri: "/phonehero2.png" }
+        : require("@/assets/images/phonehero2.png"),
+  },
+  {
+    id: "3",
+    headline: "Weddings,\nBirthdays &\nCelebrations",
+    sub: "From grand wedding mandaps to intimate rituals — our verified network covers every occasion.",
+    image:
+      Platform.OS === "web"
+        ? { uri: "/phonehero3.png" }
+        : require("@/assets/images/phonehero3.png"),
   },
 ] as const;
 
@@ -233,6 +269,9 @@ function RiverFlowLines() {
 // Component
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Track if intro splash has already run in the current session (resets on browser reload)
+let hasShownSplash = false;
+
 export default function LandingPage() {
   const { width: W } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -248,36 +287,46 @@ export default function LandingPage() {
     }
   }, []);
 
-  // Splash Screen Intro Animation (centered zoom-in logo)
-  const [showSplash, setShowSplash] = useState(true);
-  const splashScale = useRef(new Animated.Value(0.5)).current;
+  // Splash Screen Intro Animation (centered zoom-in logo) — Only on first open or reload
+  const [showSplash, setShowSplash] = useState(!hasShownSplash);
+  const splashScale = useRef(new Animated.Value(0.8)).current;
   const splashOpacity = useRef(new Animated.Value(0)).current;
   const splashContainerOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    if (hasShownSplash) {
+      setShowSplash(false);
+      return;
+    }
+    hasShownSplash = true;
+
     Animated.sequence([
       Animated.parallel([
         Animated.timing(splashScale, {
-          toValue: 1.1,
-          duration: 750,
+          toValue: 1.05,
+          duration: 1100,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: Platform.OS !== "web",
         }),
         Animated.timing(splashOpacity, {
           toValue: 1,
-          duration: 650,
+          duration: 750,
+          easing: Easing.out(Easing.ease),
           useNativeDriver: Platform.OS !== "web",
         }),
       ]),
-      Animated.delay(300),
+      Animated.delay(250),
       Animated.parallel([
         Animated.timing(splashScale, {
-          toValue: 1.4,
-          duration: 450,
+          toValue: 1.18,
+          duration: 550,
+          easing: Easing.inOut(Easing.ease),
           useNativeDriver: Platform.OS !== "web",
         }),
         Animated.timing(splashContainerOpacity, {
           toValue: 0,
-          duration: 450,
+          duration: 550,
+          easing: Easing.in(Easing.ease),
           useNativeDriver: Platform.OS !== "web",
         }),
       ]),
@@ -316,16 +365,18 @@ export default function LandingPage() {
   const carouselRef = useRef<ScrollView>(null);
   const [activeSlide, setActiveSlide] = useState(0);
   const autoPlayRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
-  const heroH = Math.min(660, Math.round(W * 1.12));
   const isWide = W >= 720;
+  const heroSlides = isWide ? DESKTOP_HERO_SLIDES : PHONE_HERO_SLIDES;
+  const heroH = isWide ? Math.min(660, Math.round(W * 1.12)) : Math.min(Math.round(W * 1.40), 580);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const advanceSlide = useCallback(() => {
     setActiveSlide((prev) => {
-      const next = (prev + 1) % HERO_SLIDES.length;
+      const next = (prev + 1) % heroSlides.length;
       carouselRef.current?.scrollTo({ x: W * next, animated: true });
       return next;
     });
-  }, [W]);
+  }, [W, heroSlides.length]);
 
   const resetAutoPlay = useCallback(() => {
     clearInterval(autoPlayRef.current);
@@ -381,28 +432,36 @@ export default function LandingPage() {
     }
   };
 
-  const renderHeroSlide = (slide: (typeof HERO_SLIDES)[number], idx: number) => (
+  const renderHeroSlide = (slide: (typeof heroSlides)[number], idx: number) => (
     <View key={slide.id} style={[styles.heroSlide, { width: W, height: heroH }]}>
       <Image source={slide.image} style={styles.heroImg} resizeMode="cover" />
-      <View style={styles.heroScrim} />
+      <View style={[styles.heroScrim, !isWide && styles.phoneHeroScrim]} />
       <View
         style={[
           styles.heroContent,
-          {
-            paddingTop: insets.top + 76,
-            paddingHorizontal: isWide ? 56 : spacing.xl,
-          },
+          isWide
+            ? {
+                paddingTop: insets.top + 76,
+                paddingHorizontal: 56,
+                justifyContent: "center",
+              }
+            : {
+                paddingTop: insets.top + 50,
+                paddingHorizontal: spacing.lg,
+                justifyContent: "flex-end",
+                paddingBottom: 48,
+              },
         ]}
       >
-        <Text style={[styles.heroHeadline, isWide && styles.heroHeadlineWide]}>
+        <Text style={[styles.heroHeadline, isWide ? styles.heroHeadlineWide : styles.heroHeadlinePhone]}>
           {slide.headline}
         </Text>
-        <Text style={[styles.heroSub, isWide && { maxWidth: 440 }]}>{slide.sub}</Text>
-        <View style={styles.heroCtas}>
+        <Text style={[styles.heroSub, isWide ? { maxWidth: 440 } : styles.heroSubPhone]}>{slide.sub}</Text>
+        <View style={[styles.heroCtas, !isWide && styles.heroCtasPhone]}>
           <Pressable
             id={`hero-book-now-${idx}`}
             onPress={goToBooking}
-            style={({ pressed }) => [styles.heroPrimaryBtn, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.heroPrimaryBtn, !isWide && styles.heroPrimaryBtnPhone, pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel="Book a photographer now"
           >
@@ -412,7 +471,7 @@ export default function LandingPage() {
           <Pressable
             id={`hero-how-it-works-${idx}`}
             onPress={() => handleNavClick("how-it-works")}
-            style={({ pressed }) => [styles.heroGhostBtn, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.heroGhostBtn, !isWide && styles.heroGhostBtnPhone, pressed && styles.pressed]}
             accessibilityRole="button"
             accessibilityLabel="Learn how it works"
           >
@@ -434,8 +493,8 @@ export default function LandingPage() {
           <Animated.Image
             source={
               Platform.OS === "web"
-                ? { uri: "/logo-white.png" }
-                : require("@/assets/images/logo-white.png")
+                ? { uri: "/book-a-shoot-wordmark.png" }
+                : require("@/assets/images/book-a-shoot-wordmark.png")
             }
             style={[
               styles.splashLogo,
@@ -460,12 +519,12 @@ export default function LandingPage() {
         />
         <Animated.View style={[styles.navBorder, { opacity: navBorderOpacity }]} />
 
-        <View style={[styles.navInner, isWide && styles.navInnerWide]}>
+        <View style={[styles.navInner, isWide ? styles.navInnerWide : styles.navInnerPhone]}>
           {/* Logo with White-to-Color Crossfade */}
           <Pressable
             id="nav-logo"
             onPress={() => mainScrollRef.current?.scrollTo({ y: 0, animated: true })}
-            style={styles.navLogoContainer}
+            style={[styles.navLogoContainer, !isWide && styles.navLogoContainerPhone]}
             accessibilityRole="link"
             accessibilityLabel="Book A Shoot home"
           >
@@ -475,19 +534,19 @@ export default function LandingPage() {
                   ? { uri: "/logo-white.png" }
                   : require("@/assets/images/logo-white.png")
               }
-              style={[styles.navLogo, { opacity: whiteLogoOpacity }]}
+              style={[styles.navLogo, !isWide && styles.navLogoPhone, { opacity: whiteLogoOpacity }]}
               resizeMode="contain"
               accessibilityLabel="Book A Shoot"
             />
             <Animated.Image
               source={require("@/assets/images/book-a-shoot-wordmark.png")}
-              style={[styles.navLogo, styles.navLogoOverlay, { opacity: colorLogoOpacity }]}
+              style={[styles.navLogo, !isWide && styles.navLogoPhone, styles.navLogoOverlay, { opacity: colorLogoOpacity }]}
               resizeMode="contain"
               accessibilityLabel="Book A Shoot"
             />
           </Pressable>
 
-          {/* Wide nav links — "Bundle Events" removed */}
+          {/* Wide nav links — Desktop Only ("Bundle Events" removed) */}
           {isWide && (
             <View style={styles.navLinks}>
               {NAV_ITEMS.map((item) => (
@@ -507,30 +566,120 @@ export default function LandingPage() {
           )}
 
           {/* Auth CTAs */}
-          <View style={styles.navActions}>
-            <Pressable
-              id="nav-login-btn"
-              onPress={goToLogin}
-              style={({ pressed }) => [styles.navLoginBtn, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel={isLoggedIn ? "Go to Dashboard" : "Log in"}
-            >
-              <Animated.Text style={[styles.navLoginText, { color: navTextColor }]}>
-                {isLoggedIn ? "Dashboard" : "Log in"}
-              </Animated.Text>
-            </Pressable>
-            <Pressable
-              id="nav-book-btn"
-              onPress={goToBooking}
-              style={({ pressed }) => [styles.navBookBtn, pressed && styles.pressed]}
-              accessibilityRole="button"
-              accessibilityLabel="Book Now"
-            >
-              <Text style={styles.navBookText}>Book Now</Text>
-            </Pressable>
+          <View style={[styles.navActions, !isWide && styles.navActionsPhone]}>
+            {isWide ? (
+              <>
+                <Pressable
+                  id="nav-login-btn"
+                  onPress={goToLogin}
+                  style={({ pressed }) => [styles.navLoginBtn, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel={isLoggedIn ? "Go to Dashboard" : "Log in"}
+                >
+                  <Animated.Text style={[styles.navLoginText, { color: navTextColor }]}>
+                    {isLoggedIn ? "Dashboard" : "Log in"}
+                  </Animated.Text>
+                </Pressable>
+                <Pressable
+                  id="nav-book-btn"
+                  onPress={goToBooking}
+                  style={({ pressed }) => [styles.navBookBtn, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Book Now"
+                >
+                  <Text style={styles.navBookText}>Book Now</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Pressable
+                  id="nav-book-btn-phone"
+                  onPress={goToBooking}
+                  style={({ pressed }) => [styles.navBookBtnPhone, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Book Now"
+                >
+                  <Text style={styles.navBookTextPhone}>Book Now</Text>
+                </Pressable>
+                <Pressable
+                  id="nav-menu-btn"
+                  onPress={() => setMobileMenuOpen(true)}
+                  style={({ pressed }) => [styles.navMenuBtn, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Open navigation menu"
+                >
+                  <Animated.View style={{ opacity: whiteLogoOpacity, position: "absolute" }}>
+                    <Menu size={22} color={colors.white} />
+                  </Animated.View>
+                  <Animated.View style={{ opacity: colorLogoOpacity }}>
+                    <Menu size={22} color={colors.text} />
+                  </Animated.View>
+                </Pressable>
+              </>
+            )}
           </View>
         </View>
       </View>
+
+      {/* ── Crystal Clear Mobile Nav Drawer Modal ────────────────────── */}
+      {!isWide && mobileMenuOpen && (
+        <View style={[styles.mobileMenuOverlay, { paddingTop: insets.top }]}>
+          <View style={styles.mobileMenuBackdrop} />
+          <View style={styles.mobileMenuHeader}>
+            <Image
+              source={require("@/assets/images/book-a-shoot-wordmark.png")}
+              style={{ width: 135, height: 34 }}
+              resizeMode="contain"
+            />
+            <Pressable
+              onPress={() => setMobileMenuOpen(false)}
+              style={styles.mobileMenuCloseBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Close navigation menu"
+            >
+              <X size={22} color={colors.text} />
+            </Pressable>
+          </View>
+
+          <View style={styles.mobileMenuItems}>
+            {NAV_ITEMS.map((item) => (
+              <Pressable
+                key={item.id}
+                onPress={() => {
+                  setMobileMenuOpen(false);
+                  handleNavClick(item.id);
+                }}
+                style={styles.mobileMenuItem}
+              >
+                <Text style={styles.mobileMenuItemText}>{item.label}</Text>
+                <ChevronRight size={18} color={colors.primaryDark} />
+              </Pressable>
+            ))}
+          </View>
+
+          <View style={styles.mobileMenuFooter}>
+            <Pressable
+              onPress={() => {
+                setMobileMenuOpen(false);
+                goToLogin();
+              }}
+              style={styles.mobileMenuLoginBtn}
+            >
+              <Text style={styles.mobileMenuLoginText}>{isLoggedIn ? "Go to Dashboard" : "Log In / Register"}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setMobileMenuOpen(false);
+                goToBooking();
+              }}
+              style={styles.mobileMenuBookBtn}
+            >
+              <Text style={styles.mobileMenuBookText}>Book A Shoot Now</Text>
+              <ArrowRight size={18} color={colors.white} />
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       {/* ── Main Scroll ─────────────────────────────────────────────────── */}
       <Animated.ScrollView
@@ -553,13 +702,13 @@ export default function LandingPage() {
             scrollEventThrottle={16}
             onMomentumScrollEnd={onCarouselScrollEnd}
             style={{ width: W, height: heroH }}
-            contentContainerStyle={{ width: W * HERO_SLIDES.length }}
+            contentContainerStyle={{ width: W * heroSlides.length }}
           >
-            {HERO_SLIDES.map((slide, idx) => renderHeroSlide(slide, idx))}
+            {heroSlides.map((slide, idx) => renderHeroSlide(slide, idx))}
           </ScrollView>
           {/* Dot indicators */}
           <View style={styles.dotRow}>
-            {HERO_SLIDES.map((_, i) => (
+            {heroSlides.map((_, i) => (
               <Pressable
                 key={i}
                 onPress={() => {
@@ -576,13 +725,13 @@ export default function LandingPage() {
         </View>
 
         {/* ── STATS STRIP ───────────────────────────────────────────── */}
-        <View style={styles.statsStrip}>
+        <View style={[styles.statsStrip, !isWide && styles.statsStripPhone]}>
           {STATS.map((s, i) => (
             <View
               key={s.label}
               style={[styles.statItem, i < STATS.length - 1 && styles.statDivider]}
             >
-              <Text style={styles.statValue}>{s.value}</Text>
+              <Text style={[styles.statValue, !isWide && styles.statValuePhone]}>{s.value}</Text>
               <Text style={styles.statLabel}>{s.label}</Text>
             </View>
           ))}
@@ -774,23 +923,57 @@ export default function LandingPage() {
             </Text>
           </View>
 
-          <View style={[styles.whyGrid, isWide && styles.whyGridWide]}>
-            {WHY_US.map((w) => {
-              const IconComp = w.icon;
-              return (
-                <View key={w.title} style={[styles.whyCard, isWide && styles.whyCardWide]}>
-                  {/* River-like flowing lines placed at the START (top) of the card */}
-                  <RiverFlowLines />
+          {isWide ? (
+            <View style={[styles.whyGrid, styles.whyGridWide]}>
+              {WHY_US.map((w) => {
+                const IconComp = w.icon;
+                return (
+                  <View key={w.title} style={[styles.whyCard, styles.whyCardWide]}>
+                    {/* River-like flowing lines placed at the START (top) of the card */}
+                    <RiverFlowLines />
 
-                  <View style={styles.whyIconWrap}>
-                    <IconComp size={22} color={colors.primary} />
+                    <View style={styles.whyIconWrap}>
+                      <IconComp size={22} color={colors.primary} />
+                    </View>
+                    <Text style={styles.whyTitle}>{w.title}</Text>
+                    <Text style={styles.whyDesc}>{w.desc}</Text>
                   </View>
-                  <Text style={styles.whyTitle}>{w.title}</Text>
-                  <Text style={styles.whyDesc}>{w.desc}</Text>
-                </View>
-              );
-            })}
-          </View>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.whyPhoneContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.whyScrollPhone}
+                decelerationRate="fast"
+                snapToInterval={Math.min(W * 0.82, 300) + 14}
+              >
+                {WHY_US.map((w) => {
+                  const IconComp = w.icon;
+                  return (
+                    <View
+                      key={w.title}
+                      style={[styles.whyCard, styles.whyCardPhone, { width: Math.min(W * 0.82, 300) }]}
+                    >
+                      <RiverFlowLines />
+                      <View style={styles.whyIconWrap}>
+                        <IconComp size={22} color={colors.primary} />
+                      </View>
+                      <Text style={styles.whyTitle}>{w.title}</Text>
+                      <Text style={styles.whyDesc}>{w.desc}</Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+              <View style={styles.carouselDotsRow}>
+                {WHY_US.map((_, i) => (
+                  <View key={i} style={styles.miniDot} />
+                ))}
+              </View>
+            </View>
+          )}
         </View>
 
         {/* ── CITIES (Orange Section) ─────── */}
@@ -834,35 +1017,87 @@ export default function LandingPage() {
             </Text>
           </View>
 
-          <View style={[styles.blogCardsRow, isWide && styles.blogCardsRowWide]}>
-            {HOMEPAGE_BLOGS.map((blog) => (
-              <Pressable
-                key={blog.id}
-                onPress={goToBlogs}
-                style={({ pressed }) => [styles.homepageBlogCard, isWide && styles.homepageBlogCardWide, pressed && styles.pressed]}
-                accessibilityRole="button"
+          {isWide ? (
+            <View style={[styles.blogCardsRow, styles.blogCardsRowWide]}>
+              {HOMEPAGE_BLOGS.map((blog) => (
+                <Pressable
+                  key={blog.id}
+                  onPress={goToBlogs}
+                  style={({ pressed }) => [styles.homepageBlogCard, styles.homepageBlogCardWide, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                >
+                  <View style={styles.homepageBlogImgFrame}>
+                    <Image source={blog.image} style={styles.homepageBlogImg} resizeMode="cover" />
+                    <View style={styles.blogTagOverlay}>
+                      <Text style={styles.blogTagText}>{blog.tag}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.homepageBlogBody}>
+                    <View style={styles.blogMetaRow}>
+                      <Clock size={12} color={colors.muted} />
+                      <Text style={styles.blogMetaText}>{blog.readTime}</Text>
+                    </View>
+                    <Text style={styles.homepageBlogTitle}>{blog.title}</Text>
+                    <Text style={styles.homepageBlogSub}>{blog.sub}</Text>
+                    <View style={styles.readArticleRow}>
+                      <Text style={styles.readArticleText}>Read Story</Text>
+                      <ArrowRight size={14} color={colors.primaryDark} />
+                    </View>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <View style={styles.blogPhoneContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.blogScrollPhone}
+                decelerationRate="fast"
+                snapToInterval={Math.min(W * 0.84, 320) + 16}
               >
-                <View style={styles.homepageBlogImgFrame}>
-                  <Image source={blog.image} style={styles.homepageBlogImg} resizeMode="cover" />
-                  <View style={styles.blogTagOverlay}>
-                    <Text style={styles.blogTagText}>{blog.tag}</Text>
-                  </View>
-                </View>
-                <View style={styles.homepageBlogBody}>
-                  <View style={styles.blogMetaRow}>
-                    <Clock size={12} color={colors.muted} />
-                    <Text style={styles.blogMetaText}>{blog.readTime}</Text>
-                  </View>
-                  <Text style={styles.homepageBlogTitle}>{blog.title}</Text>
-                  <Text style={styles.homepageBlogSub}>{blog.sub}</Text>
-                  <View style={styles.readArticleRow}>
-                    <Text style={styles.readArticleText}>Read Story</Text>
-                    <ArrowRight size={14} color={colors.primaryDark} />
-                  </View>
-                </View>
-              </Pressable>
-            ))}
-          </View>
+                {HOMEPAGE_BLOGS.map((blog) => (
+                  <Pressable
+                    key={blog.id}
+                    onPress={goToBlogs}
+                    style={({ pressed }) => [
+                      styles.homepageBlogCard,
+                      styles.homepageBlogCardPhone,
+                      { width: Math.min(W * 0.84, 320) },
+                      pressed && styles.pressed,
+                    ]}
+                    accessibilityRole="button"
+                  >
+                    <View style={styles.homepageBlogImgFramePhone}>
+                      <Image source={blog.image} style={styles.homepageBlogImg} resizeMode="cover" />
+                      <View style={styles.blogTagOverlay}>
+                        <Text style={styles.blogTagText}>{blog.tag}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.homepageBlogBody}>
+                      <View style={styles.blogMetaRow}>
+                        <Clock size={12} color={colors.muted} />
+                        <Text style={styles.blogMetaText}>{blog.readTime}</Text>
+                      </View>
+                      <Text style={styles.homepageBlogTitle}>{blog.title}</Text>
+                      <Text style={styles.homepageBlogSub} numberOfLines={2}>
+                        {blog.sub}
+                      </Text>
+                      <View style={styles.readArticleRow}>
+                        <Text style={styles.readArticleText}>Read Story</Text>
+                        <ArrowRight size={14} color={colors.primaryDark} />
+                      </View>
+                    </View>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              <View style={styles.carouselDotsRow}>
+                {HOMEPAGE_BLOGS.map((_, i) => (
+                  <View key={i} style={styles.miniDot} />
+                ))}
+              </View>
+            </View>
+          )}
 
           <View style={styles.viewAllBlogsWrap}>
             <Pressable
@@ -1025,13 +1260,14 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 9999,
-    backgroundColor: "#111827",
+    backgroundColor: "#FFF8F0", // Warm Beige background
     alignItems: "center",
     justifyContent: "center",
   },
   splashLogo: {
-    width: 320,
-    height: 95,
+    width: 340,
+    height: 142,
+    maxWidth: "82%",
   },
 
   // ── Navbar ─────────────────────────────────────────────────────────────
@@ -1115,6 +1351,145 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+  // ── Phone Navbar & Drawer ──────────────────────────────────────────────
+  navInnerPhone: {
+    height: 60,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.md,
+  },
+  navLogoContainerPhone: {
+    width: 135,
+    height: 34,
+    position: "relative",
+    justifyContent: "center",
+  },
+  navLogoPhone: {
+    width: 135,
+    height: 34,
+  },
+  navActionsPhone: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  navBookBtnPhone: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    shadowColor: colors.primaryDark,
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  navBookTextPhone: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  navMenuBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  mobileMenuOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 9999,
+    backgroundColor: "#FFF8F0", // Warm Beige background
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xxl,
+  },
+  mobileMenuBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  mobileMenuHeader: {
+    height: 60,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottomWidth: 1,
+    borderBottomColor: colors.peachBorder,
+  },
+  mobileMenuCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.bgWarm,
+    borderWidth: 1,
+    borderColor: colors.peachBorder,
+  },
+  mobileMenuItems: {
+    paddingVertical: spacing.xl,
+    gap: 12,
+  },
+  mobileMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(254, 215, 170, 0.4)",
+  },
+  mobileMenuItemText: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  mobileMenuFooter: {
+    marginTop: "auto",
+    gap: 12,
+    paddingBottom: 24,
+  },
+  mobileMenuLoginBtn: {
+    borderWidth: 1.5,
+    borderColor: colors.primaryDark,
+    borderRadius: radius,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.white,
+  },
+  mobileMenuLoginText: {
+    color: colors.primaryDark,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  mobileMenuBookBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: radius,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    shadowColor: colors.primaryDark,
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  mobileMenuBookText: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+
   // ── Hero ───────────────────────────────────────────────────────────────
 
   heroSlide: {
@@ -1137,6 +1512,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: "rgba(10,5,0,0.46)",
   },
+  phoneHeroScrim: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(10, 5, 0, 0.44)",
+  },
   heroContent: {
     position: "absolute",
     top: 0,
@@ -1156,6 +1539,13 @@ const styles = StyleSheet.create({
     fontSize: 54,
     lineHeight: 66,
   },
+  heroHeadlinePhone: {
+    fontSize: 30,
+    fontWeight: "700",
+    color: colors.white,
+    lineHeight: 38,
+    letterSpacing: -0.5,
+  },
   heroSub: {
     fontSize: 16,
     color: "rgba(255,255,255,0.86)",
@@ -1163,11 +1553,24 @@ const styles = StyleSheet.create({
     lineHeight: 25,
     maxWidth: 360,
   },
+  heroSubPhone: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.92)",
+    marginTop: 10,
+    lineHeight: 21,
+    maxWidth: 340,
+  },
   heroCtas: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing.md,
     marginTop: spacing.xl,
+  },
+  heroCtasPhone: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 18,
   },
   heroPrimaryBtn: {
     backgroundColor: colors.primary,
@@ -1177,6 +1580,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     paddingVertical: 14,
     borderRadius: radius,
+  },
+  heroPrimaryBtnPhone: {
+    paddingHorizontal: 22,
+    paddingVertical: 12,
   },
   heroPrimaryText: {
     color: colors.white,
@@ -1190,6 +1597,10 @@ const styles = StyleSheet.create({
     borderRadius: radius,
     borderWidth: 1.5,
     borderColor: "rgba(255,255,255,0.55)",
+  },
+  heroGhostBtnPhone: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   heroGhostText: {
     color: colors.white,
@@ -1226,6 +1637,10 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
     paddingVertical: spacing.lg,
   },
+  statsStripPhone: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
+  },
   statItem: {
     flex: 1,
     alignItems: "center",
@@ -1239,6 +1654,10 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "700",
     color: colors.primary,
+    letterSpacing: -0.5,
+  },
+  statValuePhone: {
+    fontSize: 21,
     letterSpacing: -0.5,
   },
   statLabel: {
@@ -1597,6 +2016,33 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     minWidth: 260,
   },
+  whyPhoneContainer: {
+    width: "100%",
+    paddingVertical: spacing.sm,
+  },
+  whyScrollPhone: {
+    paddingHorizontal: spacing.md,
+    gap: spacing.md,
+    alignItems: "stretch",
+  },
+  whyCardPhone: {
+    minHeight: 220,
+    justifyContent: "flex-start",
+  },
+  carouselDotsRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 6,
+    marginTop: spacing.md,
+  },
+  miniDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+    opacity: 0.35,
+  },
   riverLinesContainer: {
     position: "absolute",
     top: 0,
@@ -1714,6 +2160,24 @@ const styles = StyleSheet.create({
   },
   homepageBlogCardWide: {
     flex: 1,
+  },
+  blogPhoneContainer: {
+    width: "100%",
+    paddingVertical: spacing.sm,
+  },
+  blogScrollPhone: {
+    paddingHorizontal: spacing.md,
+    gap: spacing.md,
+    alignItems: "stretch",
+  },
+  homepageBlogCardPhone: {
+    minHeight: 300,
+  },
+  homepageBlogImgFramePhone: {
+    width: "100%",
+    height: 160,
+    position: "relative",
+    backgroundColor: colors.bgWarm,
   },
   homepageBlogImgFrame: {
     width: "100%",

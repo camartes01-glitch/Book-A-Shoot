@@ -121,23 +121,29 @@ export default function AboutPage() {
           <Pressable onPress={goToHome} style={styles.navLogoContainer}>
             <Image
               source={require("@/assets/images/book-a-shoot-wordmark.png")}
-              style={styles.navLogo}
+              style={[styles.navLogo, !isWide && styles.navLogoPhone]}
               resizeMode="contain"
               accessibilityLabel="Book A Shoot"
             />
           </Pressable>
 
           <View style={styles.navActions}>
-            <Pressable
-              onPress={goToServices}
-              style={({ pressed }) => [styles.navGhostBtn, pressed && styles.pressed]}
-              accessibilityRole="link"
-            >
-              <Text style={styles.navGhostText}>Services</Text>
-            </Pressable>
+            {isWide && (
+              <Pressable
+                onPress={goToServices}
+                style={({ pressed }) => [styles.navGhostBtn, pressed && styles.pressed]}
+                accessibilityRole="link"
+              >
+                <Text style={styles.navGhostText}>Services</Text>
+              </Pressable>
+            )}
             <Pressable
               onPress={goToLogin}
-              style={({ pressed }) => [styles.navPrimaryBtn, pressed && styles.pressed]}
+              style={({ pressed }) => [
+                styles.navPrimaryBtn,
+                !isWide && styles.navPrimaryBtnPhone,
+                pressed && styles.pressed,
+              ]}
               accessibilityRole="button"
             >
               <Text style={styles.navPrimaryText}>Book Now</Text>
@@ -149,48 +155,96 @@ export default function AboutPage() {
       {/* ── Scrollable Body ────────────────────────────────────────────── */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingTop: insets.top + 70, paddingBottom: 60 }}
+        contentContainerStyle={{ paddingTop: insets.top + (isWide ? 70 : 60), paddingBottom: 60 }}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Hero Section ─────────────────────────────────────────────── */}
-        <View style={[styles.heroSection, isWide && styles.heroSectionWide]}>
-          <Text style={[styles.heroHeading, isWide && styles.heroHeadingWide]}>
-            Transforming Event Photography Through Trust & Technology
-          </Text>
-
-          <Text style={[styles.heroSub, isWide && styles.heroSubWide]}>
-            A premier product of Camartes, Book A Shoot is India's dedicated platform connecting
-            families, couples, and enterprises with elite, 100% KYC-verified photography and
-            cinematography firms.
-          </Text>
-
-          {/* Hero Image Container */}
-          <View style={[styles.heroImageFrame, isWide && styles.heroImageFrameWide]}>
+        {!isWide ? (
+          <View style={styles.phoneHeroWrapper}>
             <Image
               source={
                 Platform.OS === "web"
-                  ? { uri: "/aboutus.png" }
-                  : require("@/assets/images/aboutus.png")
+                  ? { uri: "/phoneabout.png" }
+                  : require("@/assets/images/phoneabout.png")
               }
-              style={styles.heroImage}
+              style={StyleSheet.absoluteFill}
               resizeMode="cover"
-              accessibilityLabel="Book A Shoot Team and Professional Gear"
+              accessibilityLabel="About Book A Shoot"
             />
-            <View style={styles.imageOverlayBadge}>
-              <ShieldCheck size={18} color={colors.white} />
-              <Text style={styles.imageBadgeText}>100% Verified Production Partners</Text>
+            {/* Rich scrim overlay for crisp contrast */}
+            <View style={styles.phoneHeroOverlay} />
+            <View style={styles.phoneHeroContent}>
+              <View style={styles.phoneHeroBadge}>
+                <ShieldCheck size={14} color="#f97316" />
+                <Text style={styles.phoneHeroBadgeText}>100% KYC-VERIFIED NETWORK</Text>
+              </View>
+              <Text style={styles.phoneHeroHeading}>
+                Transforming Event Photography Through Trust & Technology
+              </Text>
+              <Text style={styles.phoneHeroSub}>
+                A premier product of Camartes, Book A Shoot is India's dedicated platform connecting
+                families, couples, and enterprises with elite photography & cinematography studios.
+              </Text>
+              <View style={styles.phoneHeroCtaRow}>
+                <Pressable
+                  onPress={goToLogin}
+                  style={({ pressed }) => [styles.phoneHeroPrimaryBtn, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.phoneHeroPrimaryBtnText}>Book A Shoot</Text>
+                  <ArrowRight size={15} color={colors.white} />
+                </Pressable>
+                <Pressable
+                  onPress={goToServices}
+                  style={({ pressed }) => [styles.phoneHeroGhostBtn, pressed && styles.pressed]}
+                  accessibilityRole="link"
+                >
+                  <Text style={styles.phoneHeroGhostBtnText}>Explore Services</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
-        </View>
+        ) : (
+          <View style={[styles.heroSection, styles.heroSectionWide]}>
+            <Text style={[styles.heroHeading, styles.heroHeadingWide]}>
+              Transforming Event Photography Through Trust & Technology
+            </Text>
+
+            <Text style={[styles.heroSub, styles.heroSubWide]}>
+              A premier product of Camartes, Book A Shoot is India's dedicated platform connecting
+              families, couples, and enterprises with elite, 100% KYC-verified photography and
+              cinematography firms.
+            </Text>
+
+            {/* Hero Image Container */}
+            <View style={[styles.heroImageFrame, styles.heroImageFrameWide]}>
+              <Image
+                source={
+                  Platform.OS === "web"
+                    ? { uri: "/aboutus.png" }
+                    : require("@/assets/images/aboutus.png")
+                }
+                style={styles.heroImage}
+                resizeMode="cover"
+                accessibilityLabel="Book A Shoot Team and Professional Gear"
+              />
+              <View style={styles.imageOverlayBadge}>
+                <ShieldCheck size={18} color={colors.white} />
+                <Text style={styles.imageBadgeText}>100% Verified Production Partners</Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* ── Stats Strip ──────────────────────────────────────────────── */}
-        <View style={[styles.statsStrip, isWide && styles.statsStripWide]}>
+        <View style={[styles.statsStrip, isWide ? styles.statsStripWide : styles.statsStripPhone]}>
           {STATS.map((s, idx) => (
             <View
               key={s.label}
               style={[
                 styles.statItem,
-                idx < STATS.length - 1 && styles.statDivider,
+                !isWide && styles.statItemPhone,
+                isWide && idx < STATS.length - 1 && styles.statDivider,
               ]}
             >
               <Text style={styles.statValue}>{s.value}</Text>
@@ -269,7 +323,7 @@ export default function AboutPage() {
         </View>
 
         {/* ── Bottom CTA Banner (Consistently using cta.png) ───────────── */}
-        <View style={styles.ctaBannerWrapper}>
+        <View style={[styles.ctaBannerWrapper, !isWide && styles.ctaBannerWrapperPhone]}>
           <Image
             source={
               Platform.OS === "web"
@@ -281,8 +335,8 @@ export default function AboutPage() {
             accessibilityLabel="Book A Shoot Call to Action Banner"
           />
 
-          <View style={[styles.ctaLeftContainer, isWide && styles.ctaLeftContainerWide]}>
-            <Text style={[styles.ctaTitleLeft, isWide && styles.ctaTitleLeftWide]}>
+          <View style={[styles.ctaLeftContainer, isWide ? styles.ctaLeftContainerWide : styles.ctaLeftContainerPhone]}>
+            <Text style={[styles.ctaTitleLeft, isWide ? styles.ctaTitleLeftWide : styles.ctaTitleLeftPhone]}>
               Ready to Capture Your{"\n"}
               <Text style={{ color: colors.primaryDark }}>Next Big Celebration?</Text>
             </Text>
@@ -317,7 +371,7 @@ export default function AboutPage() {
         <View style={styles.footer}>
           <Image
             source={require("@/assets/images/book-a-shoot-wordmark.png")}
-            style={styles.footerLogo}
+            style={[styles.footerLogo, !isWide && styles.footerLogoPhone]}
             resizeMode="contain"
             accessibilityLabel="Book A Shoot"
           />
@@ -387,6 +441,10 @@ const styles = StyleSheet.create({
     width: 220,
     height: 56,
   },
+  navLogoPhone: {
+    width: 135,
+    height: 34,
+  },
   navActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -407,6 +465,10 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: radius,
   },
+  navPrimaryBtnPhone: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+  },
   navPrimaryText: {
     color: colors.white,
     fontSize: 13,
@@ -414,6 +476,98 @@ const styles = StyleSheet.create({
   },
 
   // ── Hero ─────────────────────────────────────────────────────────────
+  phoneHeroWrapper: {
+    position: "relative",
+    width: "100%",
+    minHeight: 520,
+    justifyContent: "flex-end",
+    overflow: "hidden",
+    backgroundColor: "#0f172a",
+  },
+  phoneHeroOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(15, 23, 42, 0.72)",
+  },
+  phoneHeroContent: {
+    position: "relative",
+    zIndex: 2,
+    paddingHorizontal: spacing.lg,
+    paddingTop: 48,
+    paddingBottom: 40,
+    gap: 12,
+  },
+  phoneHeroBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    backgroundColor: "rgba(249, 115, 22, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(249, 115, 22, 0.4)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  phoneHeroBadgeText: {
+    color: "#fb923c",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  phoneHeroHeading: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: colors.white,
+    lineHeight: 36,
+    letterSpacing: -0.4,
+  },
+  phoneHeroSub: {
+    fontSize: 14,
+    color: "#cbd5e1",
+    lineHeight: 22,
+  },
+  phoneHeroCtaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginTop: 8,
+  },
+  phoneHeroPrimaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
+    borderRadius: radius,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  phoneHeroPrimaryBtnText: {
+    color: colors.white,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  phoneHeroGhostBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: radius,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+  },
+  phoneHeroGhostBtnText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: "600",
+  },
   heroSection: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xxl,
@@ -526,6 +680,21 @@ const styles = StyleSheet.create({
   },
   statsStripWide: {
     marginHorizontal: 56,
+  },
+  statsStripPhone: {
+    marginHorizontal: spacing.md,
+    marginVertical: 24,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    borderRadius: radius,
+  },
+  statItemPhone: {
+    width: "50%",
+    minWidth: 0,
+    paddingVertical: 12,
+    alignItems: "center",
   },
   statItem: {
     flex: 1,
@@ -741,6 +910,10 @@ const styles = StyleSheet.create({
     marginTop: 84,
     marginBottom: 40,
   },
+  ctaBannerWrapperPhone: {
+    minHeight: 380,
+    marginTop: 40,
+  },
   ctaBackgroundImage: {
     position: "absolute",
     top: 0,
@@ -760,6 +933,10 @@ const styles = StyleSheet.create({
   ctaLeftContainerWide: {
     paddingLeft: 72,
   },
+  ctaLeftContainerPhone: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 40,
+  },
   ctaTitleLeft: {
     fontSize: 32,
     fontWeight: "600",
@@ -770,6 +947,10 @@ const styles = StyleSheet.create({
   ctaTitleLeftWide: {
     fontSize: 40,
     lineHeight: 48,
+  },
+  ctaTitleLeftPhone: {
+    fontSize: 24,
+    lineHeight: 32,
   },
   ctaSubLeft: {
     fontSize: 16,
@@ -831,6 +1012,10 @@ const styles = StyleSheet.create({
     width: 220,
     height: 56,
     marginBottom: 8,
+  },
+  footerLogoPhone: {
+    width: 140,
+    height: 36,
   },
   footerBrand: {
     fontSize: 13,
