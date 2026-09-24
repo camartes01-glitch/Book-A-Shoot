@@ -5,6 +5,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProvider, useAppStore } from "@/src/state/AppProvider";
 import { colors } from "@/src/constants/theme";
+import { prefetchAllAppImages } from "@/src/utils/imagePrefetcher";
 
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: 400, fade: true });
@@ -12,6 +13,7 @@ SplashScreen.setOptions({ duration: 400, fade: true });
 function HideSplashWhenReady() {
   const { ready } = useAppStore();
   useEffect(() => {
+    prefetchAllAppImages();
     if (ready) {
       void SplashScreen.hideAsync();
       return;
@@ -25,6 +27,9 @@ function HideSplashWhenReady() {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    prefetchAllAppImages();
+  }, []);
   return (
     <SafeAreaProvider>
       <AppProvider>
@@ -36,6 +41,7 @@ export default function RootLayout() {
           <Stack.Screen name="about" />
           <Stack.Screen name="services" />
           <Stack.Screen name="blogs" />
+          <Stack.Screen name="contact" />
           <Stack.Screen name="terms" />
           <Stack.Screen name="privacy" />
 

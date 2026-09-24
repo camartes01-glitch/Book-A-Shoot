@@ -240,13 +240,15 @@ export default function BlogsPage() {
               accessibilityLabel="Book A Shoot"
             />
           </Pressable>
-          <Text style={styles.footerBrand}>© 2025 Book A Shoot · Powered by Camartes Technologies</Text>
+          <Text style={styles.footerBrand}>© 2025 Book A Shoot · Powered by Camartes</Text>
           <View style={styles.footerLinks}>
             <Pressable onPress={goToHome}><Text style={styles.footerLinkText}>Home</Text></Pressable>
             <Text style={styles.footerDot}>•</Text>
             <Pressable onPress={goToAbout}><Text style={styles.footerLinkText}>About Us</Text></Pressable>
             <Text style={styles.footerDot}>•</Text>
             <Pressable onPress={goToServices}><Text style={styles.footerLinkText}>Services</Text></Pressable>
+            <Text style={styles.footerDot}>•</Text>
+            <Pressable onPress={() => router.push("/contact")}><Text style={styles.footerLinkText}>Contact</Text></Pressable>
             <Text style={styles.footerDot}>•</Text>
             <Pressable onPress={() => router.push("/privacy")}><Text style={styles.footerLinkText}>Privacy</Text></Pressable>
             <Text style={styles.footerDot}>•</Text>

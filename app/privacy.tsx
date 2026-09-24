@@ -69,13 +69,13 @@ export default function PrivacyPage() {
         <View style={[styles.container, isWide && styles.containerWide]}>
           <View style={styles.header}>
             <Text style={styles.title}>Privacy Policy</Text>
-            <Text style={styles.lastUpdated}>Effective Date: September 2025 · Camartes Technologies</Text>
+            <Text style={styles.lastUpdated}>Effective Date: September 2025 · Camartes</Text>
           </View>
 
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>1. Privacy Commitment</Text>
             <Text style={styles.paragraph}>
-              At <Text style={styles.bold}>Book A Shoot</Text> (a brand of Camartes Technologies), we hold
+              At <Text style={styles.bold}>Book A Shoot</Text> (a brand of Camartes), we hold
               the privacy of your personal life, family moments, and confidential event details in the
               highest regard. This Privacy Policy details how we collect, safeguard, process, and respect
               your information.
@@ -138,7 +138,7 @@ export default function PrivacyPage() {
               our privacy practices, please contact our Grievance Officer:
             </Text>
             <Text style={styles.paragraph}>
-              Grievance Officer, Camartes Technologies{"\n"}
+              Grievance Officer, Camartes{"\n"}
               Email: privacy@camartes.com{"\n"}
               Bengaluru / Hyderabad, India
             </Text>
@@ -159,6 +159,10 @@ export default function PrivacyPage() {
             <Text style={styles.footerDot}>•</Text>
             <Pressable onPress={() => router.push("/blogs")}>
               <Text style={styles.footerLink}>Blogs</Text>
+            </Pressable>
+            <Text style={styles.footerDot}>•</Text>
+            <Pressable onPress={() => router.push("/contact")}>
+              <Text style={styles.footerLink}>Contact Us</Text>
             </Pressable>
             <Text style={styles.footerDot}>•</Text>
             <Pressable onPress={() => router.push("/terms")}>

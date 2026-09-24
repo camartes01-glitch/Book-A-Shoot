@@ -383,6 +383,8 @@ export default function AboutPage() {
             <Text style={styles.footerDot}>•</Text>
             <Pressable onPress={() => router.push("/blogs")}><Text style={styles.footerLinkText}>Blogs</Text></Pressable>
             <Text style={styles.footerDot}>•</Text>
+            <Pressable onPress={() => router.push("/contact")}><Text style={styles.footerLinkText}>Contact</Text></Pressable>
+            <Text style={styles.footerDot}>•</Text>
             <Pressable onPress={() => router.push("/privacy")}><Text style={styles.footerLinkText}>Privacy</Text></Pressable>
             <Text style={styles.footerDot}>•</Text>
             <Pressable onPress={() => router.push("/terms")}><Text style={styles.footerLinkText}>Terms</Text></Pressable>

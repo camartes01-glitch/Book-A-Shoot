@@ -69,14 +69,14 @@ export default function TermsPage() {
         <View style={[styles.container, isWide && styles.containerWide]}>
           <View style={styles.header}>
             <Text style={styles.title}>Terms of Service</Text>
-            <Text style={styles.lastUpdated}>Effective Date: September 2025 · Camartes Technologies</Text>
+            <Text style={styles.lastUpdated}>Effective Date: September 2025 · Camartes</Text>
           </View>
 
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>1. Introduction & Overview</Text>
             <Text style={styles.paragraph}>
               Welcome to <Text style={styles.bold}>Book A Shoot</Text>, a product platform owned and
-              operated by Camartes Technologies ("Camartes", "we", "our", or "us"). These Terms of Service
+              operated by Camartes ("Camartes", "we", "our", or "us"). These Terms of Service
               govern your access to and use of the Book A Shoot mobile applications, web application, and
               related services (collectively, the "Platform").
             </Text>
@@ -176,6 +176,10 @@ export default function TermsPage() {
             <Text style={styles.footerDot}>•</Text>
             <Pressable onPress={() => router.push("/blogs")}>
               <Text style={styles.footerLink}>Blogs</Text>
+            </Pressable>
+            <Text style={styles.footerDot}>•</Text>
+            <Pressable onPress={() => router.push("/contact")}>
+              <Text style={styles.footerLink}>Contact Us</Text>
             </Pressable>
             <Text style={styles.footerDot}>•</Text>
             <Pressable onPress={() => router.push("/privacy")}>

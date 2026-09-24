@@ -153,17 +153,17 @@ function getHomepageServiceImage(id: string) {
 
 // Professional Services List with real app images
 const SERVICES = [
-  { id: "wedding",        label: "Wedding Ceremony", tagline: "Sacred vows & grand mandap moments" },
-  { id: "pre_wedding",    label: "Pre-Wedding",      tagline: "Cinematic narratives & scenic visuals" },
-  { id: "bride_making",   label: "Bride Making",     tagline: "Bridal getting-ready & candid jewelry" },
-  { id: "groom_making",   label: "Groom Making",     tagline: "Regal safa tying & baraat prep" },
-  { id: "sangeet",        label: "Sangeet Night",    tagline: "High-energy dances & stage celebration" },
-  { id: "birthday",       label: "Birthday",         tagline: "Milestone birthdays & cake smashes" },
-  { id: "baby_shoot",     label: "Baby Shoot",       tagline: "Tender newborn poses & toddler joy" },
-  { id: "maternity_shoot",label: "Maternity",        tagline: "Motherhood elegance & glowing grace" },
-  { id: "corporate_event",label: "Corporate Summit", tagline: "Conferences, galas & executive PR" },
-  { id: "product_shoot",  label: "Product & Studio", tagline: "Clean e-commerce packshots & styling" },
-  { id: "pooja",          label: "Sacred Pooja",     tagline: "Auspicious Vedic rituals & homams" },
+  { id: "wedding", label: "Wedding Ceremony", tagline: "Sacred vows & grand mandap moments" },
+  { id: "pre_wedding", label: "Pre-Wedding", tagline: "Cinematic narratives & scenic visuals" },
+  { id: "bride_making", label: "Bride Making", tagline: "Bridal getting-ready & candid jewelry" },
+  { id: "groom_making", label: "Groom Making", tagline: "Regal safa tying & baraat prep" },
+  { id: "sangeet", label: "Sangeet Night", tagline: "High-energy dances & stage celebration" },
+  { id: "birthday", label: "Birthday", tagline: "Milestone birthdays & cake smashes" },
+  { id: "baby_shoot", label: "Baby Shoot", tagline: "Tender newborn poses & toddler joy" },
+  { id: "maternity_shoot", label: "Maternity", tagline: "Motherhood elegance & glowing grace" },
+  { id: "corporate_event", label: "Corporate Summit", tagline: "Conferences, galas & executive PR" },
+  { id: "product_shoot", label: "Product & Studio", tagline: "Clean e-commerce packshots & styling" },
+  { id: "pooja", label: "Sacred Pooja", tagline: "Auspicious Vedic rituals & homams" },
 ] as const;
 
 // Selected cities only
@@ -225,6 +225,7 @@ const NAV_ITEMS = [
   { id: "about", label: "About Us" },
   { id: "services", label: "Services" },
   { id: "blogs", label: "Blogs" },
+  { id: "contact", label: "Contact Us" },
   { id: "partner", label: "Partner with Us" },
 ] as const;
 
@@ -416,6 +417,7 @@ export default function LandingPage() {
   const goToServices = () => router.push("/services");
   const goToAbout = () => router.push("/about");
   const goToBlogs = () => router.push("/blogs");
+  const goToContact = () => router.push("/contact");
   const openPartner = () => Linking.openURL("https://camartes.com");
 
   const handleNavClick = (id: string) => {
@@ -425,6 +427,8 @@ export default function LandingPage() {
       goToAbout();
     } else if (id === "blogs") {
       goToBlogs();
+    } else if (id === "contact") {
+      goToContact();
     } else if (id === "partner") {
       openPartner();
     } else if (id === "how-it-works") {
@@ -441,16 +445,16 @@ export default function LandingPage() {
           styles.heroContent,
           isWide
             ? {
-                paddingTop: insets.top + 76,
-                paddingHorizontal: 56,
-                justifyContent: "center",
-              }
+              paddingTop: insets.top + 76,
+              paddingHorizontal: 56,
+              justifyContent: "center",
+            }
             : {
-                paddingTop: insets.top + 50,
-                paddingHorizontal: spacing.lg,
-                justifyContent: "flex-end",
-                paddingBottom: 48,
-              },
+              paddingTop: insets.top + 50,
+              paddingHorizontal: spacing.lg,
+              justifyContent: "flex-end",
+              paddingBottom: 48,
+            },
         ]}
       >
         <Text style={[styles.heroHeadline, isWide ? styles.heroHeadlineWide : styles.heroHeadlinePhone]}>
@@ -889,10 +893,10 @@ export default function LandingPage() {
                     styles.multipleEventsImg,
                     Platform.OS === "web"
                       ? ({
-                          clipPath: isWide
-                            ? "polygon(90px 0%, 100% 0%, 100% 100%, 0% 100%)"
-                            : "polygon(0% 24px, 100% 0%, 100% 100%, 0% 100%)",
-                        } as any)
+                        clipPath: isWide
+                          ? "polygon(90px 0%, 100% 0%, 100% 100%, 0% 100%)"
+                          : "polygon(0% 24px, 100% 0%, 100% 100%, 0% 100%)",
+                      } as any)
                       : null,
                   ]}
                   resizeMode="cover"
@@ -1203,6 +1207,15 @@ export default function LandingPage() {
             </Pressable>
 
             <Pressable
+              id="footer-contact"
+              onPress={goToContact}
+              style={styles.footerLink}
+              accessibilityRole="link"
+            >
+              <Text style={styles.footerLinkText}>Contact Us</Text>
+            </Pressable>
+
+            <Pressable
               id="footer-partner"
               onPress={openPartner}
               style={styles.footerLink}
@@ -1234,7 +1247,7 @@ export default function LandingPage() {
           </View>
 
           <View style={styles.footerDivider} />
-          <Text style={styles.copyright}>© 2025 Book A Shoot · Powered by Camartes Technologies</Text>
+          <Text style={styles.copyright}>© 2025 Book A Shoot · Powered by Camartes</Text>
         </View>
       </Animated.ScrollView>
     </View>

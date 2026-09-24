@@ -25,6 +25,13 @@ export default function Root({ children }: PropsWithChildren) {
         <link rel="apple-touch-icon" href="/favicon.png" />
         <meta name="theme-color" content="#EA580C" />
 
+        {/* ── Instant Image Preloads for Critical Above-The-Fold LCP ── */}
+        <link rel="preload" as="image" href="/book-a-shoot-wordmark.png" fetchPriority="high" />
+        <link rel="preload" as="image" href="/hero1.webp" fetchPriority="high" />
+        <link rel="preload" as="image" href="/phonehero1.webp" fetchPriority="high" />
+        <link rel="preload" as="image" href="/contact.webp" />
+        <link rel="preload" as="image" href="/phonecontact.webp" />
+
         {/* Reset web ScrollView to prevent duplicate scrollbars */}
         <ScrollViewStyleReset />
       </head>
