@@ -7,6 +7,28 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { isDemoAuthMode } from "@/src/config/authMode";
 
 function resolveApiUrl(): string {
+  // If running in a web browser on a production/deployed site (e.g. Vercel, bookashoot.online)
+  if (typeof window !== "undefined" && window.location) {
+    const host = window.location.hostname;
+    const isLocalhost = host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0";
+    if (!isLocalhost) {
+      // In production web, we MUST connect to an HTTPS remote backend!
+      // Insecure http://localhost will be blocked by browsers (Mixed Content) and fail.
+      const envUrl =
+        process.env.EXPO_PUBLIC_CAMARTES_API_URL?.trim() ||
+        process.env.EXPO_PUBLIC_CAMARTES_API?.trim() ||
+        process.env.EXPO_PUBLIC_API_URL?.trim() ||
+        process.env.API_BASE_URL?.trim();
+
+      if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1") && envUrl.startsWith("https://")) {
+        let clean = envUrl.replace(/\/+$/, "");
+        if (clean.endsWith("/api")) clean = clean.slice(0, -4);
+        return clean;
+      }
+      return "https://camartes-backend.onrender.com";
+    }
+  }
+
   const envUrl =
     process.env.EXPO_PUBLIC_CAMARTES_API_URL?.trim() ||
     process.env.EXPO_PUBLIC_CAMARTES_API?.trim() ||
@@ -21,15 +43,6 @@ function resolveApiUrl(): string {
       clean = clean.slice(0, -4);
     }
     return clean;
-  }
-
-  // When running locally in a web browser (e.g. localhost or 127.0.0.1),
-  // automatically point to the local Camartes backend running on port 8001
-  if (typeof window !== "undefined" && window.location) {
-    const host = window.location.hostname;
-    if (host === "localhost" || host === "127.0.0.1") {
-      return "http://localhost:8001";
-    }
   }
 
   return "https://camartes-backend.onrender.com";

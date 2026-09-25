@@ -74,19 +74,17 @@ export function PackageTierCard({
             <Muted style={styles.headlineText}>{pkg.headline}</Muted>
           </View>
 
-          <Pressable
-            onPress={toggleExpand}
-            accessibilityRole="button"
-            accessibilityLabel={expanded ? "Close details" : "View breakdown details"}
-            style={({ pressed }) => [styles.arrowButton, pressed && styles.cardPressed]}
-            hitSlop={12}
+          <View
+            style={styles.arrowButton}
+            accessibilityElementsHidden={true}
+            importantForAccessibility="no-hide-descendants"
           >
             {expanded ? (
               <ChevronUp size={20} color={colors.primaryDark} />
             ) : (
               <ChevronDown size={20} color={colors.primaryDark} />
             )}
-          </Pressable>
+          </View>
         </View>
 
         {!expanded ? (
