@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "BOOK A SHOOT",
-    "slug": "camartes-customer",
+    "slug": "book-a-shoot",
+    "owner": "camartes01",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -31,7 +32,9 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION",
         "POST_NOTIFICATIONS",
-        "SCHEDULE_EXACT_ALARM"
+        "SCHEDULE_EXACT_ALARM",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -80,6 +83,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8351bc32-b8c6-4300-8286-0f4190ed1c86"
+      }
     }
   }
 }

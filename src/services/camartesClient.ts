@@ -48,7 +48,7 @@ function resolveApiUrl(): string {
     return clean;
   }
 
-  return "http://localhost:8001";
+  return "https://camartes-prelaunch-1.onrender.com";
 }
 
 export const CAMARTES_API = resolveApiUrl();

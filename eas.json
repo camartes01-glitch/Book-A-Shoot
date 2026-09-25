@@ -1,0 +1,47 @@
+{
+  "cli": {
+    "version": ">= 14.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://vyjwezlkozajarwexirg.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_g6oALf4pkcwK82IRndmzkQ_4-9WbeAj",
+        "EXPO_PUBLIC_CAMARTES_API_URL": "https://camartes-prelaunch-1.onrender.com",
+        "EXPO_PUBLIC_CAMARTES_API": "https://camartes-prelaunch-1.onrender.com",
+        "EXPO_PUBLIC_API_URL": "https://camartes-prelaunch-1.onrender.com/api",
+        "EXPO_PUBLIC_AUTH_MODE": "REAL",
+        "EXPO_PUBLIC_CONTACT_RECEIVER_EMAIL": "info@bookashoot.online",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "631527312553-942aq7c10t0jtr5kedieo3jrbiruagnu.apps.googleusercontent.com"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://vyjwezlkozajarwexirg.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_g6oALf4pkcwK82IRndmzkQ_4-9WbeAj",
+        "EXPO_PUBLIC_CAMARTES_API_URL": "https://camartes-prelaunch-1.onrender.com",
+        "EXPO_PUBLIC_CAMARTES_API": "https://camartes-prelaunch-1.onrender.com",
+        "EXPO_PUBLIC_API_URL": "https://camartes-prelaunch-1.onrender.com/api",
+        "EXPO_PUBLIC_AUTH_MODE": "REAL",
+        "EXPO_PUBLIC_CONTACT_RECEIVER_EMAIL": "info@bookashoot.online",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "631527312553-942aq7c10t0jtr5kedieo3jrbiruagnu.apps.googleusercontent.com"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
