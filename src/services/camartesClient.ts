@@ -181,6 +181,9 @@ export async function camartesFetch<T>(
           headers.set("X-Guest-Id", uid);
         }
       }
+      if (parsedProf?.email && !headers.has("X-User-Email")) {
+        headers.set("X-User-Email", parsedProf.email);
+      }
     }
   } catch {
     // Non-blocking

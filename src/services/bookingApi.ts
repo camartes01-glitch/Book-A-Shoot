@@ -316,8 +316,6 @@ function invalidateStalePackageAndMatches(
 export async function listBookings(customerId: string): Promise<Booking[]> {
   const allStored = await readAllBookings();
   const local = allStored.filter((b) => b.customerId === customerId);
-  const token = await getAuthToken();
-  if (!token || token.startsWith("google-session-")) return sortBookings(local);
   try {
     const remote = await camartesFetch<unknown>("/api/bookings/my-bookings", {}, { requireAuth: true });
     const remoteList = parseRemoteBookingList(remote);
@@ -515,21 +513,18 @@ export async function refreshRemoteBookingStatus(bookingId: string): Promise<Boo
     // Continue to fallback
   }
 
-  // 2. Fallback: my-bookings if authenticated with Camartes session
-  const token = await getAuthToken();
-  if (token && !token.startsWith("google-session-")) {
-    try {
-      const remote = await camartesFetch<unknown>(
-        "/api/bookings/my-bookings",
-        {},
-        { requireAuth: true },
-      );
-      const rows = parseRemoteBookingList(remote);
-      const match = rows.find((row) => row.id === booking.remoteBookingId);
-      if (match) return await saveBooking(applyRemoteSnapshot(booking, match));
-    } catch {
-      // ignore
-    }
+  // 2. Fallback: my-bookings if authenticated
+  try {
+    const remote = await camartesFetch<unknown>(
+      "/api/bookings/my-bookings",
+      {},
+      { requireAuth: true },
+    );
+    const rows = parseRemoteBookingList(remote);
+    const match = rows.find((row) => row.id === booking.remoteBookingId);
+    if (match) return await saveBooking(applyRemoteSnapshot(booking, match));
+  } catch {
+    // ignore
   }
 
   return booking;

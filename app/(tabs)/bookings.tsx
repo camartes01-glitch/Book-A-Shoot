@@ -20,7 +20,7 @@ import {
   getEffectiveBookingStatus,
   type BookingFilterTab,
 } from "@/src/domain/bookingFilters";
-import { formatDateLong, formatInr } from "@/src/utils/format";
+import { formatDateLong } from "@/src/utils/format";
 import { colors, radiusSm, spacing } from "@/src/constants/theme";
 import { normalizeRouteParam } from "@/src/utils/routeParam";
 import type { Booking } from "@/src/types/booking";
@@ -298,9 +298,6 @@ export default function BookingsScreen() {
                   {b.days.length} event day{b.days.length === 1 ? "" : "s"}
                   {finalEventDate ? ` · ${formatDateLong(finalEventDate)}` : ""}
                 </Muted>
-                {b.estimatedAmount ? (
-                  <Muted style={{ fontWeight: "700", color: colors.primaryDark }}>{formatInr(b.estimatedAmount)}</Muted>
-                ) : null}
               </Pressable>
 
               {canEdit || canDelete || showRetrySearch ? (

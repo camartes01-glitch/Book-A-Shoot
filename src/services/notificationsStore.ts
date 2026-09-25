@@ -13,12 +13,14 @@ import {
   fetchUnreadCount,
   markAllAsRead as apiMarkAllAsRead,
   markAsRead as apiMarkAsRead,
+  deleteNotification as apiDeleteNotification,
   type BackendNotification,
 } from "@/src/services/notificationsApi";
 import { categoryForType, isPaymentRelated } from "@/src/domain/notificationContent";
 
 const KEY = "camartes-customer:notifications:v1";
 const READ_IDS_KEY = "camartes-customer:read_notification_ids:v1";
+const DELETED_IDS_KEY = "camartes-customer:deleted_notification_ids:v1";
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
@@ -36,6 +38,31 @@ function notifyListeners() {
 export function subscribeNotifications(listener: Listener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+async function getDeletedNotificationIds(): Promise<Set<string>> {
+  try {
+    const raw = await AsyncStorage.getItem(DELETED_IDS_KEY);
+    if (!raw) return new Set<string>();
+    const parsed = JSON.parse(raw) as string[];
+    return new Set<string>(parsed || []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+async function saveDeletedNotificationIds(set: Set<string>): Promise<void> {
+  try {
+    await AsyncStorage.setItem(DELETED_IDS_KEY, JSON.stringify(Array.from(set)));
+  } catch {
+    // Ignore
+  }
+}
+
+function getNotificationContentKey(n: Partial<AppNotification>): string {
+  const titleNorm = (n.title || "").trim();
+  const bodyNorm = (n.body || "").trim();
+  return `${n.type || ""}:${n.bookingId || ""}:${n.firmId || ""}:${titleNorm}:${bodyNorm}`;
 }
 
 async function getReadNotificationIds(): Promise<Set<string>> {
@@ -216,6 +243,7 @@ function mapBackendNotification(n: BackendNotification): AppNotification {
 
 export async function getNotifications(): Promise<AppNotification[]> {
   const readIds = await getReadNotificationIds();
+  const deletedIds = await getDeletedNotificationIds();
 
   let list: AppNotification[] = [];
   const token = await getAuthToken();
@@ -241,9 +269,17 @@ export async function getNotifications(): Promise<AppNotification[]> {
 
   list = deduplicateNotifications([...list, ...localList]);
 
-  // Enforce read status override for locally read items
+  // Enforce read status override and filter deleted or payment-related items
   const updated = list
-    .filter((n) => !isPaymentRelated({ type: n.type, title: n.title, body: n.body }))
+    .filter((n) => {
+      if (!n) return false;
+      const strId = String(n.id || "");
+      const contentKey = getNotificationContentKey(n);
+      if (deletedIds.has(strId) || (contentKey && deletedIds.has(contentKey))) {
+        return false;
+      }
+      return !isPaymentRelated({ type: n.type, title: n.title, body: n.body });
+    })
     .map((n) => {
       const stringId = String(n.id);
       if (readIds.has(stringId) || n.read) {
@@ -260,15 +296,17 @@ export async function addNotification(notification: AppNotification): Promise<vo
   if (isPaymentRelated({ type: notification.type, title: notification.title, body: notification.body })) {
     return;
   }
+  const deletedIds = await getDeletedNotificationIds();
+  const strId = String(notification.id || "");
+  const newContentKey = getNotificationContentKey(notification);
+  if (deletedIds.has(strId) || (newContentKey && deletedIds.has(newContentKey))) {
+    return;
+  }
+
   const list = await getNotifications();
-  const titleNorm = (notification.title || "").trim();
-  const bodyNorm = (notification.body || "").trim();
-  const newContentKey = `${notification.type || ""}:${notification.bookingId || ""}:${notification.firmId || ""}:${titleNorm}:${bodyNorm}`;
 
   const exists = list.some((n) => {
-    const tNorm = (n.title || "").trim();
-    const bNorm = (n.body || "").trim();
-    const existingContentKey = `${n.type || ""}:${n.bookingId || ""}:${n.firmId || ""}:${tNorm}:${bNorm}`;
+    const existingContentKey = getNotificationContentKey(n);
     return existingContentKey === newContentKey;
   });
 
@@ -335,15 +373,115 @@ export async function markNotificationRead(id: string): Promise<void> {
   notifyListeners();
 }
 
-export async function unreadCount(): Promise<number> {
+export async function deleteNotification(id: string): Promise<void> {
+  if (!id) return;
+  const targetId = String(id);
+
+  // 1. Record ID and content key in persistent deleted set
+  const deletedIds = await getDeletedNotificationIds();
+  deletedIds.add(targetId);
+
+  let localList: AppNotification[] = [];
+  try {
+    const raw = await AsyncStorage.getItem(KEY);
+    localList = raw ? (JSON.parse(raw) as AppNotification[]) : [];
+  } catch {
+    localList = [];
+  }
+
+  const target = localList.find((n) => String(n.id) === targetId);
+  if (target) {
+    const contentKey = getNotificationContentKey(target);
+    if (contentKey) {
+      deletedIds.add(contentKey);
+    }
+  }
+  await saveDeletedNotificationIds(deletedIds);
+
+  // 2. Update local cached list
+  const filtered = localList.filter((n) => String(n.id) !== targetId);
+  await AsyncStorage.setItem(KEY, JSON.stringify(filtered));
+
+  // 3. Call backend delete non-blocking
   const token = await getAuthToken();
   if (token && !isDemoAuthMode()) {
     try {
-      return await fetchUnreadCount();
+      await apiDeleteNotification(targetId);
     } catch {
-      // fallback to local list
+      // non-blocking
     }
   }
+
+  notifyListeners();
+}
+
+export async function deleteNotifications(ids: string[]): Promise<void> {
+  if (!ids || ids.length === 0) return;
+  const targetIdSet = new Set(ids.map((id) => String(id)));
+  const deletedIds = await getDeletedNotificationIds();
+
+  let localList: AppNotification[] = [];
+  try {
+    const raw = await AsyncStorage.getItem(KEY);
+    localList = raw ? (JSON.parse(raw) as AppNotification[]) : [];
+  } catch {
+    localList = [];
+  }
+
+  const token = await getAuthToken();
+  const shouldCallBackend = Boolean(token && !isDemoAuthMode());
+
+  for (const n of localList) {
+    const strId = String(n.id);
+    if (targetIdSet.has(strId)) {
+      deletedIds.add(strId);
+      const contentKey = getNotificationContentKey(n);
+      if (contentKey) {
+        deletedIds.add(contentKey);
+      }
+      if (shouldCallBackend) {
+        void apiDeleteNotification(strId).catch(() => {});
+      }
+    }
+  }
+
+  for (const id of ids) {
+    deletedIds.add(String(id));
+  }
+
+  await saveDeletedNotificationIds(deletedIds);
+
+  const filtered = localList.filter((n) => !targetIdSet.has(String(n.id)));
+  await AsyncStorage.setItem(KEY, JSON.stringify(filtered));
+
+  notifyListeners();
+}
+
+export async function clearAllNotifications(): Promise<void> {
+  const list = await getNotifications();
+  const deletedIds = await getDeletedNotificationIds();
+
+  const token = await getAuthToken();
+  const shouldCallBackend = Boolean(token && !isDemoAuthMode());
+
+  for (const n of list) {
+    const strId = String(n.id);
+    deletedIds.add(strId);
+    const contentKey = getNotificationContentKey(n);
+    if (contentKey) {
+      deletedIds.add(contentKey);
+    }
+    if (shouldCallBackend) {
+      void apiDeleteNotification(strId).catch(() => {});
+    }
+  }
+
+  await saveDeletedNotificationIds(deletedIds);
+  await AsyncStorage.setItem(KEY, JSON.stringify([]));
+  notifyListeners();
+}
+
+export async function unreadCount(): Promise<number> {
   const list = await getNotifications();
   return list.filter((n) => !n.read).length;
 }

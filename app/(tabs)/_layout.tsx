@@ -28,9 +28,10 @@ function CustomBottomNavigation({ state, descriptors, navigation }: CustomTabBar
 
   const currentRouteName = state.routes[state.index]?.name;
   const isHomeActive = currentRouteName === "index";
-  const isMessagesActive = currentRouteName === "messages";
-  const isProfileActive = currentRouteName === "profile";
   const isBookingsActive = currentRouteName === "bookings";
+  const isMessagesActive = currentRouteName === "messages";
+  const isNotificationsActive = currentRouteName === "notifications";
+  const isProfileActive = currentRouteName === "profile";
 
   const onBookPress = async () => {
     try {
@@ -50,20 +51,28 @@ function CustomBottomNavigation({ state, descriptors, navigation }: CustomTabBar
         accessibilityRole="button"
         accessibilityLabel="Home"
       >
-        <Home size={22} color={isHomeActive ? colors.primary : "#64748B"} />
+        <Home size={21} color={isHomeActive ? colors.primary : "#64748B"} />
         <Text style={[styles.tabLabel, isHomeActive && styles.tabLabelActive]}>Home</Text>
         {isHomeActive && <View style={styles.activeDot} />}
       </Pressable>
 
-      {/* 2. Explore Tab */}
+      {/* 2. My Bookings Tab (Replacing Explore) */}
       <Pressable
         style={styles.tabItem}
-        onPress={() => router.push("/events")}
+        onPress={() => navigation.navigate("bookings")}
         accessibilityRole="button"
-        accessibilityLabel="Explore events"
+        accessibilityLabel="My Bookings"
       >
-        <Compass size={22} color={isBookingsActive ? colors.primary : "#64748B"} />
-        <Text style={[styles.tabLabel, isBookingsActive && styles.tabLabelActive]}>Explore</Text>
+        <CalendarCheck size={21} color={isBookingsActive ? colors.primary : "#64748B"} />
+        <Text
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}
+          style={[styles.tabLabel, isBookingsActive && styles.tabLabelActive]}
+        >
+          Bookings
+        </Text>
+        {isBookingsActive && <View style={styles.activeDot} />}
       </Pressable>
 
       {/* 3. Center Floating Book Button */}
@@ -74,7 +83,7 @@ function CustomBottomNavigation({ state, descriptors, navigation }: CustomTabBar
         accessibilityLabel="Start booking a shoot"
       >
         <View style={styles.floatingCircle}>
-          <Camera size={24} color="#FFFFFF" />
+          <Camera size={22} color="#FFFFFF" />
         </View>
         <Text style={styles.centerBookLabel}>Book</Text>
       </Pressable>
@@ -88,11 +97,6 @@ function CustomBottomNavigation({ state, descriptors, navigation }: CustomTabBar
       >
         <View style={styles.iconWithBadgeWrap}>
           <MessageCircle size={22} color={isMessagesActive ? colors.primary : "#64748B"} />
-          {unreadCount > 0 ? (
-            <View style={styles.badgePill}>
-              <Text style={styles.badgePillText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
-            </View>
-          ) : null}
         </View>
         <Text style={[styles.tabLabel, isMessagesActive && styles.tabLabelActive]}>Messages</Text>
         {isMessagesActive && <View style={styles.activeDot} />}
@@ -173,6 +177,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#64748B",
     marginTop: 4,
+    textAlign: "center",
   },
   tabLabelActive: {
     color: colors.primary,

@@ -1,5 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Easing,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { ArrowLeft } from "lucide-react-native";
@@ -20,13 +30,98 @@ import { checkWebSupabaseSession, extractUserInfoFromSupabaseUser, signInWithGoo
 WebBrowser.maybeCompleteAuthSession();
 
 function resolveAppRoute(target?: string | null): string {
-  if (!target || target === "/(tabs)" || target === "/%28tabs%29" || target === "(tabs)" || target === "/(tabs)/index" || target === "/") {
-    return "/";
-  }
-  if (target.startsWith("/(tabs)/")) {
-    return target.replace("/(tabs)/", "/");
+  if (
+    !target ||
+    target === "/" ||
+    target === "/landing" ||
+    target === "/(tabs)" ||
+    target === "/%28tabs%29" ||
+    target === "(tabs)" ||
+    target === "/(tabs)/index"
+  ) {
+    return "/(tabs)";
   }
   return target;
+}
+
+function OrangeLoadingAnimation({ message }: { message: string }) {
+  const spinValue = useRef(new Animated.Value(0)).current;
+  const pulseValue = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const spinAnim = Animated.loop(
+      Animated.timing(spinValue, {
+        toValue: 1,
+        duration: 1100,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+
+    const pulseAnim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseValue, {
+          toValue: 1.18,
+          duration: 650,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseValue, {
+          toValue: 1,
+          duration: 650,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    spinAnim.start();
+    pulseAnim.start();
+
+    return () => {
+      spinAnim.stop();
+      pulseAnim.stop();
+    };
+  }, [spinValue, pulseValue]);
+
+  const spin = spinValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  return (
+    <View style={styles.loadingOverlay}>
+      <View style={styles.loadingCard}>
+        <View style={styles.animWrap}>
+          {/* Pulsing outer halo */}
+          <Animated.View
+            style={[
+              styles.pulseRing,
+              {
+                transform: [{ scale: pulseValue }],
+              },
+            ]}
+          />
+          {/* Rotating orange circle */}
+          <Animated.View
+            style={[
+              styles.spinningRing,
+              {
+                transform: [{ rotate: spin }],
+              },
+            ]}
+          />
+          {/* Center glowing orange badge */}
+          <View style={styles.centerDot}>
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          </View>
+        </View>
+
+        <Text style={styles.loadingMessage}>{message}</Text>
+        <Text style={styles.loadingSubMessage}>Please hold on a moment...</Text>
+      </View>
+    </View>
+  );
 }
 
 export default function LoginScreen() {
@@ -34,7 +129,7 @@ export default function LoginScreen() {
   const params = useLocalSearchParams<{ returnTo?: string; reauth?: string }>();
   const explicitReturn = Array.isArray(params.returnTo) ? params.returnTo[0] : params.returnTo;
   const isReauth = (Array.isArray(params.reauth) ? params.reauth[0] : params.reauth) === "1";
-  const returnTarget = explicitReturn || (activeDraft ? getDraftResumeRoute(activeDraft) : "/");
+  const returnTarget = explicitReturn || (activeDraft ? getDraftResumeRoute(activeDraft) : "/(tabs)");
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [emailOrPhone, setEmailOrPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -412,6 +507,19 @@ export default function LoginScreen() {
       <Muted style={{ textAlign: "center", marginTop: spacing.md }}>
         By continuing you agree to the Terms of Service and Privacy Policy.
       </Muted>
+
+      {/* Orange loading animation overlay shown ONLY when login or Google sign-in is loading */}
+      {loading || googleBusy ? (
+        <OrangeLoadingAnimation
+          message={
+            googleBusy
+              ? "Connecting with Google..."
+              : mode === "signup"
+              ? "Creating your account..."
+              : "Signing in to Book A Shoot..."
+          }
+        />
+      ) : null}
     </ScreenContainer>
   );
 }
@@ -440,4 +548,83 @@ const styles = StyleSheet.create({
     marginTop: -spacing.sm,
   },
   forgotLinkText: { color: colors.primaryDark, fontSize: 14, fontWeight: "700" },
+
+  // ── Orange Loading Animation Styles ─────────────────────────────────────────
+  loadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(255, 253, 249, 0.92)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 9999,
+  },
+  loadingCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    paddingVertical: 28,
+    paddingHorizontal: 32,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 107, 53, 0.25)",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    elevation: 8,
+    maxWidth: 320,
+    width: "88%",
+  },
+  animWrap: {
+    width: 72,
+    height: 72,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    marginBottom: 16,
+  },
+  pulseRing: {
+    position: "absolute",
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "rgba(255, 107, 53, 0.16)",
+  },
+  spinningRing: {
+    position: "absolute",
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    borderWidth: 3.5,
+    borderColor: colors.primary,
+    borderTopColor: "transparent",
+    borderRightColor: colors.primary,
+  },
+  centerDot: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  loadingMessage: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F172A",
+    textAlign: "center",
+  },
+  loadingSubMessage: {
+    fontSize: 12.5,
+    color: "#64748B",
+    marginTop: 4,
+    textAlign: "center",
+  },
 });

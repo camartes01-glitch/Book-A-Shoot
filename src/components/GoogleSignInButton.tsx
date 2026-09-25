@@ -79,7 +79,7 @@ export function GoogleSignInButton({
     >
       {loading ? (
         <View style={styles.contentRow}>
-          <ActivityIndicator size="small" color="#4285F4" style={{ marginRight: 8 }} />
+          <ActivityIndicator size="small" color={colors.primary} style={{ marginRight: 8 }} />
           <Text style={styles.label}>Connecting to Google...</Text>
         </View>
       ) : (

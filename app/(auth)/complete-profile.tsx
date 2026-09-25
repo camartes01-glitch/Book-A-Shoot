@@ -21,7 +21,15 @@ import { CamartesApiError } from "@/src/services/camartesClient";
 import { updateSupabaseUserProfile } from "@/src/services/supabaseAuth";
 
 function resolveAppRoute(target?: string | null): string {
-  if (!target || target === "/(tabs)" || target === "/%28tabs%29" || target === "(tabs)" || target === "/(tabs)/index" || target === "/") {
+  if (
+    !target ||
+    target === "/" ||
+    target === "/landing" ||
+    target === "/(tabs)" ||
+    target === "/%28tabs%29" ||
+    target === "(tabs)" ||
+    target === "/(tabs)/index"
+  ) {
     return "/(tabs)";
   }
   return target;
@@ -30,7 +38,7 @@ function resolveAppRoute(target?: string | null): string {
 export default function CompleteProfileScreen() {
   const { profile, updateProfile } = useAppStore();
   const params = useLocalSearchParams<{ returnTo?: string }>();
-  const returnTarget = params.returnTo || "/";
+  const returnTarget = params.returnTo || "/(tabs)";
 
   const [name, setName] = useState(profile?.name || "");
   const [phone, setPhone] = useState(profile?.mobile || "");

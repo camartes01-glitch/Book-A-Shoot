@@ -4,7 +4,7 @@ import type { CustomerProfile } from "@/src/types/booking";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as authApi from "@/src/services/authApi";
 import * as bookingApi from "@/src/services/bookingApi";
-import { addNotification, getNotifications, markAllRead, subscribeNotifications } from "@/src/services/notificationsStore";
+import { addNotification, getNotifications, markAllRead, deleteNotification as deleteNotificationStore, deleteNotifications as deleteNotificationsStore, clearAllNotifications as clearAllNotificationsStore, subscribeNotifications } from "@/src/services/notificationsStore";
 import { runEngineTick, runReplacementTick } from "@/src/services/notificationEngine";
 import { resolveNotificationRoute } from "@/src/domain/notificationRouting";
 import { buildNotificationContent, categoryForType } from "@/src/domain/notificationContent";
@@ -87,6 +87,9 @@ type AppContextValue = {
   notifications: AppNotification[];
   refreshNotifications: () => Promise<void>;
   markNotificationsRead: () => Promise<void>;
+  deleteNotification: (id: string) => Promise<void>;
+  deleteNotifications: (ids: string[]) => Promise<void>;
+  clearAllNotifications: () => Promise<void>;
 };
 
 const Ctx = createContext<AppContextValue | null>(null);
@@ -560,7 +563,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const markNotificationsRead = useCallback(async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     await markAllRead();
+  }, []);
+
+  const deleteNotification = useCallback(async (id: string) => {
+    setNotifications((prev) => prev.filter((n) => String(n.id) !== String(id)));
+    await deleteNotificationStore(id);
+  }, []);
+
+  const deleteNotifications = useCallback(async (ids: string[]) => {
+    const targetIdSet = new Set(ids.map((id) => String(id)));
+    setNotifications((prev) => prev.filter((n) => !targetIdSet.has(String(n.id))));
+    await deleteNotificationsStore(ids);
+  }, []);
+
+  const clearAllNotifications = useCallback(async () => {
+    setNotifications([]);
+    await clearAllNotificationsStore();
   }, []);
 
   const value = useMemo<AppContextValue>(
@@ -604,6 +624,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notifications,
       refreshNotifications,
       markNotificationsRead,
+      deleteNotification,
+      deleteNotifications,
+      clearAllNotifications,
     }),
     [
       ready,
@@ -644,6 +667,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       notifications,
       refreshNotifications,
       markNotificationsRead,
+      deleteNotification,
+      deleteNotifications,
+      clearAllNotifications,
     ],
   );
 

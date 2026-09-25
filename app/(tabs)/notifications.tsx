@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,16 +15,19 @@ import {
   Bell,
   BellOff,
   Calendar,
+  Check,
   CheckCircle2,
   ChevronRight,
   MessageSquare,
   Settings,
   Sparkles,
+  Trash2,
   XCircle,
 } from "lucide-react-native";
 import { ScreenContainer } from "@/src/components/ScreenContainer";
 import { Badge, Button, Card, Muted, ScreenTitle } from "@/src/components/ui";
 import { EmptyState } from "@/src/components/EmptyState";
+import { ConfirmDialog } from "@/src/components/ConfirmDialog";
 import { useAppStore } from "@/src/state/AppProvider";
 import { colors, elevation, radius, spacing } from "@/src/constants/theme";
 import { markNotificationRead } from "@/src/services/notificationsStore";
@@ -47,18 +52,32 @@ function timeAgo(iso: string): string {
 type TabType = "all" | "booking" | "message" | "reminder";
 
 export default function NotificationsScreen() {
-  const { notifications, bookings, refreshNotifications, markNotificationsRead } = useAppStore();
+  const {
+    notifications,
+    bookings,
+    refreshNotifications,
+    markNotificationsRead,
+    deleteNotification,
+    deleteNotifications,
+    clearAllNotifications,
+  } = useAppStore();
   const [selectedTab, setSelectedTab] = useState<TabType>("all");
   const [settingsVisible, setSettingsVisible] = useState(false);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
+  const [singleDeleteTargetId, setSingleDeleteTargetId] = useState<string | null>(null);
+  const [deletingBusy, setDeletingBusy] = useState(false);
   const [prefs, setPrefs] = useState<NotificationPreferences>({
     pushEnabled: true,
     remindersEnabled: true,
   });
 
+  // Automatically mark all notifications as read as soon as notifications screen is opened
   useFocusEffect(
     useCallback(() => {
-      void refreshNotifications();
-    }, [refreshNotifications]),
+      void markNotificationsRead();
+    }, [markNotificationsRead]),
   );
 
   useEffect(() => {
@@ -119,6 +138,44 @@ export default function NotificationsScreen() {
     }
   };
 
+  const handleToggleSelectionMode = () => {
+    void selectionFeedback();
+    if (isSelectionMode) {
+      setIsSelectionMode(false);
+      setSelectedIds(new Set());
+    } else {
+      setIsSelectionMode(true);
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleToggleSelectAll = () => {
+    void selectionFeedback();
+    if (selectedIds.size === filteredNotifications.length && filteredNotifications.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredNotifications.map((n) => String(n.id))));
+    }
+  };
+
+  const handleCardPress = (n: AppNotification) => {
+    if (isSelectionMode) {
+      void selectionFeedback();
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        const idStr = String(n.id);
+        if (next.has(idStr)) {
+          next.delete(idStr);
+        } else {
+          next.add(idStr);
+        }
+        return next;
+      });
+      return;
+    }
+    void handlePressNotification(n);
+  };
+
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
@@ -128,13 +185,28 @@ export default function NotificationsScreen() {
         <View>
           <ScreenTitle>Notifications</ScreenTitle>
           <Muted style={styles.headerSub}>
-            {unreadCount > 0 ? `${unreadCount} unread update${unreadCount > 1 ? "s" : ""}` : "All updates are caught up"}
+            {isSelectionMode
+              ? "Select notifications to delete"
+              : unreadCount > 0
+              ? `${unreadCount} unread update${unreadCount > 1 ? "s" : ""}`
+              : "All updates are caught up"}
           </Muted>
         </View>
 
         <View style={styles.headerActions}>
-          {unreadCount > 0 ? (
+          {!isSelectionMode && unreadCount > 0 ? (
             <Button label="Mark all read" variant="ghost" compact onPress={markNotificationsRead} />
+          ) : null}
+          {notifications.length > 0 ? (
+            <Pressable
+              onPress={handleToggleSelectionMode}
+              hitSlop={8}
+              style={[styles.clearAllBtn, isSelectionMode && styles.clearAllBtnActive]}
+              accessibilityRole="button"
+              accessibilityLabel={isSelectionMode ? "Cancel selection mode" : "Select notifications to delete"}
+            >
+              <Trash2 size={18} color={isSelectionMode ? "#FFFFFF" : "#EF4444"} />
+            </Pressable>
           ) : null}
           <Pressable
             onPress={() => {
@@ -150,6 +222,70 @@ export default function NotificationsScreen() {
           </Pressable>
         </View>
       </View>
+
+      {/* Multi-Selection Control Bar */}
+      {isSelectionMode ? (
+        <View style={styles.selectionBar}>
+          <View style={styles.selectionBarLeft}>
+            <Pressable
+              onPress={handleToggleSelectAll}
+              style={styles.selectAllBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Select or deselect all notifications"
+            >
+              <Text style={styles.selectAllBtnText}>
+                {selectedIds.size === filteredNotifications.length && filteredNotifications.length > 0
+                  ? "Deselect All"
+                  : "Select All"}
+              </Text>
+            </Pressable>
+            <Text style={styles.selectionCounterText}>
+              {selectedIds.size} of {filteredNotifications.length} selected
+            </Text>
+          </View>
+
+          <View style={styles.selectionBarRight}>
+            <Pressable
+              onPress={() => {
+                void selectionFeedback();
+                setIsSelectionMode(false);
+                setSelectedIds(new Set());
+              }}
+              style={styles.cancelSelectionBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel selection mode"
+            >
+              <Text style={styles.cancelSelectionText}>Cancel</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => {
+                if (selectedIds.size > 0) {
+                  void selectionFeedback();
+                  setConfirmDeleteVisible(true);
+                }
+              }}
+              disabled={selectedIds.size === 0}
+              style={[
+                styles.deleteSelectedBtn,
+                selectedIds.size === 0 && styles.deleteSelectedBtnDisabled,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete ${selectedIds.size} selected notifications`}
+            >
+              <Trash2 size={15} color={selectedIds.size === 0 ? "#94A3B8" : "#FFFFFF"} />
+              <Text
+                style={[
+                  styles.deleteSelectedBtnText,
+                  selectedIds.size === 0 && styles.deleteSelectedBtnTextDisabled,
+                ]}
+              >
+                Delete ({selectedIds.size})
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
 
       {/* Category Tabs */}
       <View style={styles.tabsContainer}>
@@ -201,16 +337,23 @@ export default function NotificationsScreen() {
               (n.title || "").toLowerCase().includes("unavailable") ||
               (n.body || "").toLowerCase().includes("unavailable");
             const isAccept = n.type === "vendor_accepted" || (n.title || "").toLowerCase().includes("accepted");
+            const isSelected = selectedIds.has(String(n.id));
 
             return (
               <Pressable
                 key={n.id && n.id !== "undefined" ? n.id : `notif-${idx}`}
-                onPress={() => void handlePressNotification(n)}
+                onPress={() => void handleCardPress(n)}
                 accessibilityRole="button"
                 accessibilityLabel={`Notification: ${n.title}`}
               >
-                <Card accent={!n.read} style={styles.cardBox}>
+                <Card accent={!n.read && !isSelectionMode} style={[styles.cardBox, isSelected && styles.cardBoxSelected]}>
                   <View style={styles.notifRow}>
+                    {isSelectionMode ? (
+                      <View style={[styles.selectCheckbox, isSelected && styles.selectCheckboxActive]}>
+                        {isSelected ? <Check size={13} color="#FFFFFF" strokeWidth={3} /> : null}
+                      </View>
+                    ) : null}
+
                     <View
                       style={[
                         styles.iconBadge,
@@ -238,10 +381,29 @@ export default function NotificationsScreen() {
 
                     <View style={styles.contentWrap}>
                       <View style={styles.titleLine}>
-                        <Text style={[styles.notifTitle, !n.read && styles.notifTitleUnread]} numberOfLines={1}>
-                          {n.title}
-                        </Text>
-                        {!n.read ? <View style={styles.unreadDot} /> : null}
+                        <View style={styles.titleLeft}>
+                          <Text style={[styles.notifTitle, !n.read && styles.notifTitleUnread]} numberOfLines={1}>
+                            {n.title}
+                          </Text>
+                          {!n.read ? <View style={styles.unreadDot} /> : null}
+                        </View>
+                        {!isSelectionMode ? (
+                          <Pressable
+                            onPress={(e) => {
+                              if (e && typeof e.stopPropagation === "function") {
+                                e.stopPropagation();
+                              }
+                              void selectionFeedback();
+                              setSingleDeleteTargetId(String(n.id));
+                            }}
+                            hitSlop={8}
+                            style={styles.deleteItemBtn}
+                            accessibilityRole="button"
+                            accessibilityLabel="Delete notification"
+                          >
+                            <Trash2 size={15} color="#94A3B8" />
+                          </Pressable>
+                        ) : null}
                       </View>
 
                       <Text style={styles.notifBody}>{n.body}</Text>
@@ -269,6 +431,55 @@ export default function NotificationsScreen() {
           })}
         </View>
       )}
+
+      {/* Confirmation Dialog for Multi-Selection Delete */}
+      <ConfirmDialog
+        visible={confirmDeleteVisible}
+        title="Delete Notifications"
+        message={`Are you sure you want to delete ${selectedIds.size} notification${selectedIds.size === 1 ? "" : "s"}?`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        confirmVariant="danger"
+        loading={deletingBusy}
+        onConfirm={async () => {
+          setDeletingBusy(true);
+          try {
+            await deleteNotifications(Array.from(selectedIds));
+            setSelectedIds(new Set());
+            setIsSelectionMode(false);
+            setConfirmDeleteVisible(false);
+          } finally {
+            setDeletingBusy(false);
+          }
+        }}
+        onCancel={() => {
+          setConfirmDeleteVisible(false);
+        }}
+      />
+
+      {/* Confirmation Dialog for Single Delete */}
+      <ConfirmDialog
+        visible={singleDeleteTargetId !== null}
+        title="Delete Notification"
+        message="Are you sure you want to delete 1 notification?"
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        confirmVariant="danger"
+        loading={deletingBusy}
+        onConfirm={async () => {
+          if (!singleDeleteTargetId) return;
+          setDeletingBusy(true);
+          try {
+            await deleteNotification(singleDeleteTargetId);
+            setSingleDeleteTargetId(null);
+          } finally {
+            setDeletingBusy(false);
+          }
+        }}
+        onCancel={() => {
+          setSingleDeleteTargetId(null);
+        }}
+      />
 
       {/* Notification Preferences Modal */}
       <Modal visible={settingsVisible} transparent animationType="fade" onRequestClose={() => setSettingsVisible(false)}>
@@ -332,6 +543,89 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
+  clearAllBtn: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  clearAllBtnActive: {
+    backgroundColor: "#EF4444",
+  },
+  selectionBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FEF2F2",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  selectionBarLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  selectAllBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  selectAllBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#DC2626",
+  },
+  selectionCounterText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#991B1B",
+  },
+  selectionBarRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  cancelSelectionBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  cancelSelectionText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+  deleteSelectedBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: "#EF4444",
+  },
+  deleteSelectedBtnDisabled: {
+    backgroundColor: "#E2E8F0",
+  },
+  deleteSelectedBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  deleteSelectedBtnTextDisabled: {
+    color: "#94A3B8",
+  },
   settingsBtn: {
     padding: 8,
     borderRadius: 20,
@@ -373,10 +667,30 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 16,
   },
+  cardBoxSelected: {
+    borderColor: "#FCA5A5",
+    backgroundColor: "#FEF2F2",
+  },
   notifRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
+  },
+  selectCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#CBD5E1",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+    alignSelf: "center",
+    marginRight: 2,
+  },
+  selectCheckboxActive: {
+    borderColor: "#EF4444",
+    backgroundColor: "#EF4444",
   },
   iconBadge: {
     width: 38,
@@ -410,11 +724,24 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 4,
   },
+  titleLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    marginRight: 8,
+  },
+  deleteItemBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   notifTitle: {
     fontSize: 14,
     fontWeight: "600",
     color: "#334155",
-    flex: 1,
+    flexShrink: 1,
   },
   notifTitleUnread: {
     fontWeight: "800",

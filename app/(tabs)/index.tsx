@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import {
   ArrowRight,
+  Bell,
   Camera,
   ChevronRight,
   Clock3,
@@ -181,7 +182,8 @@ export default function HomeScreen() {
   const isWide = W >= 768;
   const contentWidth = Math.min(W, 440);
 
-  const { profile, bookings, activeDraft, startNewBooking, loadDraft } = useAppStore();
+  const { profile, bookings, activeDraft, startNewBooking, loadDraft, notifications, markNotificationsRead } = useAppStore();
+  const unreadNotificationsCount = notifications?.filter((n) => !n.read).length || 0;
   const [searchOpen, setSearchOpen] = useState(false);
   const startingRef = useRef(false);
 
@@ -302,6 +304,26 @@ export default function HomeScreen() {
           </Pressable>
 
           <View style={styles.headerRightActions}>
+            {/* Notification Bell Button (to the left of Profile) */}
+            <Pressable
+              style={styles.headerNotificationBtn}
+              onPress={() => {
+                void markNotificationsRead();
+                router.push("/(tabs)/notifications");
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Open notifications"
+            >
+              <Bell size={20} color="#1E293B" />
+              {unreadNotificationsCount > 0 ? (
+                <View style={styles.headerBadgePill}>
+                  <Text style={styles.headerBadgePillText}>
+                    {unreadNotificationsCount > 9 ? "9+" : unreadNotificationsCount}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
+
             {/* User Avatar */}
             <Pressable
               style={styles.userAvatar}
@@ -882,6 +904,37 @@ const styles = StyleSheet.create({
   headerRightActions: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
+  },
+  headerNotificationBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    borderWidth: 1,
+    borderColor: "#EDE4D8",
+  },
+  headerBadgePill: {
+    position: "absolute",
+    top: -3,
+    right: -4,
+    backgroundColor: colors.primary,
+    borderRadius: 999,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 3,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+  },
+  headerBadgePillText: {
+    color: "#FFFFFF",
+    fontSize: 8.5,
+    fontWeight: "800",
   },
   userAvatar: {
     width: 36,
