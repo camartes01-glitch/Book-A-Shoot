@@ -383,21 +383,8 @@ export async function restoreSession(): Promise<CustomerProfile | null> {
       return persistProfile(profileFromCamartesUser(me, existing ?? {}));
     } catch (error) {
       if (error instanceof CamartesApiError && error.status === 401) {
-        let hasSupabaseSession = false;
-        try {
-          const { supabase } = await import("./supabaseClient");
-          const { data } = await supabase.auth.getSession();
-          if (data?.session?.user) {
-            hasSupabaseSession = true;
-          }
-        } catch {
-          // Ignore
-        }
         await setAuthToken(null);
-        if (!hasSupabaseSession) {
-          await AsyncStorage.removeItem(PROFILE_KEY);
-          return null;
-        }
+        // Do not wipe stored profile on token invalidation; preserve customer identity & bookings
       }
     }
   }

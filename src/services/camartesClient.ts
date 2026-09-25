@@ -25,7 +25,7 @@ function resolveApiUrl(): string {
         if (clean.endsWith("/api")) clean = clean.slice(0, -4);
         return clean;
       }
-      return "https://camartes-backend.onrender.com";
+      return "https://camartes-prelaunch-1.onrender.com";
     }
   }
 
@@ -45,7 +45,7 @@ function resolveApiUrl(): string {
     return clean;
   }
 
-  return "https://camartes-backend.onrender.com";
+  return "https://camartes-prelaunch-1.onrender.com";
 }
 
 export const CAMARTES_API = resolveApiUrl();
