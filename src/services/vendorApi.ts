@@ -104,7 +104,7 @@ async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): 
             "X-Client-App": "bookashoot",
             "X-Booking-Source": "book_a_shoot",
           },
-          signal: AbortSignal.timeout(8000),
+          signal: AbortSignal.timeout(15000),
         });
         if (getRes.ok) {
           const data = await getRes.json();
@@ -124,7 +124,7 @@ async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): 
             city: cityStr || null,
             radius_km: 100,
           }),
-          signal: AbortSignal.timeout(8000),
+          signal: AbortSignal.timeout(15000),
         });
         if (searchRes.ok) {
           const data = await searchRes.json();
@@ -174,7 +174,7 @@ async function fetchGeneralProviders(query: CatalogQuery = {}): Promise<RawSearc
         "X-Client-App": "bookashoot",
         "X-Booking-Source": "book_a_shoot",
       },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(15000),
     });
     if (getRes.ok) {
       const data = await getRes.json();
@@ -195,7 +195,7 @@ async function fetchGeneralProviders(query: CatalogQuery = {}): Promise<RawSearc
         city: query.city?.trim() || null,
         radius_km: 100,
       }),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(15000),
     });
     if (res.ok) {
       const data = await res.json();
@@ -475,21 +475,20 @@ export type VendorCatalogResult = {
 export async function fetchVendorCatalog(query: CatalogQuery = {}): Promise<VendorCatalogResult> {
   try {
     const types = query.serviceTypes?.length ? query.serviceTypes : SEARCH_SERVICE_TYPES;
-    const [serviceResults, generalHits] = await Promise.all([
-      Promise.all(types.map((serviceType) => fetchServiceType(serviceType, query))),
-      fetchGeneralProviders(query),
-    ]);
+    const serviceResults = await Promise.all(types.map((serviceType) => fetchServiceType(serviceType, query)));
+    let allHits = serviceResults.flat();
+    if (allHits.length === 0) {
+      const generalHits = await fetchGeneralProviders(query);
+      allHits = generalHits;
+    }
     const byId = new Map<string, Aggregate>();
 
-    const allBatches = [...serviceResults, generalHits];
-    allBatches.forEach((hits) => {
-      for (const hit of hits) {
-        const id = idOf(hit);
-        if (!id) continue;
-        const acc = byId.get(id) ?? newAggregate(id);
-        mergeHit(acc, hit);
-        byId.set(id, acc);
-      }
+    allHits.forEach((hit) => {
+      const id = idOf(hit);
+      if (!id) return;
+      const acc = byId.get(id) ?? newAggregate(id);
+      mergeHit(acc, hit);
+      byId.set(id, acc);
     });
 
     const vendors = [...byId.values()].map((acc) => toCustomerVendor(acc, true));
