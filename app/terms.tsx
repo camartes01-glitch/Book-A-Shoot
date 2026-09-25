@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { UniversalFooter } from "@/src/components/UniversalFooter";
 import { ArrowLeft, FileText, ShieldCheck } from "lucide-react-native";
 import { colors, radius, spacing } from "@/src/constants/theme";
 
@@ -156,37 +157,13 @@ export default function TermsPage() {
 
             <Text style={styles.sectionTitle}>9. Contact & Support</Text>
             <Text style={styles.paragraph}>
-              For any questions regarding these terms, contact our support team at legal@camartes.com or reach out
-              via our platform in-app support chat.
+              For any questions regarding these terms, contact our support team at info@bookashoot.online or reach out
+              via our platform in-app support chat or WhatsApp at +91 96032 15551.
             </Text>
           </View>
 
-          <View style={styles.footerRow}>
-            <Pressable onPress={() => router.push("/landing")}>
-              <Text style={styles.footerLink}>Home</Text>
-            </Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/about")}>
-              <Text style={styles.footerLink}>About Us</Text>
-            </Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/services")}>
-              <Text style={styles.footerLink}>Services</Text>
-            </Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/blogs")}>
-              <Text style={styles.footerLink}>Blogs</Text>
-            </Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/contact")}>
-              <Text style={styles.footerLink}>Contact Us</Text>
-            </Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/privacy")}>
-              <Text style={styles.footerLink}>Privacy Policy</Text>
-            </Pressable>
-          </View>
         </View>
+        <UniversalFooter />
       </ScrollView>
     </View>
   );

@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { UniversalFooter } from "@/src/components/UniversalFooter";
 import { ArrowLeft, Lock, ShieldCheck } from "lucide-react-native";
 import { colors, radius, spacing } from "@/src/constants/theme";
 
@@ -138,38 +139,14 @@ export default function PrivacyPage() {
               our privacy practices, please contact our Grievance Officer:
             </Text>
             <Text style={styles.paragraph}>
-              Grievance Officer, Camartes{"\n"}
-              Email: privacy@camartes.com{"\n"}
-              Bengaluru / Hyderabad, India
+              Grievance Officer, Book A Shoot{"\n"}
+              Email: info@bookashoot.online{"\n"}
+              HeadQuarters: RTIH Vijayawada, Andhra Pradesh
             </Text>
           </View>
 
-          <View style={styles.footerRow}>
-            <Pressable onPress={() => router.push("/landing")}>
-              <Text style={styles.footerLink}>Home</Text>
-            </Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/about")}>
-              <Text style={styles.footerLink}>About Us</Text>
-            </Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/services")}>
-              <Text style={styles.footerLink}>Services</Text>
-            </Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/blogs")}>
-              <Text style={styles.footerLink}>Blogs</Text>
-            </Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/contact")}>
-              <Text style={styles.footerLink}>Contact Us</Text>
-            </Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/terms")}>
-              <Text style={styles.footerLink}>Terms of Service</Text>
-            </Pressable>
-          </View>
         </View>
+        <UniversalFooter />
       </ScrollView>
     </View>
   );

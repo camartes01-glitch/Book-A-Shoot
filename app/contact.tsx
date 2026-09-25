@@ -27,9 +27,12 @@ import {
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
+import { UniversalFooter } from "@/src/components/UniversalFooter";
+import { UniversalNavbar } from "@/src/components/UniversalNavbar";
 import {
   AlertCircle,
   ArrowLeft,
+  ArrowUpRight,
   CheckCircle2,
   Mail,
   MapPin,
@@ -39,6 +42,7 @@ import {
   ShieldCheck,
 } from "lucide-react-native";
 import { colors, radius, spacing } from "@/src/constants/theme";
+import { CAMARTES_API } from "@/src/services/camartesClient";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Official Social Media Icons
@@ -106,12 +110,13 @@ export default function ContactPage() {
   const [errorMsg, setErrorMsg] = useState("");
 
   const WHATSAPP_NUMBER = "+91 96032 15551";
-  const SUPPORT_EMAIL = "support@camartes.com";
+  const SUPPORT_EMAIL = "info@bookashoot.online";
 
   // Official Social Backlinks
   const SOCIAL_LINKS = {
-    instagram: "https://instagram.com/camartes_official",
-    facebook: "https://facebook.com/camartes",
+    instagram: "https://instagram.com/bookashootonline",
+    facebook: "https://facebook.com/bookashootonline",
+    linkedin: "https://linkedin.com/company/bookashootonline",
     whatsapp: `https://wa.me/919603215551?text=${encodeURIComponent(
       "Hi Book A Shoot team! I'm interested in booking a photography shoot."
     )}`,
@@ -173,83 +178,50 @@ export default function ContactPage() {
     setSubmitting(true);
 
     try {
-      const resendApiKey = process.env.EXPO_PUBLIC_RESEND_API_KEY;
-      const receiverEmail = process.env.EXPO_PUBLIC_CONTACT_RECEIVER_EMAIL || SUPPORT_EMAIL;
-
-      const emailPayload = {
-        from: "Book A Shoot <onboarding@resend.dev>",
-        to: [receiverEmail],
-        reply_to: cleanEmail,
-        subject: `📸 New Shoot Inquiry from ${name.trim()} (${eventType})`,
-        html: `
-          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #FFF8F0; padding: 32px; border-radius: 16px; border: 1px solid #FFEDD5;">
-            <div style="text-align: center; margin-bottom: 24px;">
-              <h1 style="color: #EA580C; margin: 0; font-size: 24px; font-weight: 800;">Book A Shoot</h1>
-              <p style="color: #64748B; font-size: 14px; margin-top: 4px;">Powered by Camartes</p>
-            </div>
-            
-            <div style="background: #FFFFFF; border-radius: 12px; padding: 24px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-              <h2 style="color: #0F172A; font-size: 18px; margin-top: 0; border-bottom: 2px solid #FFF8F0; padding-bottom: 12px;">
-                🎉 New Client Shoot Inquiry
-              </h2>
-              
-              <table style="width: 100%; border-collapse: collapse; margin-top: 16px;">
-                <tr>
-                  <td style="padding: 8px 0; color: #64748B; font-weight: 600; width: 140px;">Client Name:</td>
-                  <td style="padding: 8px 0; color: #0F172A; font-weight: 700;">${name.trim()}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 8px 0; color: #64748B; font-weight: 600;">Email:</td>
-                  <td style="padding: 8px 0; color: #0F172A;"><a href="mailto:${cleanEmail}" style="color: #EA580C;">${cleanEmail}</a></td>
-                </tr>
-                <tr>
-                  <td style="padding: 8px 0; color: #64748B; font-weight: 600;">WhatsApp / Phone:</td>
-                  <td style="padding: 8px 0; color: #0F172A;"><a href="tel:+91${cleanPhone}" style="color: #EA580C;">+91 ${cleanPhone}</a></td>
-                </tr>
-                <tr>
-                  <td style="padding: 8px 0; color: #64748B; font-weight: 600;">Event Type:</td>
-                  <td style="padding: 8px 0; color: #0F172A; font-weight: 700;">${eventType}</td>
-                </tr>
-                ${location.trim()
-            ? `<tr>
-                        <td style="padding: 8px 0; color: #64748B; font-weight: 600;">Location / City:</td>
-                        <td style="padding: 8px 0; color: #0F172A;">${location.trim()}</td>
-                      </tr>`
-            : ""
-          }
-              </table>
-
-              <div style="margin-top: 20px; padding: 16px; background: #FFF7ED; border-radius: 8px; border-left: 4px solid #EA580C;">
-                <p style="margin: 0; font-size: 13px; font-weight: 700; color: #9A3412;">Client's Vision & Note:</p>
-                <p style="margin: 8px 0 0 0; font-size: 14px; color: #334155; line-height: 1.6; white-space: pre-wrap;">${message.trim()}</p>
-              </div>
-            </div>
-
-            <div style="text-align: center; margin-top: 24px; font-size: 12px; color: #94A3B8;">
-              <p>Submitted via Book A Shoot Web Application • Received at ${new Date().toLocaleString("en-IN")}</p>
-            </div>
-          </div>
-        `,
+      const payload = {
+        fullName: name.trim(),
+        email: cleanEmail,
+        phone: cleanPhone,
+        serviceType: eventType,
+        city: location.trim(),
+        message: message.trim(),
       };
 
-      if (resendApiKey) {
-        const response = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${resendApiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(emailPayload),
-        });
+      let success = false;
+      let lastError = "";
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          console.warn("Resend API response error:", errData);
-          throw new Error(errData?.message || "Failed to deliver email through Resend API.");
+      const targetUrls = Array.from(
+        new Set([
+          "http://localhost:8001/api/contact/submit",
+          `${CAMARTES_API}/api/contact/submit`,
+          "/api/contact/submit",
+        ])
+      );
+
+      for (const url of targetUrls) {
+        try {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (res.ok) {
+            const data = await res.json().catch(() => ({}));
+            if (data.success !== false) {
+              success = true;
+              break;
+            }
+          } else {
+            const errData = await res.json().catch(() => ({}));
+            lastError = errData?.detail || errData?.message || "";
+          }
+        } catch (e: any) {
+          lastError = e?.message || "";
         }
-      } else {
-        console.log("Resend API Key is not set in environment yet. Email payload ready:", emailPayload);
-        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
+
+      if (!success) {
+        throw new Error(lastError || "Failed to submit inquiry. Please try again or reach us via WhatsApp.");
       }
 
       setSubmitted(true);
@@ -273,65 +245,21 @@ export default function ContactPage() {
 
   return (
     <View style={styles.root}>
-      {/* ── Fixed / Floating Navbar ────────────────────────────────────── */}
-      <View style={[styles.navbar, { paddingTop: insets.top }]}>
-        <View style={[styles.navInner, isWide && styles.navInnerWide]}>
-          <Pressable
-            onPress={goToHome}
-            style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Back to Home"
-          >
-            <ArrowLeft size={18} color={colors.primary} />
-            <Text style={styles.backBtnText}>Home</Text>
-          </Pressable>
-
-          <Pressable onPress={goToHome} style={styles.navLogoContainer}>
-            <Image
-              source={require("@/assets/images/book-a-shoot-wordmark.png")}
-              style={[styles.navLogo, !isWide && styles.navLogoPhone]}
-              resizeMode="contain"
-              accessibilityLabel="Book A Shoot"
-            />
-          </Pressable>
-
-          <View style={styles.navActions}>
-            {isWide && (
-              <Pressable
-                onPress={goToServices}
-                style={({ pressed }) => [styles.navGhostBtn, pressed && styles.pressed]}
-                accessibilityRole="link"
-              >
-                <Text style={styles.navGhostText}>Services</Text>
-              </Pressable>
-            )}
-            <Pressable
-              onPress={goToLogin}
-              style={({ pressed }) => [
-                styles.navPrimaryBtn,
-                !isWide && styles.navPrimaryBtnPhone,
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.navPrimaryText}>Book Now</Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
+      {/* ── Universal Constant Navbar ──────────────────────────────────────── */}
+      <UniversalNavbar activeRoute="contact" />
 
       {/* ── Scrollable Content ─────────────────────────────────────────── */}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={{
-          paddingTop: insets.top + (isWide ? 76 : 64),
+          paddingTop: insets.top + (isWide ? 96 : 88),
           paddingBottom: Math.max(insets.bottom + 40, 60),
         }}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Full Hero Section with Responsive Background (No Black Screen, No White Box, Center of Page) ── */}
+        {/* ── Full Hero Section with Responsive Background (Increased Transparency) ── */}
         <View style={[styles.heroContainer, isWide ? styles.heroContainerDesktop : styles.heroContainerMobile]}>
-          {/* Background Image: contact.png on desktop, phonecontact.png on mobile */}
+          {/* Background Image: fully visible and vivid */}
           <Image
             source={
               isWide
@@ -347,8 +275,8 @@ export default function ContactPage() {
             accessibilityLabel="Book A Shoot Contact Background"
           />
 
-          {/* Light beige screen over the image */}
-          <View style={styles.heroBeigeOverlay} pointerEvents="none" />
+          {/* Light screen overlay like in About page for crisp text visibility */}
+          <View style={styles.heroScreenOverlay} pointerEvents="none" />
 
           {/* Centered Hero Content directly on the image */}
           <View style={[styles.heroContent, isWide && styles.heroContentWide]}>
@@ -373,155 +301,92 @@ export default function ContactPage() {
 
         {/* ── Main Body Container ──────────────────────────────────────── */}
         <View style={[styles.bodyContainer, isWide && styles.bodyContainerWide]}>
-          {/* ── Compact Social Media Section (Simple Heading & Official Icons) ──── */}
-          <View style={styles.socialSimpleSection}>
-            <View style={styles.socialSimpleHeader}>
-              <Text style={styles.socialSimpleTitle}>Connect With Us</Text>
-              <Text style={styles.socialSimpleSub}>
-                Chat directly with our team or explore our latest wedding films and client stories.
-              </Text>
-            </View>
-
-            <View style={styles.socialIconsRow}>
-              {/* WhatsApp: Official Green Icon (+91 96032 15551) */}
-              <Pressable
-                onPress={handleWhatsApp}
-                style={({ pressed }) => [styles.socialIconItem, pressed && styles.pressed]}
-                accessibilityRole="link"
-                accessibilityLabel="WhatsApp support at +91 96032 15551"
-              >
-                <WhatsAppOfficialIcon size={34} />
-                <View style={styles.socialIconTextCol}>
-                  <Text style={styles.socialIconTitle}>WhatsApp</Text>
-                  <Text style={styles.socialIconMeta}>{WHATSAPP_NUMBER}</Text>
-                </View>
-              </Pressable>
-
-              {/* Instagram: Official Original Sunset Gradient Colors */}
-              <Pressable
-                onPress={() => openUrl(SOCIAL_LINKS.instagram)}
-                style={({ pressed }) => [styles.socialIconItem, pressed && styles.pressed]}
-                accessibilityRole="link"
-                accessibilityLabel="Instagram @camartes_official"
-              >
-                <Image
-                  source={require("@/assets/images/instagram.png")}
-                  style={styles.socialIconImg}
-                  resizeMode="contain"
-                />
-                <View style={styles.socialIconTextCol}>
-                  <Text style={styles.socialIconTitle}>Instagram</Text>
-                  <Text style={styles.socialIconMeta}>@camartes_official</Text>
-                </View>
-              </Pressable>
-
-              {/* Facebook: Official Blue Icon */}
-              <Pressable
-                onPress={() => openUrl(SOCIAL_LINKS.facebook)}
-                style={({ pressed }) => [styles.socialIconItem, pressed && styles.pressed]}
-                accessibilityRole="link"
-                accessibilityLabel="Facebook Book A Shoot"
-              >
-                <FacebookOfficialIcon size={34} />
-                <View style={styles.socialIconTextCol}>
-                  <Text style={styles.socialIconTitle}>Facebook</Text>
-                  <Text style={styles.socialIconMeta}>Book A Shoot</Text>
-                </View>
-              </Pressable>
-            </View>
-          </View>
-
-          {/* ── Main Two-Column Row: Contact Form + Direct Info ───────────── */}
+          {/* ── Main Two-Column Row: Single Info Card on Left + Inquiry Form on Right ──── */}
           <View style={[styles.mainRow, isWide && styles.mainRowWide]}>
-            {/* Left Column: Direct Studio & Support Info (Orange Icons Only) */}
+            {/* Left Column: Single Unified Executive Card */}
             <View style={[styles.infoCol, isWide && styles.infoColWide]}>
-              <View style={styles.infoBox}>
-                <Text style={styles.infoBoxTitle}>Direct Concierge & Help</Text>
-                <Text style={styles.infoBoxDesc}>
-                  We're available every day from 9:00 AM to 9:00 PM IST to assist you with dates, bespoke
-                  requirements, and custom packages.
-                </Text>
+              <View style={styles.singleUnifiedCard}>
+                {/* 1. Direct Concierge & Help */}
+                <View style={styles.cardSection}>
+                  <Text style={styles.cardHeading}>Direct Concierge & Help</Text>
+                  <Text style={styles.cardDesc}>
+                    We're available every day from 9:00 AM to 9:00 PM IST to assist you with dates, bespoke requirements, and custom packages.
+                  </Text>
 
-                <View style={styles.contactList}>
-                  {/* WhatsApp Support */}
-                  <Pressable
-                    onPress={handleWhatsApp}
-                    style={({ pressed }) => [styles.contactListItem, pressed && styles.pressed]}
-                    accessibilityRole="button"
-                  >
-                    <View style={styles.contactListIcon}>
-                      <MessageCircle size={18} color={colors.primary} />
-                    </View>
-                    <View style={styles.contactListTextCol}>
-                      <Text style={styles.contactListLabel}>WhatsApp Concierge</Text>
-                      <Text style={styles.contactListValue}>{WHATSAPP_NUMBER}</Text>
-                    </View>
-                  </Pressable>
+                  <View style={styles.conciergeList}>
+                    {/* WhatsApp Support */}
+                    <Pressable
+                      onPress={handleWhatsApp}
+                      style={({ pressed }) => [styles.conciergeItem, pressed && styles.pressed]}
+                      accessibilityRole="button"
+                    >
+                      <View style={styles.conciergeIconWrap}>
+                        <MessageCircle size={18} color={colors.primary} />
+                      </View>
+                      <View style={styles.conciergeTextCol}>
+                        <Text style={styles.conciergeLabel}>WhatsApp Concierge</Text>
+                        <Text style={styles.conciergeValue}>{WHATSAPP_NUMBER}</Text>
+                      </View>
+                    </Pressable>
 
-                  {/* Phone Support */}
-                  <Pressable
-                    onPress={handleCall}
-                    style={({ pressed }) => [styles.contactListItem, pressed && styles.pressed]}
-                    accessibilityRole="button"
-                  >
-                    <View style={styles.contactListIcon}>
-                      <Phone size={18} color={colors.primary} />
-                    </View>
-                    <View style={styles.contactListTextCol}>
-                      <Text style={styles.contactListLabel}>Direct Phone Call</Text>
-                      <Text style={styles.contactListValue}>{WHATSAPP_NUMBER}</Text>
-                    </View>
-                  </Pressable>
+                    {/* Phone Support */}
+                    <Pressable
+                      onPress={handleCall}
+                      style={({ pressed }) => [styles.conciergeItem, pressed && styles.pressed]}
+                      accessibilityRole="button"
+                    >
+                      <View style={styles.conciergeIconWrap}>
+                        <Phone size={18} color={colors.primary} />
+                      </View>
+                      <View style={styles.conciergeTextCol}>
+                        <Text style={styles.conciergeLabel}>Direct Phone Call</Text>
+                        <Text style={styles.conciergeValue}>{WHATSAPP_NUMBER}</Text>
+                      </View>
+                    </Pressable>
 
-                  {/* Email Support */}
-                  <Pressable
-                    onPress={handleEmailSupport}
-                    style={({ pressed }) => [styles.contactListItem, pressed && styles.pressed]}
-                    accessibilityRole="button"
-                  >
-                    <View style={styles.contactListIcon}>
-                      <Mail size={18} color={colors.primary} />
-                    </View>
-                    <View style={styles.contactListTextCol}>
-                      <Text style={styles.contactListLabel}>Email Support</Text>
-                      <Text style={styles.contactListValue}>{SUPPORT_EMAIL}</Text>
-                    </View>
-                  </Pressable>
-                </View>
-              </View>
-
-              {/* Physical Studio Hubs */}
-              <View style={styles.studiosBox}>
-                <Text style={styles.infoBoxTitle}>Studio Hubs & Presence</Text>
-                <View style={styles.studioItem}>
-                  <MapPin size={18} color={colors.primary} style={{ marginTop: 2 }} />
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={styles.studioCity}>Hyderabad (Headquarters)</Text>
-                    <Text style={styles.studioAddr}>
-                      Camartes, Hitech City & Jubilee Hills Studio, Hyderabad, Telangana 500081
-                    </Text>
+                    {/* Email Support */}
+                    <Pressable
+                      onPress={handleEmailSupport}
+                      style={({ pressed }) => [styles.conciergeItem, pressed && styles.pressed]}
+                      accessibilityRole="button"
+                    >
+                      <View style={styles.conciergeIconWrap}>
+                        <Mail size={18} color={colors.primary} />
+                      </View>
+                      <View style={styles.conciergeTextCol}>
+                        <Text style={styles.conciergeLabel}>Email Support</Text>
+                        <Text style={styles.conciergeValue}>{SUPPORT_EMAIL}</Text>
+                      </View>
+                    </Pressable>
                   </View>
                 </View>
 
-                <View style={[styles.studioItem, { marginTop: 12 }]}>
-                  <MapPin size={18} color={colors.primary} style={{ marginTop: 2 }} />
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={styles.studioCity}>Bengaluru (Regional Hub)</Text>
-                    <Text style={styles.studioAddr}>
-                      Indiranagar Creative Collective, 100 Feet Road, Bengaluru, Karnataka 560038
-                    </Text>
+                {/* Subtle Divider */}
+                <View style={styles.cardDivider} />
+
+                {/* 2. Locations & HeadQuarters */}
+                <View style={styles.cardSection}>
+                  <Text style={styles.cardHeading}>Locations & HeadQuarters</Text>
+                  <View style={styles.locationItem}>
+                    <MapPin size={18} color={colors.primary} style={{ marginTop: 2 }} />
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={styles.locationTitle}>HeadQuarters — RTIH Vijayawada</Text>
+                      <Text style={styles.locationDesc}>RTIH, Vijayawada, Andhra Pradesh</Text>
+                    </View>
                   </View>
                 </View>
-              </View>
 
-              {/* Trust Badge Guarantee */}
-              <View style={styles.guaranteeBox}>
-                <ShieldCheck size={26} color={colors.primary} />
-                <View style={{ flex: 1, gap: 4 }}>
-                  <Text style={styles.guaranteeTitle}>The Camartes Assurance</Text>
-                  <Text style={styles.guaranteeDesc}>
-                    Every studio on Book A Shoot is 100% KYC verified, audited for dual-card equipment
-                    redundancy, and backed by our automated replacement guarantee.
+                {/* Subtle Divider */}
+                <View style={styles.cardDivider} />
+
+                {/* 3. The Camartes Assurance */}
+                <View style={styles.cardSection}>
+                  <View style={styles.assuranceHeader}>
+                    <ShieldCheck size={20} color={colors.primary} />
+                    <Text style={styles.cardHeading}>The Camartes Assurance</Text>
+                  </View>
+                  <Text style={styles.assuranceDesc}>
+                    Every studio on Book A Shoot is 100% KYC verified, audited for dual-card equipment redundancy, and backed by our automated replacement guarantee.
                   </Text>
                 </View>
               </View>
@@ -532,38 +397,71 @@ export default function ContactPage() {
               <View style={styles.formCard}>
                 {submitted ? (
                   <View style={styles.successContainer}>
+                    {/* Refined Check Icon */}
                     <View style={styles.successIconCircle}>
-                      <CheckCircle2 size={40} color={colors.primary} />
+                      <CheckCircle2 size={30} color={colors.primary} strokeWidth={2.2} />
                     </View>
-                    <Text style={styles.successTitle}>Inquiry Sent Beautifully!</Text>
+
+                    {/* Clean, refined heading (not overly bold) */}
+                    <Text style={styles.successTitle}>Inquiry Received</Text>
+
                     <Text style={styles.successSub}>
-                      Thank you, <Text style={{ fontWeight: "700", color: colors.text }}>{name}</Text>! We’ve
-                      received your shoot details. Our creative team will review your date & vision and
-                      reach out via WhatsApp or email within 2 hours.
+                      Thank you, <Text style={styles.successNameText}>{name.trim()}</Text>. Our dedicated studio concierge has received your details and is reviewing availability for your celebration.
                     </Text>
 
+                    {/* Professional docket overview */}
                     <View style={styles.successSummaryBox}>
-                      <View style={styles.successSummaryRow}>
-                        <Text style={styles.successSummaryLabel}>Event:</Text>
+                      <View style={styles.successSummaryHeader}>
+                        <Text style={styles.successSummaryHeaderText}>SUBMISSION OVERVIEW</Text>
+                        <Text style={styles.successSummaryStatus}>Status: Dispatched</Text>
+                      </View>
+
+                      <View style={styles.successSummaryDivider} />
+
+                      <View style={styles.successItemRow}>
+                        <Text style={styles.successSummaryLabel}>Celebration</Text>
                         <Text style={styles.successSummaryVal}>{eventType}</Text>
                       </View>
-                      <View style={styles.successSummaryRow}>
-                        <Text style={styles.successSummaryLabel}>Contact:</Text>
+
+                      <View style={styles.successItemRow}>
+                        <Text style={styles.successSummaryLabel}>Mobile / WhatsApp</Text>
                         <Text style={styles.successSummaryVal}>+91 {phone}</Text>
                       </View>
-                      <View style={styles.successSummaryRow}>
-                        <Text style={styles.successSummaryLabel}>Email:</Text>
-                        <Text style={styles.successSummaryVal}>{email}</Text>
+
+                      <View style={styles.successItemRow}>
+                        <Text style={styles.successSummaryLabel}>Email Address</Text>
+                        <Text style={[styles.successSummaryVal, styles.successSummaryValEmail]}>
+                          {email.trim()}
+                        </Text>
                       </View>
+
+                      {location.trim() ? (
+                        <View style={styles.successItemRow}>
+                          <Text style={styles.successSummaryLabel}>Location</Text>
+                          <Text style={styles.successSummaryVal}>{location.trim()}</Text>
+                        </View>
+                      ) : null}
                     </View>
 
-                    <Pressable
-                      onPress={resetForm}
-                      style={({ pressed }) => [styles.resetBtn, pressed && styles.pressed]}
-                      accessibilityRole="button"
-                    >
-                      <Text style={styles.resetBtnText}>Send Another Message</Text>
-                    </Pressable>
+                    {/* Quick WhatsApp Connect & Reset Button */}
+                    <View style={styles.successActionsCol}>
+                      <Pressable
+                        onPress={handleWhatsApp}
+                        style={({ pressed }) => [styles.successWhatsAppBtn, pressed && styles.pressed]}
+                        accessibilityRole="button"
+                      >
+                        <WhatsAppOfficialIcon size={18} />
+                        <Text style={styles.successWhatsAppBtnText}>Instant Chat on WhatsApp</Text>
+                      </Pressable>
+
+                      <Pressable
+                        onPress={resetForm}
+                        style={({ pressed }) => [styles.resetBtn, pressed && styles.pressed]}
+                        accessibilityRole="button"
+                      >
+                        <Text style={styles.resetBtnText}>Submit Another Inquiry</Text>
+                      </Pressable>
+                    </View>
                   </View>
                 ) : (
                   <>
@@ -660,7 +558,7 @@ export default function ContactPage() {
                       <Text style={styles.fieldLabel}>Event City or Venue Location</Text>
                       <TextInput
                         style={styles.input}
-                        placeholder="e.g. Hyderabad, Bengaluru, Goa..."
+                        placeholder="e.g. Vijayawada, Vizag, Guntur, Tirupati..."
                         placeholderTextColor="#94A3B8"
                         value={location}
                         onChangeText={setLocation}
@@ -715,97 +613,146 @@ export default function ContactPage() {
               </View>
             </View>
           </View>
-        </View>
 
-        {/* ── Professional Footer with Social Icons & Contact Details ────── */}
-        <View style={[styles.footer, isWide && styles.footerWide]}>
-          {/* Brand & Tagline */}
-          <View style={styles.footerBrand}>
-            <Image
-              source={require("@/assets/images/book-a-shoot-wordmark.png")}
-              style={styles.footerLogo}
-              resizeMode="contain"
-              accessibilityLabel="Book A Shoot"
-            />
-            <Text style={styles.footerTagline}>
-              India's trusted platform for booking verified event & wedding photographers.
-            </Text>
-          </View>
+          {/* ── Official Social Media Channels (Executive Grid) ────── */}
+          <View style={styles.socialProSection}>
+            <View style={styles.socialProHeader}>
+              <View style={styles.socialProBadge}>
+                <Text style={styles.socialProBadgeText}>OFFICIAL CHANNELS</Text>
+              </View>
+              <Text style={styles.socialProTitle}>Connect Across Our Social Community</Text>
+              <Text style={styles.socialProSubtitle}>
+                Follow verified client celebrations, explore behind-the-scenes shoots, and connect directly with our creative desk.
+              </Text>
+            </View>
 
-          {/* Contact Details Row in Footer */}
-          <View style={[styles.footerContactRow, isWide && styles.footerContactRowWide]}>
-            <Pressable onPress={handleWhatsApp} style={styles.footerContactItem}>
-              <Phone size={14} color={colors.primary} />
-              <Text style={styles.footerContactText}>{WHATSAPP_NUMBER}</Text>
-            </Pressable>
+            <View style={styles.socialProGrid}>
+              {/* WhatsApp Concierge */}
+              <Pressable
+                onPress={handleWhatsApp}
+                style={({ pressed }) => [styles.socialProCard, pressed && styles.pressed]}
+                accessibilityRole="link"
+                accessibilityLabel="WhatsApp Concierge"
+              >
+                <View style={styles.socialProCardTop}>
+                  <View style={[styles.socialProIconBadge, { backgroundColor: "rgba(37, 211, 102, 0.12)" }]}>
+                    <WhatsAppOfficialIcon size={26} />
+                  </View>
+                  <View style={styles.socialProActionArrow}>
+                    <ArrowUpRight size={17} color="#64748B" />
+                  </View>
+                </View>
+                <View style={styles.socialProCardBody}>
+                  <Text style={styles.socialProCardName}>WhatsApp Concierge</Text>
+                  <Text style={styles.socialProCardHandle}>+91 96032 15551</Text>
+                  <Text style={styles.socialProCardDesc}>
+                    Direct instant chat for live shoot dates, custom packages, and fast pricing.
+                  </Text>
+                </View>
+                <View style={styles.socialProCardFooter}>
+                  <View style={styles.socialProOnlineDot} />
+                  <Text style={styles.socialProFooterStatus}>Online · 9 AM – 9 PM IST</Text>
+                </View>
+              </Pressable>
 
-            <Text style={styles.footerDot}>•</Text>
+              {/* Instagram */}
+              <Pressable
+                onPress={() => openUrl(SOCIAL_LINKS.instagram)}
+                style={({ pressed }) => [styles.socialProCard, pressed && styles.pressed]}
+                accessibilityRole="link"
+                accessibilityLabel="Instagram @bookashootonline"
+              >
+                <View style={styles.socialProCardTop}>
+                  <View style={[styles.socialProIconBadge, { backgroundColor: "rgba(225, 48, 108, 0.10)" }]}>
+                    <Image
+                      source={require("@/assets/images/instagram.png")}
+                      style={styles.socialProBadgeImg}
+                      resizeMode="contain"
+                    />
+                  </View>
+                  <View style={styles.socialProActionArrow}>
+                    <ArrowUpRight size={17} color="#64748B" />
+                  </View>
+                </View>
+                <View style={styles.socialProCardBody}>
+                  <Text style={styles.socialProCardName}>Instagram</Text>
+                  <Text style={styles.socialProCardHandle}>@bookashootonline</Text>
+                  <Text style={styles.socialProCardDesc}>
+                    Cinematic reels, bride & groom portraits, baby shoots & daily behind-the-scenes stories.
+                  </Text>
+                </View>
+                <View style={styles.socialProCardFooter}>
+                  <Text style={styles.socialProFooterTag}>Visual Portfolio</Text>
+                </View>
+              </Pressable>
 
-            <Pressable onPress={handleEmailSupport} style={styles.footerContactItem}>
-              <Mail size={14} color={colors.primary} />
-              <Text style={styles.footerContactText}>{SUPPORT_EMAIL}</Text>
-            </Pressable>
+              {/* Facebook */}
+              <Pressable
+                onPress={() => openUrl(SOCIAL_LINKS.facebook)}
+                style={({ pressed }) => [styles.socialProCard, pressed && styles.pressed]}
+                accessibilityRole="link"
+                accessibilityLabel="Facebook @bookashootonline"
+              >
+                <View style={styles.socialProCardTop}>
+                  <View style={[styles.socialProIconBadge, { backgroundColor: "rgba(24, 119, 242, 0.10)" }]}>
+                    <Image
+                      source={require("@/assets/images/facebook.png")}
+                      style={styles.socialProBadgeImg}
+                      resizeMode="contain"
+                    />
+                  </View>
+                  <View style={styles.socialProActionArrow}>
+                    <ArrowUpRight size={17} color="#64748B" />
+                  </View>
+                </View>
+                <View style={styles.socialProCardBody}>
+                  <Text style={styles.socialProCardName}>Facebook</Text>
+                  <Text style={styles.socialProCardHandle}>bookashootonline</Text>
+                  <Text style={styles.socialProCardDesc}>
+                    Verified client reviews, complete event photo albums, and festival coverage updates.
+                  </Text>
+                </View>
+                <View style={styles.socialProCardFooter}>
+                  <Text style={styles.socialProFooterTag}>Community & Reviews</Text>
+                </View>
+              </Pressable>
 
-            <Text style={styles.footerDot}>•</Text>
-
-            <View style={styles.footerContactItem}>
-              <MapPin size={14} color={colors.primary} />
-              <Text style={styles.footerContactText}>Hyderabad & Bengaluru</Text>
+              {/* LinkedIn */}
+              <Pressable
+                onPress={() => openUrl(SOCIAL_LINKS.linkedin)}
+                style={({ pressed }) => [styles.socialProCard, pressed && styles.pressed]}
+                accessibilityRole="link"
+                accessibilityLabel="LinkedIn Book A Shoot"
+              >
+                <View style={styles.socialProCardTop}>
+                  <View style={[styles.socialProIconBadge, { backgroundColor: "rgba(10, 102, 194, 0.10)" }]}>
+                    <Image
+                      source={require("@/assets/images/linkedin.png")}
+                      style={styles.socialProBadgeImg}
+                      resizeMode="contain"
+                    />
+                  </View>
+                  <View style={styles.socialProActionArrow}>
+                    <ArrowUpRight size={17} color="#64748B" />
+                  </View>
+                </View>
+                <View style={styles.socialProCardBody}>
+                  <Text style={styles.socialProCardName}>LinkedIn</Text>
+                  <Text style={styles.socialProCardHandle}>Book A Shoot</Text>
+                  <Text style={styles.socialProCardDesc}>
+                    Creative industry network, studio partnerships, company culture & announcements.
+                  </Text>
+                </View>
+                <View style={styles.socialProCardFooter}>
+                  <Text style={styles.socialProFooterTag}>Company & Network</Text>
+                </View>
+              </Pressable>
             </View>
           </View>
-
-          {/* Official Social Media Icons Row in Footer */}
-          <View style={styles.footerSocialIconsRow}>
-            <Pressable
-              onPress={handleWhatsApp}
-              style={({ pressed }) => [styles.footerSocialIconBtn, pressed && styles.pressed]}
-              accessibilityRole="link"
-              accessibilityLabel="WhatsApp support"
-            >
-              <WhatsAppOfficialIcon size={26} />
-            </Pressable>
-
-            <Pressable
-              onPress={() => openUrl(SOCIAL_LINKS.instagram)}
-              style={({ pressed }) => [styles.footerSocialIconBtn, pressed && styles.pressed]}
-              accessibilityRole="link"
-              accessibilityLabel="Instagram"
-            >
-              <Image
-                source={require("@/assets/images/instagram.png")}
-                style={styles.footerSocialIconImg}
-                resizeMode="contain"
-              />
-            </Pressable>
-
-            <Pressable
-              onPress={() => openUrl(SOCIAL_LINKS.facebook)}
-              style={({ pressed }) => [styles.footerSocialIconBtn, pressed && styles.pressed]}
-              accessibilityRole="link"
-              accessibilityLabel="Facebook"
-            >
-              <FacebookOfficialIcon size={26} />
-            </Pressable>
-          </View>
-
-          {/* Navigation Links */}
-          <View style={styles.footerLinksRow}>
-            <Pressable onPress={goToHome}><Text style={styles.footerLinkText}>Home</Text></Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={goToServices}><Text style={styles.footerLinkText}>Services</Text></Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={goToAbout}><Text style={styles.footerLinkText}>About Us</Text></Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={goToBlogs}><Text style={styles.footerLinkText}>Blogs</Text></Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/privacy")}><Text style={styles.footerLinkText}>Privacy</Text></Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/terms")}><Text style={styles.footerLinkText}>Terms</Text></Pressable>
-          </View>
-
-          <View style={styles.footerDivider} />
-          <Text style={styles.copyright}>© 2025 Book A Shoot · Powered by Camartes</Text>
         </View>
+
+        {/* ── Universal Constant Footer ───────────────────────────────── */}
+        <UniversalFooter />
       </ScrollView>
     </View>
   );
@@ -912,6 +859,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     overflow: "hidden",
+    backgroundColor: "#0f172a",
   },
   heroContainerDesktop: {
     minHeight: 520,
@@ -921,13 +869,13 @@ const styles = StyleSheet.create({
     minHeight: 460,
     paddingVertical: 60,
   },
-  heroBeigeOverlay: {
+  heroScreenOverlay: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(255, 247, 237, 0.42)",
+    backgroundColor: "rgba(15, 23, 42, 0.52)",
   },
   heroContent: {
     position: "relative",
@@ -943,11 +891,11 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     fontSize: 38,
-    fontWeight: "800",
+    fontWeight: "700",
     color: colors.primary,
     lineHeight: 48,
     letterSpacing: -0.8,
-    marginBottom: 16,
+    marginBottom: 14,
     textAlign: "center",
   },
   heroTitlePhone: {
@@ -956,10 +904,10 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
   },
   heroFlirtyLine: {
-    fontSize: 19,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "500",
     color: "#FFFFFF",
-    lineHeight: 28,
+    lineHeight: 26,
     marginBottom: 14,
     textAlign: "center",
     maxWidth: 820,
@@ -995,70 +943,137 @@ const styles = StyleSheet.create({
     paddingTop: 44,
   },
 
-  // ── Compact Social Media Section (Simple Heading & Icons) ──────────────────
-  socialSimpleSection: {
-    backgroundColor: colors.white,
-    borderRadius: 18,
-    padding: 20,
+  // ── Executive Official Social Media Channels ──────────────────────────────
+  socialProSection: {
+    marginTop: 48,
+    paddingTop: 36,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    width: "100%",
+  },
+  socialProHeader: {
+    marginBottom: 22,
+  },
+  socialProBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255, 107, 53, 0.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: 36,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 1,
+    borderColor: "rgba(255, 107, 53, 0.20)",
   },
-  socialSimpleHeader: {
-    marginBottom: 16,
+  socialProBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.primary,
+    letterSpacing: 0.8,
   },
-  socialSimpleTitle: {
+  socialProTitle: {
     fontSize: 20,
-    fontWeight: "800",
-    color: colors.text,
+    fontWeight: "600",
+    color: "#0F172A",
     letterSpacing: -0.3,
   },
-  socialSimpleSub: {
+  socialProSubtitle: {
     fontSize: 13.5,
-    color: colors.muted,
-    marginTop: 3,
-    lineHeight: 19,
+    color: "#64748B",
+    marginTop: 4,
+    lineHeight: 20,
+    maxWidth: 620,
   },
-  socialIconsRow: {
+  socialProGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 16,
   },
-  socialIconItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    backgroundColor: colors.cream,
+  socialProCard: {
+    flex: 1,
+    minWidth: 240,
+    backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 14,
-    minWidth: 180,
-    flex: 1,
+    borderRadius: 16,
+    padding: 18,
+    justifyContent: "space-between",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  socialIconImg: {
-    width: 34,
-    height: 34,
+  socialProCardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
   },
-  socialIconTextCol: {
-    flex: 1,
+  socialProIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  socialIconTitle: {
-    fontSize: 14.5,
-    fontWeight: "800",
-    color: colors.text,
+  socialProBadgeImg: {
+    width: 26,
+    height: 26,
   },
-  socialIconMeta: {
-    fontSize: 12,
-    color: colors.muted,
+  socialProActionArrow: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  socialProCardBody: {
+    gap: 3,
+  },
+  socialProCardName: {
+    fontSize: 15.5,
+    fontWeight: "600",
+    color: "#0F172A",
+    letterSpacing: -0.2,
+  },
+  socialProCardHandle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.primary,
+  },
+  socialProCardDesc: {
+    fontSize: 12.5,
+    color: "#64748B",
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  socialProCardFooter: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F1F5F9",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  socialProOnlineDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "#22C55E",
+  },
+  socialProFooterStatus: {
+    fontSize: 11.5,
+    color: "#16A34A",
+    fontWeight: "600",
+  },
+  socialProFooterTag: {
+    fontSize: 11.5,
+    color: "#94A3B8",
     fontWeight: "500",
-    marginTop: 1,
   },
 
   // ── Main Two-Column Row ────────────────────────────────────────────────────
@@ -1072,7 +1087,6 @@ const styles = StyleSheet.create({
   },
   infoCol: {
     flex: 1,
-    gap: 20,
   },
   infoColWide: {
     maxWidth: 420,
@@ -1082,107 +1096,104 @@ const styles = StyleSheet.create({
   },
   formColWide: {},
 
-  // Info Boxes (Only Orange Icons)
-  infoBox: {
+  // ── Single Unified Card on the Left ────────────────────────────────────────
+  singleUnifiedCard: {
     backgroundColor: colors.white,
-    borderRadius: 18,
-    padding: 22,
+    borderRadius: 20,
+    padding: 24,
     borderWidth: 1,
     borderColor: colors.border,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.04,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
-  infoBoxTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: colors.text,
-    marginBottom: 6,
+  cardSection: {
+    width: "100%",
   },
-  infoBoxDesc: {
+  cardHeading: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: "#0F172A",
+    letterSpacing: -0.2,
+  },
+  cardDesc: {
     fontSize: 13.5,
-    color: colors.muted,
+    color: "#64748B",
     lineHeight: 20,
-    marginBottom: 18,
+    marginTop: 6,
+    marginBottom: 16,
   },
-  contactList: {
-    gap: 12,
+  conciergeList: {
+    gap: 10,
   },
-  contactListItem: {
+  conciergeItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 12,
     backgroundColor: colors.cream,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-    padding: 12,
+    borderColor: "#FED7AA",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
   },
-  contactListIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  conciergeIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: colors.peach,
     alignItems: "center",
     justifyContent: "center",
   },
-  contactListTextCol: {
+  conciergeTextCol: {
     flex: 1,
   },
-  contactListLabel: {
-    fontSize: 11.5,
-    fontWeight: "600",
-    color: colors.muted,
+  conciergeLabel: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#9A3412",
     textTransform: "uppercase",
+    letterSpacing: 0.4,
   },
-  contactListValue: {
+  conciergeValue: {
     fontSize: 14,
-    fontWeight: "700",
-    color: colors.text,
+    fontWeight: "600",
+    color: "#0F172A",
     marginTop: 1,
   },
-
-  // Studios Box
-  studiosBox: {
-    backgroundColor: colors.white,
-    borderRadius: 18,
-    padding: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
+  cardDivider: {
+    height: 1,
+    backgroundColor: "#F1F5F9",
+    marginVertical: 20,
   },
-  studioItem: {
+  locationItem: {
     flexDirection: "row",
-    gap: 12,
+    gap: 10,
     alignItems: "flex-start",
+    marginTop: 12,
   },
-  studioCity: {
-    fontSize: 14.5,
-    fontWeight: "700",
-    color: colors.text,
+  locationTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0F172A",
   },
-  studioAddr: {
-    fontSize: 12.5,
-    color: colors.muted,
+  locationDesc: {
+    fontSize: 13,
+    color: "#64748B",
     lineHeight: 18,
   },
-
-  // Guarantee Box
-  guaranteeBox: {
+  assuranceHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
-    backgroundColor: colors.bgWarm,
-    borderWidth: 1,
-    borderColor: colors.peachBorder,
-    borderRadius: 16,
-    padding: 18,
+    gap: 8,
+    marginBottom: 8,
   },
-  guaranteeTitle: {
-    fontSize: 14.5,
-    fontWeight: "800",
-    color: colors.primary,
-  },
-  guaranteeDesc: {
-    fontSize: 12.5,
-    color: colors.text,
-    lineHeight: 18,
+  assuranceDesc: {
+    fontSize: 13,
+    color: "#475569",
+    lineHeight: 19,
   },
 
   // ── Contact Form Card ──────────────────────────────────────────────────────
@@ -1203,8 +1214,8 @@ const styles = StyleSheet.create({
   },
   formTitle: {
     fontSize: 22,
-    fontWeight: "800",
-    color: colors.text,
+    fontWeight: "600",
+    color: "#0F172A",
     letterSpacing: -0.3,
   },
   formSubtitle: {
@@ -1242,7 +1253,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "500",
     color: colors.text,
     marginBottom: 6,
   },
@@ -1324,67 +1335,127 @@ const styles = StyleSheet.create({
   // Success State
   successContainer: {
     alignItems: "center",
-    paddingVertical: 24,
-    paddingHorizontal: 12,
+    paddingVertical: 18,
+    paddingHorizontal: 8,
   },
   successIconCircle: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: colors.peach,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(255, 107, 53, 0.12)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: 14,
   },
   successTitle: {
-    fontSize: 24,
-    fontWeight: "800",
+    fontSize: 21,
+    fontWeight: "600",
     color: colors.text,
     marginBottom: 8,
     textAlign: "center",
+    letterSpacing: -0.3,
+  },
+  successNameText: {
+    fontWeight: "600",
+    color: colors.text,
   },
   successSub: {
-    fontSize: 14,
+    fontSize: 13.5,
     color: colors.muted,
     textAlign: "center",
-    lineHeight: 22,
-    maxWidth: 440,
+    lineHeight: 21,
+    maxWidth: 420,
     marginBottom: 20,
   },
   successSummaryBox: {
     width: "100%",
-    backgroundColor: colors.cream,
-    borderRadius: 12,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "#E2E8F0",
     marginBottom: 20,
-    gap: 8,
+    gap: 10,
   },
-  successSummaryRow: {
+  successSummaryHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
+  },
+  successSummaryHeaderText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748B",
+    letterSpacing: 0.6,
+  },
+  successSummaryStatus: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#059669",
+    backgroundColor: "#ECFDF5",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  successSummaryDivider: {
+    height: 1,
+    backgroundColor: "#E2E8F0",
+    marginVertical: 2,
+  },
+  successItemRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: 12,
   },
   successSummaryLabel: {
     fontSize: 13,
-    color: colors.muted,
-    fontWeight: "600",
+    color: "#64748B",
+    fontWeight: "500",
   },
   successSummaryVal: {
     fontSize: 13,
     color: colors.text,
+    fontWeight: "600",
+    textAlign: "right",
+    flexShrink: 1,
+  },
+  successSummaryValEmail: {
+    color: colors.primaryDark,
+  },
+  successActionsCol: {
+    width: "100%",
+    gap: 10,
+  },
+  successWhatsAppBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#25D366",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+  },
+  successWhatsAppBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
     fontWeight: "700",
   },
   resetBtn: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: radius,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#CBD5E1",
   },
   resetBtnText: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#475569",
   },
 
   // ── Professional Footer with Social Icons & Contact Details ───────────────

@@ -18,6 +18,8 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { UniversalFooter } from "@/src/components/UniversalFooter";
+import { UniversalNavbar } from "@/src/components/UniversalNavbar";
 import {
   ArrowLeft,
   ArrowRight,
@@ -105,57 +107,13 @@ export default function AboutPage() {
 
   return (
     <View style={styles.root}>
-      {/* ── Top Navbar ─────────────────────────────────────────────────── */}
-      <View style={[styles.navbar, { paddingTop: insets.top }]}>
-        <View style={[styles.navInner, isWide && styles.navInnerWide]}>
-          <Pressable
-            onPress={goToHome}
-            style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Back to Home"
-          >
-            <ArrowLeft size={18} color={colors.text} />
-            <Text style={styles.backBtnText}>Home</Text>
-          </Pressable>
-
-          <Pressable onPress={goToHome} style={styles.navLogoContainer}>
-            <Image
-              source={require("@/assets/images/book-a-shoot-wordmark.png")}
-              style={[styles.navLogo, !isWide && styles.navLogoPhone]}
-              resizeMode="contain"
-              accessibilityLabel="Book A Shoot"
-            />
-          </Pressable>
-
-          <View style={styles.navActions}>
-            {isWide && (
-              <Pressable
-                onPress={goToServices}
-                style={({ pressed }) => [styles.navGhostBtn, pressed && styles.pressed]}
-                accessibilityRole="link"
-              >
-                <Text style={styles.navGhostText}>Services</Text>
-              </Pressable>
-            )}
-            <Pressable
-              onPress={goToLogin}
-              style={({ pressed }) => [
-                styles.navPrimaryBtn,
-                !isWide && styles.navPrimaryBtnPhone,
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.navPrimaryText}>Book Now</Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
+      {/* ── Universal Constant Navbar ──────────────────────────────────────── */}
+      <UniversalNavbar activeRoute="about" />
 
       {/* ── Scrollable Body ────────────────────────────────────────────── */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingTop: insets.top + (isWide ? 70 : 60), paddingBottom: 60 }}
+        contentContainerStyle={{ paddingTop: insets.top + (isWide ? 96 : 88), paddingBottom: 60 }}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Hero Section ─────────────────────────────────────────────── */}
@@ -174,10 +132,6 @@ export default function AboutPage() {
             {/* Rich scrim overlay for crisp contrast */}
             <View style={styles.phoneHeroOverlay} />
             <View style={styles.phoneHeroContent}>
-              <View style={styles.phoneHeroBadge}>
-                <ShieldCheck size={14} color="#f97316" />
-                <Text style={styles.phoneHeroBadgeText}>100% KYC-VERIFIED NETWORK</Text>
-              </View>
               <Text style={styles.phoneHeroHeading}>
                 Transforming Event Photography Through Trust & Technology
               </Text>
@@ -236,22 +190,32 @@ export default function AboutPage() {
           </View>
         )}
 
-        {/* ── Stats Strip ──────────────────────────────────────────────── */}
-        <View style={[styles.statsStrip, isWide ? styles.statsStripWide : styles.statsStripPhone]}>
-          {STATS.map((s, idx) => (
-            <View
-              key={s.label}
-              style={[
-                styles.statItem,
-                !isWide && styles.statItemPhone,
-                isWide && idx < STATS.length - 1 && styles.statDivider,
-              ]}
-            >
-              <Text style={styles.statValue}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
-            </View>
-          ))}
-        </View>
+        {/* ── Stats Section: 4 Cards on Mobile, Strip on Desktop ────────── */}
+        {!isWide ? (
+          <View style={styles.statsMobileGrid}>
+            {STATS.map((s) => (
+              <View key={s.label} style={styles.statCardMobile}>
+                <Text style={styles.statCardValueMobile}>{s.value}</Text>
+                <Text style={styles.statCardLabelMobile}>{s.label}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={[styles.statsStrip, styles.statsStripWide]}>
+            {STATS.map((s, idx) => (
+              <View
+                key={s.label}
+                style={[
+                  styles.statItem,
+                  idx < STATS.length - 1 && styles.statDivider,
+                ]}
+              >
+                <Text style={styles.statValue}>{s.value}</Text>
+                <Text style={styles.statLabel}>{s.label}</Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* ── Brand Narrative ─────────────────────────────────────────── */}
         <View style={styles.narrativeSection}>
@@ -367,29 +331,8 @@ export default function AboutPage() {
           </View>
         </View>
 
-        {/* ── Footer ──────────────────────────────────────────────────── */}
-        <View style={styles.footer}>
-          <Image
-            source={require("@/assets/images/book-a-shoot-wordmark.png")}
-            style={[styles.footerLogo, !isWide && styles.footerLogoPhone]}
-            resizeMode="contain"
-            accessibilityLabel="Book A Shoot"
-          />
-          <Text style={styles.footerBrand}>© 2025 Book A Shoot · Powered by Camartes</Text>
-          <View style={styles.footerLinks}>
-            <Pressable onPress={goToHome}><Text style={styles.footerLinkText}>Home</Text></Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={goToServices}><Text style={styles.footerLinkText}>Services</Text></Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/blogs")}><Text style={styles.footerLinkText}>Blogs</Text></Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/contact")}><Text style={styles.footerLinkText}>Contact</Text></Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/privacy")}><Text style={styles.footerLinkText}>Privacy</Text></Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/terms")}><Text style={styles.footerLinkText}>Terms</Text></Pressable>
-          </View>
-        </View>
+        {/* ── Universal Footer ────────────────────────────────────────── */}
+        <UniversalFooter />
       </ScrollView>
     </View>
   );
@@ -664,6 +607,45 @@ const styles = StyleSheet.create({
   },
 
   // ── Stats ────────────────────────────────────────────────────────────
+  statsMobileGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.md,
+    marginTop: 20,
+    marginBottom: 24,
+    gap: 12,
+  },
+  statCardMobile: {
+    width: "48%",
+    backgroundColor: colors.white,
+    borderRadius: radius,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: 18,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  statCardValueMobile: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: colors.primary,
+    marginBottom: 4,
+    letterSpacing: -0.5,
+  },
+  statCardLabelMobile: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.muted,
+    textAlign: "center",
+    lineHeight: 16,
+  },
   statsStrip: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -682,21 +664,6 @@ const styles = StyleSheet.create({
   },
   statsStripWide: {
     marginHorizontal: 56,
-  },
-  statsStripPhone: {
-    marginHorizontal: spacing.md,
-    marginVertical: 24,
-    paddingVertical: 16,
-    paddingHorizontal: 8,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    borderRadius: radius,
-  },
-  statItemPhone: {
-    width: "50%",
-    minWidth: 0,
-    paddingVertical: 12,
-    alignItems: "center",
   },
   statItem: {
     flex: 1,

@@ -1,44 +1,121 @@
 import { useEffect } from "react";
-import { Platform, Text } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { Tabs, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Bell, CalendarCheck, Home, MessageCircle, User } from "lucide-react-native";
+import {
+  Bell,
+  CalendarCheck,
+  Camera,
+  Compass,
+  Home,
+  MessageCircle,
+  User,
+} from "lucide-react-native";
 import { useAppStore } from "@/src/state/AppProvider";
 import { colors } from "@/src/constants/theme";
 
-function TabLabel({ color, children, focused }: { color: string; children: React.ReactNode; focused: boolean }) {
+interface CustomTabBarProps {
+  state: any;
+  descriptors: any;
+  navigation: any;
+}
+
+function CustomBottomNavigation({ state, descriptors, navigation }: CustomTabBarProps) {
+  const insets = useSafeAreaInsets();
+  const { startNewBooking, notifications } = useAppStore();
+  const unreadCount = notifications.filter((n) => !n.read).length;
+  const bottomPad = Math.max(insets.bottom, Platform.OS === "web" ? 14 : 10);
+
+  const currentRouteName = state.routes[state.index]?.name;
+  const isHomeActive = currentRouteName === "index";
+  const isMessagesActive = currentRouteName === "messages";
+  const isProfileActive = currentRouteName === "profile";
+  const isBookingsActive = currentRouteName === "bookings";
+
+  const onBookPress = async () => {
+    try {
+      await startNewBooking();
+      router.push("/booking/new");
+    } catch {
+      router.push("/booking/new");
+    }
+  };
+
   return (
-    <Text
-      numberOfLines={1}
-      adjustsFontSizeToFit
-      minimumFontScale={0.62}
-      maxFontSizeMultiplier={1.1}
-      allowFontScaling
-      style={{
-        color,
-        fontSize: 9,
-        letterSpacing: -0.15,
-        fontWeight: focused ? "800" : "600",
-        textAlign: "center",
-        marginTop: 1,
-        marginBottom: 0,
-        width: "100%",
-        paddingHorizontal: 1,
-        includeFontPadding: false,
-      }}
-    >
-      {children}
-    </Text>
+    <View style={[styles.tabBarContainer, { paddingBottom: bottomPad }]}>
+      {/* 1. Home Tab */}
+      <Pressable
+        style={styles.tabItem}
+        onPress={() => navigation.navigate("index")}
+        accessibilityRole="button"
+        accessibilityLabel="Home"
+      >
+        <Home size={22} color={isHomeActive ? colors.primary : "#64748B"} />
+        <Text style={[styles.tabLabel, isHomeActive && styles.tabLabelActive]}>Home</Text>
+        {isHomeActive && <View style={styles.activeDot} />}
+      </Pressable>
+
+      {/* 2. Explore Tab */}
+      <Pressable
+        style={styles.tabItem}
+        onPress={() => router.push("/events")}
+        accessibilityRole="button"
+        accessibilityLabel="Explore events"
+      >
+        <Compass size={22} color={isBookingsActive ? colors.primary : "#64748B"} />
+        <Text style={[styles.tabLabel, isBookingsActive && styles.tabLabelActive]}>Explore</Text>
+      </Pressable>
+
+      {/* 3. Center Floating Book Button */}
+      <Pressable
+        style={styles.centerBookItem}
+        onPress={onBookPress}
+        accessibilityRole="button"
+        accessibilityLabel="Start booking a shoot"
+      >
+        <View style={styles.floatingCircle}>
+          <Camera size={24} color="#FFFFFF" />
+        </View>
+        <Text style={styles.centerBookLabel}>Book</Text>
+      </Pressable>
+
+      {/* 4. Messages Tab */}
+      <Pressable
+        style={styles.tabItem}
+        onPress={() => navigation.navigate("messages")}
+        accessibilityRole="button"
+        accessibilityLabel="Messages"
+      >
+        <View style={styles.iconWithBadgeWrap}>
+          <MessageCircle size={22} color={isMessagesActive ? colors.primary : "#64748B"} />
+          {unreadCount > 0 ? (
+            <View style={styles.badgePill}>
+              <Text style={styles.badgePillText}>{unreadCount > 9 ? "9+" : unreadCount}</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text style={[styles.tabLabel, isMessagesActive && styles.tabLabelActive]}>Messages</Text>
+        {isMessagesActive && <View style={styles.activeDot} />}
+      </Pressable>
+
+      {/* 5. Profile Tab */}
+      <Pressable
+        style={styles.tabItem}
+        onPress={() => navigation.navigate("profile")}
+        accessibilityRole="button"
+        accessibilityLabel="Profile"
+      >
+        <User size={22} color={isProfileActive ? colors.primary : "#64748B"} />
+        <Text style={[styles.tabLabel, isProfileActive && styles.tabLabelActive]}>Profile</Text>
+        {isProfileActive && <View style={styles.activeDot} />}
+      </Pressable>
+    </View>
   );
 }
 
 export default function TabsLayout() {
   const { ready, profile, notifications } = useAppStore();
   const unread = notifications.filter((n) => !n.read).length;
-  const insets = useSafeAreaInsets();
-  // Web has no home-indicator inset; keep extra padding so labels are not clipped.
-  const bottomPad = Math.max(insets.bottom, Platform.OS === "web" ? 14 : 10);
-  const barHeight = 58 + bottomPad;
 
   useEffect(() => {
     if (ready && !profile) router.replace("/(auth)/login");
@@ -48,46 +125,113 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      tabBar={(props) => <CustomBottomNavigation {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarHideOnKeyboard: true,
-        tabBarStyle: {
-          backgroundColor: colors.white,
-          borderTopColor: colors.border,
-          height: barHeight,
-          paddingTop: 6,
-          paddingBottom: bottomPad,
-        },
-        tabBarItemStyle: { flex: 1, paddingHorizontal: 0, minWidth: 0, paddingBottom: 0 },
-        tabBarIconStyle: { marginTop: 2 },
-        tabBarLabel: ({ color, children, focused }) => (
-          <TabLabel color={String(color)} focused={focused}>
-            {children}
-          </TabLabel>
-        ),
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: ({ color }) => <Home size={22} color={color} /> }} />
-      <Tabs.Screen
-        name="bookings"
-        options={{ title: "Bookings", tabBarIcon: ({ color }) => <CalendarCheck size={22} color={color} /> }}
-      />
-      <Tabs.Screen
-        name="messages"
-        options={{ title: "Messages", tabBarIcon: ({ color }) => <MessageCircle size={22} color={color} /> }}
-      />
+      <Tabs.Screen name="index" options={{ title: "Home" }} />
+      <Tabs.Screen name="bookings" options={{ title: "Bookings" }} />
+      <Tabs.Screen name="messages" options={{ title: "Messages" }} />
       <Tabs.Screen
         name="notifications"
         options={{
           title: "Notifications",
-          tabBarAccessibilityLabel: "Notifications",
           tabBarBadge: unread > 0 ? unread : undefined,
-          tabBarIcon: ({ color }) => <Bell size={22} color={color} />,
         }}
       />
-      <Tabs.Screen name="profile" options={{ title: "Profile", tabBarIcon: ({ color }) => <User size={22} color={color} /> }} />
+      <Tabs.Screen name="profile" options={{ title: "Profile" }} />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  tabBarContainer: {
+    backgroundColor: "#FFFFFF",
+    borderTopWidth: 1,
+    borderTopColor: "#EDE4D8",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-around",
+    paddingTop: 8,
+    position: "relative",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 2,
+    position: "relative",
+  },
+  tabLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#64748B",
+    marginTop: 4,
+  },
+  tabLabelActive: {
+    color: colors.primary,
+    fontWeight: "700",
+  },
+  activeDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.primary,
+    marginTop: 2,
+  },
+  centerBookItem: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: -22,
+  },
+  floatingCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.38,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+  },
+  centerBookLabel: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: colors.primary,
+    marginTop: 3,
+  },
+  iconWithBadgeWrap: {
+    position: "relative",
+  },
+  badgePill: {
+    position: "absolute",
+    top: -4,
+    right: -8,
+    backgroundColor: colors.primary,
+    borderRadius: 999,
+    minWidth: 15,
+    height: 15,
+    paddingHorizontal: 3,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+  },
+  badgePillText: {
+    color: "#FFFFFF",
+    fontSize: 8.5,
+    fontWeight: "800",
+  },
+});

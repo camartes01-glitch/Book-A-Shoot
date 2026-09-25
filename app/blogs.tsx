@@ -18,6 +18,8 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { UniversalFooter } from "@/src/components/UniversalFooter";
+import { UniversalNavbar } from "@/src/components/UniversalNavbar";
 import {
   ArrowLeft,
   ArrowRight,
@@ -81,57 +83,13 @@ export default function BlogsPage() {
 
   return (
     <View style={styles.root}>
-      {/* ── Top Navbar ─────────────────────────────────────────────────── */}
-      <View style={[styles.navbar, { paddingTop: insets.top }]}>
-        <View style={[styles.navInner, isWide && styles.navInnerWide]}>
-          <Pressable
-            onPress={goToHome}
-            style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Back to Home"
-          >
-            <ArrowLeft size={18} color={colors.text} />
-            <Text style={styles.backBtnText}>Home</Text>
-          </Pressable>
-
-          <Pressable onPress={goToHome} style={styles.navLogoContainer}>
-            <Image
-              source={require("@/assets/images/book-a-shoot-wordmark.png")}
-              style={[styles.navLogo, !isWide && styles.navLogoPhone]}
-              resizeMode="contain"
-              accessibilityLabel="Book A Shoot"
-            />
-          </Pressable>
-
-          <View style={styles.navActions}>
-            {isWide && (
-              <Pressable
-                onPress={goToServices}
-                style={({ pressed }) => [styles.navGhostBtn, pressed && styles.pressed]}
-                accessibilityRole="link"
-              >
-                <Text style={styles.navGhostText}>Services</Text>
-              </Pressable>
-            )}
-            <Pressable
-              onPress={goToLogin}
-              style={({ pressed }) => [
-                styles.navPrimaryBtn,
-                !isWide && styles.navPrimaryBtnPhone,
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.navPrimaryText}>Book Now</Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
+      {/* ── Universal Constant Navbar ──────────────────────────────────────── */}
+      <UniversalNavbar activeRoute="blogs" />
 
       {/* ── Main Content Scroll ────────────────────────────────────────── */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingTop: insets.top + (isWide ? 70 : 60), paddingBottom: 60 }}
+        contentContainerStyle={{ paddingTop: insets.top + (isWide ? 96 : 88), paddingBottom: 60 }}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Header Banner ─────────────────────────────────────────────── */}
@@ -230,31 +188,8 @@ export default function BlogsPage() {
           </View>
         </View>
 
-        {/* ── Footer ────────────────────────────────────────────────────── */}
-        <View style={styles.footer}>
-          <Pressable onPress={goToHome} style={styles.footerLogoContainer}>
-            <Image
-              source={require("@/assets/images/book-a-shoot-wordmark.png")}
-              style={[styles.footerLogo, !isWide && styles.footerLogoPhone]}
-              resizeMode="contain"
-              accessibilityLabel="Book A Shoot"
-            />
-          </Pressable>
-          <Text style={styles.footerBrand}>© 2025 Book A Shoot · Powered by Camartes</Text>
-          <View style={styles.footerLinks}>
-            <Pressable onPress={goToHome}><Text style={styles.footerLinkText}>Home</Text></Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={goToAbout}><Text style={styles.footerLinkText}>About Us</Text></Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={goToServices}><Text style={styles.footerLinkText}>Services</Text></Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/contact")}><Text style={styles.footerLinkText}>Contact</Text></Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/privacy")}><Text style={styles.footerLinkText}>Privacy</Text></Pressable>
-            <Text style={styles.footerDot}>•</Text>
-            <Pressable onPress={() => router.push("/terms")}><Text style={styles.footerLinkText}>Terms</Text></Pressable>
-          </View>
-        </View>
+        {/* ── Universal Footer ─────────────────────────────────────────── */}
+        <UniversalFooter />
       </ScrollView>
     </View>
   );
@@ -353,7 +288,8 @@ const styles = StyleSheet.create({
   },
   headerSectionPhone: {
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.lg,
+    paddingTop: 24,
+    paddingBottom: 8,
   },
   pill: {
     flexDirection: "row",

@@ -20,15 +20,18 @@ import {
   LogOut,
   Mail,
   MessageCircle,
+  MessageSquare,
   Pencil,
   Phone,
   Plus,
+  Send,
   ShieldCheck,
   X,
 } from "lucide-react-native";
 import { ScreenContainer } from "@/src/components/ScreenContainer";
 import { useAppStore } from "@/src/state/AppProvider";
 import { colors, spacing } from "@/src/constants/theme";
+import { submitUserFeedback } from "@/src/services/feedbackApi";
 
 interface FAQItem {
   id: string;
@@ -93,8 +96,16 @@ export default function ProfileScreen() {
 
   // Collapsible sections - by default collapsed for clean uncluttered UI
   const [showContactCare, setShowContactCare] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [showFaqs, setShowFaqs] = useState(false);
   const [expandedFaq, setExpandedFaq] = useState<string | null>(null);
+
+  // Send us feedback state
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackType, setFeedbackType] = useState<"Suggestion" | "App Experience" | "Photographer Review" | "Other">("Suggestion");
+  const [sendingFeedback, setSendingFeedback] = useState(false);
+  const [feedbackSent, setFeedbackSent] = useState(false);
+  const [feedbackError, setFeedbackError] = useState("");
 
   const onSave = async () => {
     if (!name.trim()) return;
@@ -168,7 +179,7 @@ export default function ProfileScreen() {
   };
 
   const handleEmail = (email: string) => {
-    const url = `mailto:${email}?subject=${encodeURIComponent("Customer Inquiry - Camartes BookAShoot")}`;
+    const url = `mailto:${email}?subject=${encodeURIComponent("Customer Inquiry - Book A Shoot")}`;
     Linking.canOpenURL(url).then((supported) => {
       if (supported) Linking.openURL(url);
     }).catch(() => undefined);
@@ -184,6 +195,29 @@ export default function ProfileScreen() {
 
   const toggleFaq = (id: string) => {
     setExpandedFaq((prev) => (prev === id ? null : id));
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackText.trim()) {
+      setFeedbackError("Please write your feedback before sending.");
+      return;
+    }
+    setSendingFeedback(true);
+    setFeedbackError("");
+    try {
+      await submitUserFeedback({
+        name: profile?.name || "Customer",
+        email: profile?.email || "anonymous@bookashoot.online",
+        phone: profile?.mobile,
+        category: feedbackType,
+        message: feedbackText.trim(),
+      });
+      setFeedbackSent(true);
+    } catch (err: any) {
+      setFeedbackError(err?.message || "Could not send feedback. Please try again.");
+    } finally {
+      setSendingFeedback(false);
+    }
   };
 
   return (
@@ -375,16 +409,16 @@ export default function ProfileScreen() {
             {/* Email Us Card */}
             <Pressable
               style={({ pressed }) => [styles.contactCard, pressed && styles.contactCardPressed]}
-              onPress={() => handleEmail("support@camartes.com")}
+              onPress={() => handleEmail("info@bookashoot.online")}
               accessibilityRole="button"
-              accessibilityLabel="Email support at support@camartes.com"
+              accessibilityLabel="Email support at info@bookashoot.online"
             >
               <View style={styles.contactIconCircle}>
                 <Mail size={22} color={colors.primaryDark} />
               </View>
               <View style={styles.contactInfoCol}>
                 <Text style={styles.contactCardTitle}>Email Us</Text>
-                <Text style={styles.contactCardValue}>support@camartes.com</Text>
+                <Text style={styles.contactCardValue}>info@bookashoot.online</Text>
               </View>
             </Pressable>
 
@@ -419,6 +453,132 @@ export default function ProfileScreen() {
                 <Text style={styles.contactCardValue}>+91 96032 15551</Text>
               </View>
             </Pressable>
+          </View>
+        ) : null}
+      </View>
+
+      {/* Send Us Feedback - Elaborated on click */}
+      <View style={styles.sectionCard}>
+        <Pressable
+          style={styles.sectionHeaderPressable}
+          onPress={() => setShowFeedback((prev) => !prev)}
+          accessibilityRole="button"
+          accessibilityLabel="Toggle Send Us Feedback"
+          accessibilityState={{ expanded: showFeedback }}
+        >
+          <View style={styles.sectionHeaderLeft}>
+            <View style={styles.sectionIconCircle}>
+              <MessageSquare size={20} color={colors.primaryDark} />
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={styles.sectionTitle}>Send Us Feedback</Text>
+              <Text style={styles.sectionSubtitle}>Share thoughts, report issues or feature ideas</Text>
+            </View>
+          </View>
+          {showFeedback ? (
+            <ChevronUp size={20} color={colors.primaryDark} />
+          ) : (
+            <ChevronDown size={20} color={colors.muted} />
+          )}
+        </Pressable>
+
+        {showFeedback ? (
+          <View style={styles.feedbackFormContainer}>
+            {feedbackSent ? (
+              <View style={styles.feedbackSuccessBox}>
+                <View style={styles.feedbackSuccessBadge}>
+                  <Check size={22} color={colors.white} />
+                </View>
+                <Text style={styles.feedbackSuccessTitle}>Thank you for your feedback!</Text>
+                <Text style={styles.feedbackSuccessText}>
+                  Your message has been delivered to info@bookashoot.online. Our core product team reviews every suggestion.
+                </Text>
+                <Pressable
+                  style={styles.feedbackResetBtn}
+                  onPress={() => {
+                    setFeedbackSent(false);
+                    setFeedbackText("");
+                    setFeedbackError("");
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Send another feedback note"
+                >
+                  <Text style={styles.feedbackResetBtnText}>Send another note</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.feedbackFormInner}>
+                <Text style={styles.feedbackFieldLabel}>Feedback Category</Text>
+                <View style={styles.feedbackPillsRow}>
+                  {(["Suggestion", "App Experience", "Photographer Review", "Other"] as const).map((cat) => (
+                    <Pressable
+                      key={cat}
+                      style={[
+                        styles.feedbackPill,
+                        feedbackType === cat && styles.feedbackPillActive,
+                      ]}
+                      onPress={() => setFeedbackType(cat)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Select category ${cat}`}
+                    >
+                      <Text
+                        style={[
+                          styles.feedbackPillText,
+                          feedbackType === cat && styles.feedbackPillTextActive,
+                        ]}
+                      >
+                        {cat}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                <Text style={[styles.feedbackFieldLabel, { marginTop: 12 }]}>Your Message</Text>
+                <TextInput
+                  style={styles.feedbackTextInput}
+                  value={feedbackText}
+                  onChangeText={(val) => {
+                    setFeedbackText(val);
+                    if (feedbackError) setFeedbackError("");
+                  }}
+                  placeholder="Tell us what you loved or what we can improve..."
+                  placeholderTextColor={colors.muted}
+                  multiline
+                  numberOfLines={4}
+                  textAlignVertical="top"
+                />
+
+                {feedbackError ? (
+                  <Text style={styles.feedbackErrorText}>{feedbackError}</Text>
+                ) : null}
+
+                <View style={styles.feedbackMetaRow}>
+                  <Text style={styles.feedbackMetaText} numberOfLines={1}>
+                    Sending as <Text style={{ fontWeight: "600", color: colors.text }}>{profile?.name || "Customer"}</Text> ({profile?.email || "info@bookashoot.online"})
+                  </Text>
+                </View>
+
+                <Pressable
+                  style={[
+                    styles.feedbackSubmitBtn,
+                    (!feedbackText.trim() || sendingFeedback) && styles.feedbackSubmitBtnDisabled,
+                  ]}
+                  onPress={handleSubmitFeedback}
+                  disabled={!feedbackText.trim() || sendingFeedback}
+                  accessibilityRole="button"
+                  accessibilityLabel="Submit feedback"
+                >
+                  {sendingFeedback ? (
+                    <ActivityIndicator size="small" color={colors.white} />
+                  ) : (
+                    <>
+                      <Send size={15} color={colors.white} />
+                      <Text style={styles.feedbackSubmitBtnText}>Send Feedback</Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+            )}
           </View>
         ) : null}
       </View>
@@ -536,7 +696,7 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     fontSize: 22,
-    fontWeight: "800",
+    fontWeight: "700",
     color: colors.primaryDark,
   },
   nameHeaderRow: {
@@ -546,7 +706,7 @@ const styles = StyleSheet.create({
   },
   profileName: {
     fontSize: 19,
-    fontWeight: "800",
+    fontWeight: "600",
     color: colors.text,
     letterSpacing: -0.3,
   },
@@ -589,7 +749,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     fontSize: 14.5,
     color: colors.text,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   editSaveBtn: {
     width: 36,
@@ -647,7 +807,7 @@ const styles = StyleSheet.create({
   },
   addPhoneBtnText: {
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "600",
     color: colors.primaryDark,
   },
   phoneEditPen: {
@@ -673,7 +833,7 @@ const styles = StyleSheet.create({
   },
   phonePrefixText: {
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "600",
     color: colors.text,
   },
   phoneInputStyle: {
@@ -742,7 +902,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 16,
-    fontWeight: "800",
+    fontWeight: "600",
     color: colors.text,
     letterSpacing: -0.2,
   },
@@ -788,7 +948,7 @@ const styles = StyleSheet.create({
   },
   contactCardTitle: {
     fontSize: 14.5,
-    fontWeight: "700",
+    fontWeight: "600",
     color: colors.text,
   },
   contactCardValue: {
@@ -826,7 +986,7 @@ const styles = StyleSheet.create({
   faqQuestionText: {
     flex: 1,
     fontSize: 13.5,
-    fontWeight: "700",
+    fontWeight: "600",
     color: colors.text,
     lineHeight: 18,
   },
@@ -865,5 +1025,132 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: colors.danger,
+  },
+
+  // ── Send Us Feedback Styles ───────────────────────────────────────────────
+  feedbackFormContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 18,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.cream,
+  },
+  feedbackFormInner: {
+    gap: 8,
+  },
+  feedbackFieldLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.text,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 4,
+  },
+  feedbackPillsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  feedbackPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  feedbackPillActive: {
+    backgroundColor: colors.peach,
+    borderColor: colors.primary,
+  },
+  feedbackPillText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: colors.muted,
+  },
+  feedbackPillTextActive: {
+    color: colors.primaryDark,
+    fontWeight: "600",
+  },
+  feedbackTextInput: {
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 13.5,
+    color: colors.text,
+    minHeight: 88,
+  },
+  feedbackErrorText: {
+    fontSize: 12,
+    color: colors.danger,
+    marginTop: 2,
+  },
+  feedbackMetaRow: {
+    marginTop: 4,
+  },
+  feedbackMetaText: {
+    fontSize: 11.5,
+    color: colors.muted,
+  },
+  feedbackSubmitBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  feedbackSubmitBtnDisabled: {
+    opacity: 0.5,
+  },
+  feedbackSubmitBtnText: {
+    fontSize: 13.5,
+    fontWeight: "600",
+    color: colors.white,
+  },
+  feedbackSuccessBox: {
+    alignItems: "center",
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    gap: 8,
+  },
+  feedbackSuccessBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#16A34A",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  feedbackSuccessTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  feedbackSuccessText: {
+    fontSize: 12.5,
+    color: colors.muted,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  feedbackResetBtn: {
+    marginTop: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.peach,
+    borderWidth: 1,
+    borderColor: colors.peachBorder,
+  },
+  feedbackResetBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.primaryDark,
   },
 });
