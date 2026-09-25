@@ -400,19 +400,32 @@ async function mergeReplacementWaves(booking: Booking, primaryFirms: AssignedPho
 }
 
 export async function refreshRemoteBookingStatus(bookingId: string): Promise<Booking | null> {
-  const booking = await getBooking(bookingId);
-  if (!booking?.remoteBookingId) return booking;
+  let booking = await getBooking(bookingId);
+  const targetId = booking?.remoteBookingId || bookingId;
+  if (!targetId) return booking;
 
   // 1. Direct fetch from GET /api/bookings/{id}
   try {
     const res = await camartesFetch<any>(
-      `/api/bookings/${encodeURIComponent(booking.remoteBookingId)}`,
+      `/api/bookings/${encodeURIComponent(targetId)}`,
       {},
       { auth: true, requireAuth: false },
     );
     if (res?.booking || res?.id || res?.booking_id) {
       const bData = res.booking || res;
       const snap = parseRemoteBookingRow(res) || parseRemoteBookingRow(bData);
+      if (!booking) {
+        const profile = await getStoredProfile();
+        booking = remoteOnlyBooking(profile?.customerId || "cust", snap || {
+          id: targetId,
+          status: "pending",
+          providerId: null,
+          eventDate: null,
+          eventTime: null,
+          serviceType: null,
+          budget: null,
+        });
+      }
       let assignedPhotographers: AssignedPhotographer[] =
         snap?.assignedPhotographers ||
         res.assigned_photographers ||
@@ -521,8 +534,14 @@ export async function refreshRemoteBookingStatus(bookingId: string): Promise<Boo
       { requireAuth: true },
     );
     const rows = parseRemoteBookingList(remote);
-    const match = rows.find((row) => row.id === booking.remoteBookingId);
-    if (match) return await saveBooking(applyRemoteSnapshot(booking, match));
+    const match = rows.find((row) => row.id === targetId || (booking && bookingLooksLike(booking, row.id)));
+    if (match) {
+      if (!booking) {
+        const profile = await getStoredProfile();
+        booking = remoteOnlyBooking(profile?.customerId || "cust", match);
+      }
+      return await saveBooking(applyRemoteSnapshot(booking, match));
+    }
   } catch {
     // ignore
   }

@@ -375,7 +375,23 @@ export async function restoreSession(): Promise<CustomerProfile | null> {
   if (isDemoAuthMode()) {
     return restoreDemoSession();
   }
+  const stored = await getStoredProfile();
   const token = await getAuthToken();
+
+  if (stored) {
+    if (token) {
+      // Re-validate in background without stalling application startup
+      camartesFetch<unknown>("/api/auth/me", {}, { requireAuth: true })
+        .then((me) => persistProfile(profileFromCamartesUser(me, stored)))
+        .catch(async (error) => {
+          if (error instanceof CamartesApiError && error.status === 401) {
+            await setAuthToken(null);
+          }
+        });
+    }
+    return stored;
+  }
+
   if (token) {
     try {
       const me = await camartesFetch<unknown>("/api/auth/me", {}, { requireAuth: true });
@@ -384,14 +400,8 @@ export async function restoreSession(): Promise<CustomerProfile | null> {
     } catch (error) {
       if (error instanceof CamartesApiError && error.status === 401) {
         await setAuthToken(null);
-        // Do not wipe stored profile on token invalidation; preserve customer identity & bookings
       }
     }
-  }
-
-  const stored = await getStoredProfile();
-  if (stored) {
-    return stored;
   }
 
   // Safety net: restore from active Supabase Google OAuth session if stored profile was cleared

@@ -343,7 +343,7 @@ export default function NotificationsScreen() {
               <Pressable
                 key={n.id && n.id !== "undefined" ? n.id : `notif-${idx}`}
                 onPress={() => void handleCardPress(n)}
-                accessibilityRole="button"
+                accessibilityRole={Platform.OS === "web" ? undefined : "button"}
                 accessibilityLabel={`Notification: ${n.title}`}
               >
                 <Card accent={!n.read && !isSelectionMode} style={[styles.cardBox, isSelected && styles.cardBoxSelected]}>

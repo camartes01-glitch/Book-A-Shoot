@@ -306,6 +306,9 @@ function ChatScreenInternal() {
   }, [userId]);
 
   useEffect(() => {
+    if (userId) {
+      void markConversationRead(userId);
+    }
     void loadMessages(true);
     const unsub = subscribeMessages(() => {
       void loadMessages(false);
@@ -318,8 +321,11 @@ function ChatScreenInternal() {
     return () => {
       unsub();
       clearInterval(timer);
+      if (userId) {
+        void markConversationRead(userId);
+      }
     };
-  }, [loadMessages]);
+  }, [loadMessages, userId]);
 
   const handleSend = async (customText?: string) => {
     if (!isAccepted) return;

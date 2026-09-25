@@ -74,23 +74,36 @@ export default function BookingDetailScreen() {
 
   const load = useCallback(async () => {
     try {
-      const local = await bookingApi.getBooking(bookingId);
-      if (!local) {
+      // 1. Immediately render cached booking if present (0ms!)
+      let current = await bookingApi.getBooking(bookingId);
+      if (current) {
+        setMissing(false);
+        setBooking(current);
+      }
+
+      // 2. Revalidate / refresh in background or fetch directly by ID
+      const targetId = current?.bookingId || bookingId;
+      const fresh = await bookingApi.refreshRemoteBookingStatus(targetId);
+      if (fresh) {
+        setMissing(false);
+        setBooking(fresh);
+        current = fresh;
+      }
+
+      if (!current) {
         setMissing(true);
         return;
       }
-      setMissing(false);
-      if (local.remoteBookingId) {
-        const fresh = await bookingApi.refreshRemoteBookingStatus(local.bookingId);
-        setBooking(fresh ?? local);
-      } else {
-        setBooking(local);
-      }
-      await refreshBookings();
+
+      // 3. Keep bookings list in sync non-blockingly
+      void refreshBookings();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not refresh this booking from Camartes.");
       const local = await bookingApi.getBooking(bookingId);
-      if (local) setBooking(local);
+      if (local) {
+        setMissing(false);
+        setBooking(local);
+      }
     }
   }, [bookingId, refreshBookings]);
 

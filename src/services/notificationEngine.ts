@@ -15,6 +15,7 @@ import {
   TERMINAL_STATUSES,
   getBookingEventTitle,
   getEffectiveBookingStatus,
+  isCompletedBooking,
   isDraftBooking,
 } from "@/src/domain/bookingFilters";
 import { getDraftResumeRoute } from "@/src/domain/bookingRequest";
@@ -40,6 +41,7 @@ type BookingEngineState = {
   /** When this client first observed each firm assigned — the clock the
    * 1-hour response window counts down from. */
   firmFirstSeenAt: Record<string, string>;
+  firstSeenAt?: string;
   remindedKeys: string[];
   scheduledReminderKeys: string[];
   draftNudgedAt?: string;
@@ -166,8 +168,21 @@ function eventPlaceOf(booking: Booking): string | undefined {
   return loc?.formattedAddress || loc?.city || undefined;
 }
 
+function isBookingInPast(booking: Booking): boolean {
+  const today = new Date().toISOString().slice(0, 10);
+  const dates = (booking.days || []).map((d) => d?.eventDate).filter((d): d is string => Boolean(d));
+  if (dates.length > 0) {
+    return dates.every((d) => d < today);
+  }
+  return false;
+}
+
 async function processDraft(booking: Booking, profile: CustomerProfile, bstate: BookingEngineState): Promise<boolean> {
   if (bstate.draftNudgedAt) return false;
+  if (isBookingInPast(booking) || hoursSince(booking.updatedAt) > 168) {
+    bstate.draftNudgedAt = nowIso();
+    return false;
+  }
 
   const scheduleKey = `draft_resume:${booking.bookingId}`;
   const params: NotificationParams = { customerName: profile.name, eventName: getBookingEventTitle(booking) };
@@ -191,6 +206,16 @@ async function processDraft(booking: Booking, profile: CustomerProfile, bstate: 
 }
 
 async function processAcceptRejectDiff(booking: Booking, profile: CustomerProfile, bstate: BookingEngineState): Promise<boolean> {
+  const effective = getEffectiveBookingStatus(booking);
+  if (
+    TERMINAL_STATUSES.has(effective) ||
+    effective === "COMPLETED" ||
+    isCompletedBooking(booking) ||
+    isBookingInPast(booking)
+  ) {
+    return false;
+  }
+
   let changed = false;
   const firms = booking.assigned_photographers || [];
   const currentIds = new Set<string>();
@@ -204,6 +229,21 @@ async function processAcceptRejectDiff(booking: Booking, profile: CustomerProfil
     currentIds.add(id);
     bstate.firmNames[id] = f.name;
     if (!bstate.firmFirstSeenAt[id]) bstate.firmFirstSeenAt[id] = nowIso();
+  }
+
+  // If this booking has not been tracked on this device yet,
+  // quietly seed the baseline state without firing historical notifications
+  if (!bstate.firstSeenAt) {
+    bstate.firstSeenAt = nowIso();
+    bstate.knownFirmIds = Array.from(currentIds);
+    bstate.acceptedFirmIds = firms.filter((f) => f.has_accepted).map((f) => firmId(f)!).filter(Boolean);
+    bstate.rejectedFirmIds = firms.filter((f) => isFirmRejected(f)).map((f) => firmId(f)!).filter(Boolean);
+    return false;
+  }
+
+  for (const f of firms) {
+    const id = firmId(f);
+    if (!id) continue;
 
     if (f.has_accepted && !bstate.acceptedFirmIds.includes(id)) {
       await fire(
@@ -247,6 +287,9 @@ async function processAcceptRejectDiff(booking: Booking, profile: CustomerProfil
 }
 
 async function processEventReminder(booking: Booking, profile: CustomerProfile, bstate: BookingEngineState): Promise<boolean> {
+  if (isBookingInPast(booking)) {
+    return false;
+  }
   const effective = getEffectiveBookingStatus(booking);
   const isConfirmed = effective === "CUSTOMER_CONFIRMED" || effective === "CONFIRMED" || effective === "IN_PROGRESS";
   if (!isConfirmed) {
@@ -261,8 +304,12 @@ async function processEventReminder(booking: Booking, profile: CustomerProfile, 
   const firmName = booking.assigned_photographers?.find((f) => f.is_confirmed)?.name;
   const eventName = getBookingEventTitle(booking);
   const eventPlace = eventPlaceOf(booking);
+  const today = new Date().toISOString().slice(0, 10);
 
   for (const day of booking.days || []) {
+    if (!day.eventDate || day.eventDate < today) {
+      continue;
+    }
     const scheduleKey = `reminder:${booking.bookingId}:${day.dayId}`;
     const key = `reminder:${day.dayId}:${day.eventDate}`;
     const params: NotificationParams = {
@@ -353,6 +400,7 @@ async function runReplacementTickInner(bookings: Booking[], profile: CustomerPro
   if (!profile) return;
   const candidates = bookings.filter((b) => {
     if (isDraftBooking(b) || !b.remoteBookingId) return false;
+    if (isBookingInPast(b)) return false;
     return ENQUIRY_STATUSES.has(getEffectiveBookingStatus(b));
   });
   if (!candidates.length) return;

@@ -156,6 +156,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const adoptAuthenticatedBookings = useCallback(async (customerId: string) => {
     try {
+      const allStored = await bookingApi.readAllBookings();
+      const local = allStored.filter((b) => b.customerId === customerId);
+      if (local.length > 0) {
+        setBookings((prev) => (prev.length === 0 ? local : prev));
+      }
       const list = await bookingApi.listBookings(customerId);
       setBookings(list);
       setActiveDraft((prev) => {
@@ -187,9 +192,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       try {
+        // 1. Instant local hydration (0ms) so bookings & profile never start at 0/empty
+        const cachedProfile = await authApi.getStoredProfile();
+        if (cachedProfile && !cancelled) {
+          setProfile(cachedProfile);
+          const allStored = await bookingApi.readAllBookings();
+          const local = allStored.filter((b) => b.customerId === cachedProfile.customerId);
+          if (local.length > 0 && !cancelled) {
+            setBookings(local);
+            setActiveDraft(selectActiveWizardDraft(local));
+          }
+        }
+
         const stored = await Promise.race([
           authApi.restoreSession(),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500)),
         ]);
         if (cancelled) return;
         setProfile(stored);

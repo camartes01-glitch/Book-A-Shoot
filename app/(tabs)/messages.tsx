@@ -25,13 +25,29 @@ import {
 import {
   fetchConversations,
   getLocalConversations,
+  markConversationRead,
   subscribeMessages,
   type Conversation,
 } from "@/src/services/messagesApi";
 import { useAppStore } from "@/src/state/AppProvider";
 import { colors, spacing } from "@/src/constants/theme";
-import { TERMINAL_STATUSES, getBookingEventTitle } from "@/src/domain/bookingFilters";
-import type { AssignedPhotographer } from "@/src/types/booking";
+import {
+  ENQUIRY_STATUSES,
+  TERMINAL_STATUSES,
+  getBookingEventTitle,
+  getEffectiveBookingStatus,
+  isCompletedBooking,
+} from "@/src/domain/bookingFilters";
+import type { AssignedPhotographer, Booking } from "@/src/types/booking";
+
+function isBookingInPast(booking: Booking): boolean {
+  const today = new Date().toISOString().slice(0, 10);
+  const dates = (booking.days || []).map((d) => d?.eventDate).filter((d): d is string => Boolean(d));
+  if (dates.length > 0) {
+    return dates.every((d) => d < today);
+  }
+  return false;
+}
 
 function formatRelativeTime(isoString: string): string {
   try {
@@ -129,47 +145,78 @@ export default function MessagesScreen() {
   }, [loadAll, refreshBookings]);
 
   /**
-   * Only candidate firms for which requests have been sent while bookings are active.
-   * If the request timed out or firm rejected, they disappear completely.
+   * Candidate firms for the latest still search-ongoing booking.
+   * Always picks the most recent search-ongoing booking and reflects firm acceptance for that booking.
    */
   const candidateFirmsForRequest = useMemo(() => {
     const list: CandidateFirmItem[] = [];
     const seenIds = new Set<string>();
 
-    // 1. Only active bookings
-    const activeBookings = bookings.filter((b) => {
-      if (TERMINAL_STATUSES.has(b.status)) return false;
-      if (b.status === "DRAFT" && !b.remoteBookingId) return false;
-      return true;
-    });
+    const today = new Date().toISOString().slice(0, 10);
 
-    for (const b of activeBookings) {
-      const assigned = (b.assigned_photographers || []) as AssignedPhotographer[];
-      for (const firm of assigned) {
-        const id = firm.provider_id || firm.id;
-        if (!id || seenIds.has(id)) continue;
+    const getBookingTimestamp = (b: Booking): number => {
+      const d = b.updatedAt || b.createdAt;
+      if (!d) return 0;
+      const t = new Date(d).getTime();
+      return isNaN(t) ? 0 : t;
+    };
 
-        // 2. Disappear if timed out or firm rejected
-        const isRejectedOrTimedOut = Boolean(
-          (firm as any).has_rejected ||
-          (firm as any).is_rejected ||
-          (firm as any).is_timed_out ||
-          (firm as any).status === "REJECTED" ||
-          (firm as any).status === "TIMED_OUT" ||
-          (firm as any).status === "EXPIRED"
-        );
-        if (isRejectedOrTimedOut) continue;
+    // Find all still search-ongoing bookings (enquiries currently in matching/request_sent/accepted state)
+    const searchOngoingBookings = bookings
+      .filter((b) => {
+        if (TERMINAL_STATUSES.has(b.status)) return false;
+        if (b.status === "COMPLETED" || isCompletedBooking(b)) return false;
+        if (b.status === "DRAFT" && !b.remoteBookingId) return false;
+        const dates = (b.days || []).map((d) => d?.eventDate).filter((d): d is string => Boolean(d));
+        if (dates.length > 0 && dates.every((d) => d < today)) return false;
+        const effective = getEffectiveBookingStatus(b);
+        return ENQUIRY_STATUSES.has(effective);
+      })
+      .sort((a, b) => getBookingTimestamp(b) - getBookingTimestamp(a));
 
-        seenIds.add(id);
-        list.push({
-          id,
-          name: firm.name,
-          picture: firm.profile_image || undefined,
-          phone: firm.contact_phone || undefined,
-          has_accepted: Boolean(firm.has_accepted),
-          bookingTitle: getBookingEventTitle(b),
-        });
-      }
+    // Pick the most recent search-ongoing booking, or fallback to the most recent active booking
+    const targetBooking =
+      searchOngoingBookings[0] ||
+      bookings
+        .filter((b) => {
+          if (TERMINAL_STATUSES.has(b.status)) return false;
+          if (b.status === "COMPLETED" || isCompletedBooking(b)) return false;
+          if (b.status === "DRAFT" && !b.remoteBookingId) return false;
+          const dates = (b.days || []).map((d) => d?.eventDate).filter((d): d is string => Boolean(d));
+          if (dates.length > 0 && dates.every((d) => d < today)) return false;
+          return true;
+        })
+        .sort((a, b) => getBookingTimestamp(b) - getBookingTimestamp(a))[0];
+
+    if (!targetBooking) return [];
+
+    const assigned = (targetBooking.assigned_photographers || []) as AssignedPhotographer[];
+    const bookingTitle = getBookingEventTitle(targetBooking);
+
+    for (const firm of assigned) {
+      const id = firm.provider_id || firm.id;
+      if (!id || seenIds.has(id)) continue;
+
+      // Disappear if timed out or firm rejected
+      const isRejectedOrTimedOut = Boolean(
+        (firm as any).has_rejected ||
+        (firm as any).is_rejected ||
+        (firm as any).is_timed_out ||
+        (firm as any).status === "REJECTED" ||
+        (firm as any).status === "TIMED_OUT" ||
+        (firm as any).status === "EXPIRED"
+      );
+      if (isRejectedOrTimedOut) continue;
+
+      seenIds.add(id);
+      list.push({
+        id,
+        name: firm.name,
+        picture: firm.profile_image || undefined,
+        phone: firm.contact_phone || undefined,
+        has_accepted: Boolean(firm.has_accepted),
+        bookingTitle,
+      });
     }
 
     return list;
@@ -239,6 +286,14 @@ export default function MessagesScreen() {
       Alert.alert("Chat Notice", "Could not locate provider ID for this conversation.");
       return;
     }
+    void markConversationRead(userId);
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.userId === userId || String(c.userId).toLowerCase() === String(userId).toLowerCase()
+          ? { ...c, unread: false }
+          : c
+      )
+    );
     router.push({
       pathname: "/chat/[userId]",
       params: {
@@ -262,6 +317,7 @@ export default function MessagesScreen() {
 
     // Firm has accepted: chat is enabled!
     setComposeOpen(false);
+    void markConversationRead(firm.id);
     router.push({
       pathname: "/chat/[userId]",
       params: {
