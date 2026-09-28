@@ -28,7 +28,7 @@ import { Button } from "@/src/components/ui";
 import { cacheVendorProfile, getCachedVendorProfile, getVendorProfile } from "@/src/services/bookingApi";
 import { useAppStore } from "@/src/state/AppProvider";
 import type { CustomerVendor } from "@/src/types/vendor";
-import { colors, spacing } from "@/src/constants/theme";
+import { colors, fontWeights, spacing } from "@/src/constants/theme";
 
 const FALLBACK_PORTFOLIO = [
   "https://images.unsplash.com/photo-1519741497674-611481863552?w=1200&auto=format&fit=crop&q=80",
@@ -433,13 +433,13 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 16,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#0F172A",
     letterSpacing: -0.3,
   },
   headerSubtitle: {
     fontSize: 11.5,
-    fontWeight: "600",
+    fontWeight: fontWeights.subheading,
     color: "#64748B",
     marginTop: 1,
   },
@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
   },
   verifiedBadgeText: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#EA580C",
   },
   scrollContent: {
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
   },
   studioTitle: {
     fontSize: 20,
-    fontWeight: "900",
+    fontWeight: fontWeights.heading,
     color: "#0F172A",
     letterSpacing: -0.4,
     flex: 1,
@@ -518,7 +518,7 @@ const styles = StyleSheet.create({
   },
   firmTagText: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#EA580C",
   },
   locationRow: {
@@ -554,7 +554,7 @@ const styles = StyleSheet.create({
   },
   badgePillText: {
     fontSize: 11.5,
-    fontWeight: "700",
+    fontWeight: fontWeights.heading,
     color: "#334155",
   },
   kycBadgePill: {
@@ -570,7 +570,7 @@ const styles = StyleSheet.create({
   },
   kycBadgePillText: {
     fontSize: 11.5,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#EA580C",
   },
   sectionCard: {
@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 15.5,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#0F172A",
     letterSpacing: -0.2,
   },
@@ -627,7 +627,7 @@ const styles = StyleSheet.create({
   },
   zoomPillText: {
     fontSize: 9,
-    fontWeight: "700",
+    fontWeight: fontWeights.heading,
     color: "#FFFFFF",
   },
   morePhotosCard: {
@@ -644,12 +644,12 @@ const styles = StyleSheet.create({
   },
   morePhotosCount: {
     fontSize: 16,
-    fontWeight: "900",
+    fontWeight: fontWeights.heading,
     color: "#EA580C",
   },
   morePhotosLabel: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: fontWeights.heading,
     color: "#9A3412",
   },
   fullGalleryBtn: {
@@ -666,7 +666,7 @@ const styles = StyleSheet.create({
   },
   fullGalleryBtnText: {
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#EA580C",
   },
   aboutText: {
@@ -689,7 +689,7 @@ const styles = StyleSheet.create({
   },
   serviceTitle: {
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#0F172A",
   },
   serviceDetail: {
@@ -717,7 +717,7 @@ const styles = StyleSheet.create({
   },
   contactNoticeTitle: {
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#C2410C",
   },
   contactNoticeDesc: {

@@ -180,7 +180,8 @@ export default function HomeScreen() {
   const { width: W } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isWide = W >= 768;
-  const contentWidth = Math.min(W, 440);
+  const contentWidth = isWide ? Math.min(W, 520) : Math.min(W, 440);
+  const slideWidth = contentWidth - 32;
 
   const { profile, bookings, activeDraft, startNewBooking, loadDraft, notifications, markNotificationsRead } = useAppStore();
   const unreadNotificationsCount = notifications?.filter((n) => !n.read).length || 0;
@@ -201,22 +202,21 @@ export default function HomeScreen() {
     const timer = setInterval(() => {
       setActiveSlide((prev) => {
         const next = (prev + 1) % MARKETING_SLIDES.length;
-        carouselRef.current?.scrollTo({ x: next * (contentWidth - 32), animated: true });
+        carouselRef.current?.scrollTo({ x: next * slideWidth, animated: true });
         return next;
       });
     }, 5200);
     return () => clearInterval(timer);
-  }, [contentWidth]);
+  }, [slideWidth]);
 
   const onCarouselScrollEnd = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const slideWidth = contentWidth - 32;
       if (slideWidth > 0) {
         const index = Math.round(e.nativeEvent.contentOffset.x / slideWidth);
         setActiveSlide(Math.max(0, Math.min(index, MARKETING_SLIDES.length - 1)));
       }
     },
-    [contentWidth]
+    [slideWidth]
   );
 
   const onCreateBooking = async () => {
@@ -463,11 +463,12 @@ export default function HomeScreen() {
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
+            scrollEventThrottle={16}
             onMomentumScrollEnd={onCarouselScrollEnd}
             contentContainerStyle={styles.marketingScrollContent}
           >
             {MARKETING_SLIDES.map((slide) => (
-              <View key={slide.id} style={[styles.marketingCard, { width: contentWidth - 32 }]}>
+              <View key={slide.id} style={[styles.marketingCard, { width: slideWidth }]}>
                 <Image source={slide.image} style={styles.marketingCardBg} resizeMode="cover" />
                 <LinearGradient
                   colors={["rgba(15, 23, 42, 0.88)", "rgba(15, 23, 42, 0.40)", "rgba(15, 23, 42, 0.15)"]}
@@ -1099,7 +1100,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   marketingScrollContent: {
-    gap: 16,
+    flexDirection: "row",
   },
   marketingCard: {
     height: 165,

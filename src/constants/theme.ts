@@ -48,4 +48,11 @@ export const elevation = {
   },
 };
 
+export const fontWeights = {
+  heading: "700" as const,
+  subheading: "600" as const,
+  medium: "500" as const,
+  body: "400" as const,
+};
+
 export const touchTarget = 44;

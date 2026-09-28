@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ChevronLeft, Home } from "lucide-react-native";
 import { router } from "expo-router";
-import { colors, spacing } from "@/src/constants/theme";
+import { colors, fontWeights, spacing } from "@/src/constants/theme";
 import {
   VISUAL_INDEX,
   WIZARD_STEPS,
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  title: { flex: 1, textAlign: "center", fontSize: 16, fontWeight: "800", color: colors.ink, paddingHorizontal: 8 },
+  title: { flex: 1, textAlign: "center", fontSize: 16, fontWeight: fontWeights.heading, color: colors.ink, paddingHorizontal: 8 },
   stepsRow: {
     flexDirection: "row",
     alignItems: "flex-start",

@@ -360,18 +360,18 @@ export default function ConfirmBookingScreen() {
       {/* Budget Card */}
       <Card>
         <SectionHead title="Budget" onEdit={() => router.push("/booking/budget?mode=edit")} />
-        <Muted style={{ fontWeight: "800", color: colors.ink }}>{activeDraft.budget ? formatInr(activeDraft.budget) : "Not set"}</Muted>
+        <Muted style={{ fontWeight: "700", color: colors.ink }}>{activeDraft.budget ? formatInr(activeDraft.budget) : "Not set"}</Muted>
         <Muted>Approximate overall budget</Muted>
       </Card>
 
       {/* Approved Package Card */}
       <Card>
         <SectionHead title="Approved Package Range" onEdit={() => router.push("/booking/packages?mode=edit")} />
-        <Muted style={{ fontWeight: "800", color: colors.ink, flexShrink: 1 }}>
+        <Muted style={{ fontWeight: "700", color: colors.ink, flexShrink: 1 }}>
           {pkg ? formatPackageOverallLabel(pkg.label, pkg.minPrice, pkg.maxPrice) : (activeDraft.selectedPackage ?? "—")}
         </Muted>
         {pkg && pkg.maxPrice > 0 ? (
-          <Muted style={{ fontSize: 20, fontWeight: "800", color: colors.primaryDark, flexShrink: 1 }}>
+          <Muted style={{ fontSize: 20, fontWeight: "700", color: colors.primaryDark, flexShrink: 1 }}>
             {formatInrRange(pkg.minPrice, pkg.maxPrice)}
           </Muted>
         ) : null}
@@ -542,12 +542,12 @@ const styles = StyleSheet.create({
   },
   dayBadgeText: {
     fontSize: 11.5,
-    fontWeight: "800",
+    fontWeight: "700",
     color: "#EA580C",
   },
   eventCardTitle: {
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "700",
     color: colors.ink,
     flex: 1,
   },
@@ -564,7 +564,7 @@ const styles = StyleSheet.create({
   },
   singleEditText: {
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "700",
     color: "#EA580C",
   },
   divider: {
@@ -583,7 +583,7 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: "700",
     color: "#94A3B8",
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -616,7 +616,7 @@ const styles = StyleSheet.create({
   },
   dispatchTitle: {
     fontSize: 14.5,
-    fontWeight: "800",
+    fontWeight: "700",
     color: colors.ink,
   },
   locationPill: {
@@ -670,7 +670,7 @@ const styles = StyleSheet.create({
   },
   firmAvatarText: {
     fontSize: 18,
-    fontWeight: "900",
+    fontWeight: "700",
     color: "#EA580C",
   },
   firmInfoCol: {
@@ -685,7 +685,7 @@ const styles = StyleSheet.create({
   },
   firmNameText: {
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: "700",
     color: "#0F172A",
     flex: 1,
   },
@@ -702,7 +702,7 @@ const styles = StyleSheet.create({
   },
   kycBadgeText: {
     fontSize: 10,
-    fontWeight: "800",
+    fontWeight: "700",
     color: "#EA580C",
   },
   firmSubRow: {
@@ -717,7 +717,7 @@ const styles = StyleSheet.create({
   },
   ratingValue: {
     fontSize: 11.5,
-    fontWeight: "800",
+    fontWeight: "700",
     color: "#0F172A",
   },
   shootsCount: {
@@ -743,7 +743,7 @@ const styles = StyleSheet.create({
   },
   viewAboutLinkText: {
     fontSize: 11.5,
-    fontWeight: "800",
+    fontWeight: "700",
     color: "#EA580C",
   },
   privacyBox: {
@@ -762,7 +762,7 @@ const styles = StyleSheet.create({
   },
   privacyBoxTitle: {
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "700",
     color: "#C2410C",
   },
   privacyBoxText: {

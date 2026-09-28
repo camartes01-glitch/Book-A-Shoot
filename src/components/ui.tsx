@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View, ActivityIndicator, type TextInputProps, type StyleProp, type ViewStyle, type TextStyle } from "react-native";
-import { colors, elevation, radius, radiusSm, spacing, touchTarget } from "@/src/constants/theme";
+import { colors, elevation, fontWeights, radius, radiusSm, spacing, touchTarget } from "@/src/constants/theme";
 
 export function Card({ children, accent = false, style }: { children: React.ReactNode; accent?: boolean; style?: object }) {
   return <View style={[styles.card, accent && styles.cardAccent, style]}>{children}</View>;
@@ -207,9 +207,9 @@ const styles = StyleSheet.create({
     ...elevation.card,
   },
   cardAccent: { borderColor: colors.primary, borderWidth: 1.5 },
-  screenTitle: { fontSize: 24, fontWeight: "800", color: colors.ink, letterSpacing: -0.4 },
-  title: { fontSize: 18, fontWeight: "800", color: colors.ink, letterSpacing: -0.2 },
-  sectionTitle: { fontSize: 15, fontWeight: "800", color: colors.ink },
+  screenTitle: { fontSize: 24, fontWeight: fontWeights.heading, color: colors.ink, letterSpacing: -0.4 },
+  title: { fontSize: 18, fontWeight: fontWeights.heading, color: colors.ink, letterSpacing: -0.2 },
+  sectionTitle: { fontSize: 15, fontWeight: fontWeights.heading, color: colors.ink },
   muted: { fontSize: 13, color: colors.muted, lineHeight: 19 },
   label: { fontSize: 13, fontWeight: "700", color: colors.ink },
   errorText: { fontSize: 12, color: colors.danger, fontWeight: "600" },

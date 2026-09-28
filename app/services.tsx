@@ -46,7 +46,7 @@ import {
   Wand2,
   X,
 } from "lucide-react-native";
-import { colors, radius, radiusSm, spacing } from "@/src/constants/theme";
+import { colors, fontWeights, radius, radiusSm, spacing } from "@/src/constants/theme";
 import { categoryImageFor } from "@/src/constants/homeMedia";
 
 interface ServiceItem {
@@ -837,7 +837,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 20,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: colors.text,
     marginTop: spacing.xs,
   },
@@ -887,14 +887,14 @@ const styles = StyleSheet.create({
   },
   customEventPillText: {
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: fontWeights.heading,
     color: colors.white,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   customEventTitle: {
     fontSize: 26,
-    fontWeight: "600",
+    fontWeight: fontWeights.subheading,
     color: colors.white,
     textAlign: "center",
     letterSpacing: -0.4,
@@ -908,7 +908,7 @@ const styles = StyleSheet.create({
     maxWidth: 720,
   },
   customEventHighlight: {
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     textDecorationLine: "underline",
   },
   customEventBtn: {
@@ -924,7 +924,7 @@ const styles = StyleSheet.create({
   customEventBtnText: {
     color: colors.primaryDark,
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
   },
 
   // ── Unified CTA Banner ───────────────────────────────────────────────

@@ -9,7 +9,7 @@ import { EmptyState } from "@/src/components/EmptyState";
 import { useAppStore } from "@/src/state/AppProvider";
 import { MAX_MATCHES } from "@/src/engine/matching";
 import { selectedPackageQuote } from "@/src/engine/pricing";
-import { colors, spacing } from "@/src/constants/theme";
+import { colors, fontWeights, spacing } from "@/src/constants/theme";
 
 export default function VendorMatchesScreen() {
   const { activeDraft, loadVendorMatches, selectVendor } = useAppStore();
@@ -173,7 +173,7 @@ const styles = StyleSheet.create({
   },
   headline: {
     fontSize: 22,
-    fontWeight: "900",
+    fontWeight: fontWeights.heading,
     color: "#0F172A",
     letterSpacing: -0.5,
     lineHeight: 28,
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
     fontWeight: "400",
   },
   chatInlineHighlight: {
-    fontWeight: "700",
+    fontWeight: fontWeights.heading,
     color: "#EA580C",
     textDecorationLine: "underline",
   },
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   },
   chatHighlightBadgeText: {
     fontSize: 11.5,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#EA580C",
   },
   tierPill: {
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   },
   tierPillText: {
     fontSize: 11.5,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#334155",
   },
   cardsList: {
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
   },
   moreOptionsTitle: {
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#0F172A",
   },
   moreOptionsSubtitle: {

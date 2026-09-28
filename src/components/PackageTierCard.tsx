@@ -5,7 +5,7 @@ import { Badge, Card, Muted } from "@/src/components/ui";
 import type { Deliverables, EventDay, PackageOption, PackageTierId } from "@/src/types/booking";
 import { getDetailedPackageBreakdown } from "@/src/config/approvedBudget";
 import { formatInrRange } from "@/src/utils/format";
-import { colors, radius, spacing } from "@/src/constants/theme";
+import { colors, fontWeights, radius, spacing } from "@/src/constants/theme";
 import { selectionFeedback } from "@/src/utils/haptics";
 
 export function PackageTierCard({
@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
   },
   totalValue: {
     fontSize: 17,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: colors.peach,
   },
   closeCardButton: {

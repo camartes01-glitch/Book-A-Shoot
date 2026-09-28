@@ -3,7 +3,7 @@ import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native
 import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { CalendarDays, Clock } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, radius, spacing, touchTarget } from "@/src/constants/theme";
+import { colors, fontWeights, radius, spacing, touchTarget } from "@/src/constants/theme";
 import { formatDateLong, formatTime12h } from "@/src/utils/format";
 import { normalizeHtmlDateValue, normalizeHtmlTimeValue, usesHtmlDateTimeInputs } from "@/src/utils/dateTime";
 import { Button } from "@/src/components/ui";
@@ -250,5 +250,5 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     gap: spacing.md,
   },
-  sheetTitle: { fontSize: 16, fontWeight: "800", color: colors.ink, textAlign: "center" },
+  sheetTitle: { fontSize: 16, fontWeight: fontWeights.heading, color: colors.ink, textAlign: "center" },
 });

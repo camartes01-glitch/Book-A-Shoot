@@ -5,7 +5,7 @@ import type { VendorMatchResult } from "@/src/types/booking";
 import { RatingStars } from "@/src/components/RatingStars";
 import { Button } from "@/src/components/ui";
 import { formatInr } from "@/src/utils/format";
-import { colors, elevation, radius, spacing } from "@/src/constants/theme";
+import { colors, elevation, fontWeights, radius, spacing } from "@/src/constants/theme";
 
 function initials(name: string) {
   return name
@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
   },
   verifiedFloatingText: {
     fontSize: 10.5,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#059669",
   },
   headerRow: {
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarText: {
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     fontSize: 16,
     color: "#EA580C",
   },
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 16.5,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#0F172A",
     letterSpacing: -0.3,
     flex: 1,
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   },
   firmBadgeText: {
     fontSize: 10.5,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#EA580C",
   },
   category: {
@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
   },
   availableText: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#059669",
   },
   statsRow: {
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
   },
   price: {
     fontSize: 17,
-    fontWeight: "900",
+    fontWeight: fontWeights.heading,
     color: "#0F172A",
     letterSpacing: -0.3,
   },

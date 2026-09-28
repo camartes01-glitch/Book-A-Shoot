@@ -16,7 +16,7 @@ import { ImageLightboxModal } from "@/src/components/ImageLightboxModal";
 import { getCachedVendorProfile, getVendorProfile } from "@/src/services/bookingApi";
 import { useAppStore } from "@/src/state/AppProvider";
 import type { CustomerVendor } from "@/src/types/vendor";
-import { colors, spacing } from "@/src/constants/theme";
+import { colors, fontWeights, spacing } from "@/src/constants/theme";
 
 // Fallback high-quality photography firm showcase images if firm has minimal uploads
 const FALLBACK_FIRM_PORTFOLIO = [
@@ -257,13 +257,13 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 16,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#0F172A",
     letterSpacing: -0.3,
   },
   headerSubtitle: {
     fontSize: 11.5,
-    fontWeight: "600",
+    fontWeight: fontWeights.subheading,
     color: "#64748B",
     marginTop: 1,
   },
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
   },
   photoCountText: {
     fontSize: 11.5,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#EA580C",
   },
   scrollContent: {
@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
   },
   introBannerText: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: fontWeights.subheading,
     color: "#C2410C",
     flex: 1,
   },
@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
   },
   imageOverlayNumber: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: fontWeights.heading,
     color: "#FFFFFF",
   },
   galleryFooter: {
@@ -355,7 +355,7 @@ const styles = StyleSheet.create({
   },
   galleryFooterTitle: {
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#0F172A",
   },
   galleryFooterSubtitle: {
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
   },
   backToProfileBtnText: {
     fontSize: 12.5,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#0F172A",
   },
   centerBox: {

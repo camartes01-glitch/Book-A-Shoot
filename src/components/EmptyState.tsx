@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View } from "react-native";
-import { colors, spacing } from "@/src/constants/theme";
+import { colors, fontWeights, spacing } from "@/src/constants/theme";
 import { Button } from "@/src/components/ui";
 
 export function EmptyState({
@@ -31,6 +31,6 @@ export function EmptyState({
 
 const styles = StyleSheet.create({
   wrap: { alignItems: "center", gap: spacing.sm, paddingVertical: spacing.md, paddingHorizontal: spacing.sm },
-  title: { fontSize: 16, fontWeight: "800", color: colors.ink, textAlign: "center" },
+  title: { fontSize: 16, fontWeight: fontWeights.heading, color: colors.ink, textAlign: "center" },
   body: { fontSize: 13, color: colors.muted, textAlign: "center", lineHeight: 19 },
 });

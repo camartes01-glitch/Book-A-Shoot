@@ -2,7 +2,6 @@ import React, { useState, useMemo, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Dimensions,
   ImageBackground,
   KeyboardAvoidingView,
   Modal,
@@ -13,32 +12,23 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
-import {
-  ArrowLeft,
-  Calendar,
-  Camera,
-  Check,
-  ChevronRight,
-  Plus,
-  Search,
-  Video,
-  X,
-} from "lucide-react-native";
+import { ArrowLeft, Search, X, ChevronRight } from "lucide-react-native";
+import { getEventIcon } from "@/src/components/EventCategoryIcon";
 import { useAppStore } from "@/src/state/AppProvider";
 import {
   DEFAULT_EVENT_CATEGORIES,
   HOME_QUICK_PICKS,
   REAL_CELEBRATION_ITEMS,
-  EVENT_TAGLINES,
   EVENT_GROUP_LABEL,
   getEventTagline,
+  POOJA_EVENT_TYPE_IDS,
 } from "@/src/constants/eventCategories";
-import { categoryImageFor } from "@/src/constants/homeMedia";
-import { colors, elevation, radius, radiusSm, spacing } from "@/src/constants/theme";
+import { colors, radius, radiusSm, spacing } from "@/src/constants/theme";
 import { selectionFeedback } from "@/src/utils/haptics";
 import * as bookingApi from "@/src/services/bookingApi";
 
@@ -68,7 +58,23 @@ const QUICK_SUGGESTIONS = [
   "Fashion Showcase",
 ];
 
+interface EventVisualConfig {
+  icon: (props: { size?: number; color?: string }) => React.ReactElement;
+  iconColor: string;
+  bgColor: string;
+}
+
+function getEventVisualConfig(id: string, _group?: string): EventVisualConfig {
+  return {
+    icon: (p: { size?: number; color?: string }) =>
+      getEventIcon(id, p.size ?? 20, p.color ?? colors.primary),
+    iconColor: colors.primary,
+    bgColor: "#FFF7ED",
+  };
+}
+
 export default function AllEventsScreen() {
+  const { width: W } = useWindowDimensions();
   const { startNewBooking, loadDraft } = useAppStore();
   const params = useLocalSearchParams<{ tab?: string }>();
   const [searchQuery, setSearchQuery] = useState("");
@@ -80,7 +86,18 @@ export default function AllEventsScreen() {
   const [starting, setStarting] = useState(false);
   const startingRef = useRef(false);
 
-  // Build the unified catalog of all events mentioned in the app + database
+  const isWide = W >= 768;
+  const isTablet = W >= 540 && W < 768;
+
+  // Responsive layout width & column calculations
+  const maxContentWidth = isWide ? 960 : 440;
+  const contentWidth = Math.min(W, maxContentWidth);
+  const numColumns = isWide ? 3 : isTablet ? 3 : 2;
+  const gridGap = 10;
+  const usableWidth = contentWidth - 32;
+  const cardWidth = Math.floor((usableWidth - gridGap * (numColumns - 1)) / numColumns);
+
+  // Build the unified catalog of all events with Pooja consolidated into one single card
   const fullCatalog: CatalogItem[] = useMemo(() => {
     const items: CatalogItem[] = [];
 
@@ -97,15 +114,33 @@ export default function AllEventsScreen() {
       });
     });
 
-    // 2. All Database Event Categories
+    // 2. All Database Event Categories (Pooja entries combined into a single "Pooja" card)
+    let poojaAdded = false;
+
     DEFAULT_EVENT_CATEGORIES.forEach((cat) => {
+      if (cat.group === "pooja") {
+        if (!poojaAdded) {
+          poojaAdded = true;
+          items.push({
+            id: "pooja",
+            label: "Pooja",
+            tagline: "Vedic rituals, festive blessings, homams & housewarming poojas",
+            group: "pooja",
+            badgeLabel: "POOJA",
+            isPopular: true,
+            isRealCelebration: false,
+          });
+        }
+        return;
+      }
+
       const isPopular = HOME_QUICK_PICKS.includes(cat.id);
       items.push({
         id: cat.id,
         label: cat.label,
         tagline: getEventTagline(cat.id),
         group: cat.group,
-        badgeLabel: isPopular ? "POPULAR" : EVENT_GROUP_LABEL[cat.group].toUpperCase(),
+        badgeLabel: isPopular ? "POPULAR" : (EVENT_GROUP_LABEL[cat.group] ?? cat.group).toUpperCase(),
         isPopular,
         isRealCelebration: false,
       });
@@ -138,12 +173,40 @@ export default function AllEventsScreen() {
       if (query.split(/\s+/).some((p) => p.length > 0 && (label.includes(p) || id.includes(p)))) {
         return true;
       }
-      if (item.group === "pooja" && (query.includes("pooja") || query.includes("puja"))) {
-        return true;
+      // Single Pooja search resolution covering all pooja subtypes
+      if (item.group === "pooja") {
+        const poojaSubnames = [
+          "pooja",
+          "puja",
+          "ganesh",
+          "satyanarayan",
+          "gruha pravesh",
+          "lakshmi",
+          "saraswati",
+          "navratri",
+          "diwali",
+          "durga",
+          "varalakshmi",
+          "vratham",
+          "havan",
+          "homam",
+          "vastu",
+        ];
+        if (poojaSubnames.some((n) => query.includes(n) || n.includes(query))) {
+          return true;
+        }
       }
       return false;
     });
   }, [fullCatalog, activeTab, searchQuery]);
+
+  // Extract popular events list for the horizontal popular row (NO "View all" button)
+  const popularItems = useMemo(() => {
+    const picks = ["wedding", "pre_wedding", "birthday", "baby_shoot", "pooja", "engagement", "haldi"];
+    return picks
+      .map((id) => fullCatalog.find((item) => item.id === id))
+      .filter((item): item is CatalogItem => Boolean(item));
+  }, [fullCatalog]);
 
   const openWizardDay = (dayId: string | undefined) => {
     if (!dayId) {
@@ -154,7 +217,7 @@ export default function AllEventsScreen() {
     router.push(`/booking/day/${dayId}`);
   };
 
-  // Select an event and initiate booking
+  // Select an event and initiate booking (Preserving all existing business logic)
   const handleSelectEvent = async (item: CatalogItem) => {
     if (startingRef.current) return;
     startingRef.current = true;
@@ -167,13 +230,11 @@ export default function AllEventsScreen() {
 
       if (firstDay) {
         if (item.id === "drone") {
-          // Aerial drone specialty coverage
           await bookingApi.updateDay(booking.bookingId, firstDay.dayId, {
             eventTypeIds: ["corporate_event"],
             aerial: { drones: 1 },
           });
         } else if (item.id === "led_wall") {
-          // Live stage LED wall specialty
           await bookingApi.updateDay(booking.bookingId, firstDay.dayId, {
             eventTypeIds: ["corporate_event"],
             ledWall: { enabled: true, size: "12x8 ft", screenCount: 1 },
@@ -183,7 +244,7 @@ export default function AllEventsScreen() {
             eventTypeIds: ["mehendi"],
           });
         } else {
-          // Standard database event category
+          // Standard database event category (including consolidated "pooja")
           await bookingApi.updateDay(booking.bookingId, firstDay.dayId, {
             eventTypeIds: [item.id],
           });
@@ -191,7 +252,7 @@ export default function AllEventsScreen() {
         await loadDraft(booking.bookingId);
       }
       openWizardDay(firstDay?.dayId);
-    } catch (err) {
+    } catch {
       Alert.alert("Unable to start booking", "Please check your network and try again.");
     } finally {
       startingRef.current = false;
@@ -199,7 +260,7 @@ export default function AllEventsScreen() {
     }
   };
 
-  // Submit custom event
+  // Submit custom event (Preserving all existing custom-event functionality)
   const handleStartCustomEvent = async (nameToUse?: string) => {
     const raw = (nameToUse ?? customEventName).trim();
     if (!raw) {
@@ -218,7 +279,6 @@ export default function AllEventsScreen() {
       const firstDay = booking.days[0];
 
       if (firstDay) {
-        // Save custom event title in day's eventTypeIds and booking.eventName
         await bookingApi.updateDay(booking.bookingId, firstDay.dayId, {
           eventTypeIds: [raw],
         });
@@ -226,7 +286,7 @@ export default function AllEventsScreen() {
       }
       setCustomEventName("");
       openWizardDay(firstDay?.dayId);
-    } catch (err) {
+    } catch {
       Alert.alert("Unable to start booking", "Please check your network and try again.");
     } finally {
       startingRef.current = false;
@@ -240,7 +300,7 @@ export default function AllEventsScreen() {
     { id: "real_celebrations", label: "Real Celebrations" },
     { id: "wedding", label: "Weddings" },
     { id: "personal", label: "Personal" },
-    { id: "pooja", label: "Poojas" },
+    { id: "pooja", label: "Pooja" },
     { id: "commercial", label: "Commercial" },
   ];
 
@@ -259,228 +319,236 @@ export default function AllEventsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
-      {/* Top Navigation Bar */}
-      <View style={styles.headerBar}>
-        <Pressable
-          onPress={handleBack}
-          style={styles.backButton}
-          hitSlop={12}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
-        >
-          <ArrowLeft size={22} color={colors.text} />
-        </Pressable>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>All Celebrations & Events</Text>
-          <Text style={styles.headerSubtitle}>Explore {fullCatalog.length}+ event types or plan a custom shoot</Text>
-        </View>
-      </View>
-
-      {/* Search Input Bar */}
-      <View style={styles.searchSection}>
-        <View style={styles.searchContainer}>
-          <Search size={18} color={colors.muted} style={styles.searchIcon} />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder="Search weddings, birthdays, poojas, shoots..."
-            placeholderTextColor={colors.muted}
-            style={styles.searchInput}
-            returnKeyType="search"
-            clearButtonMode="never"
-          />
-          {searchQuery.length > 0 ? (
-            <Pressable
-              onPress={() => setSearchQuery("")}
-              hitSlop={8}
-              style={styles.clearSearchBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Clear search"
-            >
-              <X size={16} color={colors.muted} />
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
-
-      {/* Filter Tabs Horizontal Scroll */}
-      <View style={styles.tabsWrapper}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tabsContainer}
-        >
-          {tabs.map((tab) => {
-            const isSelected = activeTab === tab.id;
-            return (
-              <Pressable
-                key={tab.id}
-                onPress={() => {
-                  void selectionFeedback();
-                  setActiveTab(tab.id);
-                }}
-                style={[styles.tabChip, isSelected && styles.tabChipActive]}
-                accessibilityRole="button"
-                accessibilityLabel={tab.label}
-              >
-                <Text style={[styles.tabChipText, isSelected && styles.tabChipTextActive]}>
-                  {tab.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-      {/* Main Content Area */}
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Prominent Custom Event Banner */}
-        <Pressable
-          style={styles.customBanner}
-          onPress={() => {
-            void selectionFeedback();
-            setCustomModalVisible(true);
-          }}
-          accessibilityRole="button"
-          accessibilityLabel="Plan a custom event"
-        >
-          <LinearGradient
-            colors={["#FFF7ED", "#FFEDD5"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.customBannerGradient}
+      <View style={[styles.mainContainer, isWide && styles.mainContainerWide]}>
+        {/* ── 1. Compact Header Bar ──────────────────────────────────── */}
+        <View style={styles.headerBar}>
+          <Pressable
+            onPress={handleBack}
+            style={styles.backButton}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
           >
-            <View style={styles.customBannerContent}>
-              <View style={styles.customBannerHeaderRow}>
-                <Text style={styles.customBannerTitle}>Plan a Custom Event</Text>
-                <View style={styles.customBadge}>
-                  <Text style={styles.customBadgeText}>SPECIAL</Text>
-                </View>
-              </View>
-              <Text style={styles.customBannerDesc}>
-                Planning a unique milestone, college fest, expo, or private celebration? Tell us what you're planning.
-              </Text>
-              <View style={styles.customBannerActionRow}>
-                <Text style={styles.customBannerActionText}>Customize your event shoot</Text>
-                <ChevronRight size={16} color={colors.primaryDark} />
-              </View>
-            </View>
-          </LinearGradient>
-        </Pressable>
-
-        {/* Section Header */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.catalogHeading}>
-            {activeTab === "all"
-              ? "All Event Types"
-              : activeTab === "popular"
-              ? "Popular Events"
-              : activeTab === "real_celebrations"
-              ? "Real Celebrations & Portfolio"
-              : `${EVENT_GROUP_LABEL[activeTab as keyof typeof EVENT_GROUP_LABEL] ?? activeTab} Events`}
-          </Text>
-          <Text style={styles.catalogCount}>
-            {filteredCatalog.length} available
-          </Text>
+            <ArrowLeft size={20} color={colors.primary} />
+          </Pressable>
+          <View style={styles.headerTextWrap}>
+            <Text style={styles.headerTitle}>All Celebrations & Events</Text>
+            <Text style={styles.headerSubtitle}>
+              Explore {fullCatalog.length}+ event types or plan a custom shoot
+            </Text>
+          </View>
         </View>
 
-        {/* 2-Column Events Grid */}
-        {filteredCatalog.length > 0 ? (
-          <View style={styles.grid}>
-            {/* Custom Event Card also placed directly inside the grid for discoverability */}
-            <Pressable
-              onPress={() => {
-                void selectionFeedback();
-                setCustomModalVisible(true);
-              }}
-              style={[styles.eventCard, styles.customEventGridCard]}
-              accessibilityRole="button"
-              accessibilityLabel="Add custom event"
-            >
-              <LinearGradient
-                colors={["#FF6B35", "#EA580C"]}
-                style={styles.customGridGradient}
+        {/* ── 2. Clean Search Input Bar ──────────────────────────────── */}
+        <View style={styles.searchSection}>
+          <View style={styles.searchContainer}>
+            <Search size={18} color={colors.primary} style={styles.searchIcon} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search weddings, birthdays, poojas, shoots..."
+              placeholderTextColor="#94A3B8"
+              style={styles.searchInput}
+              returnKeyType="search"
+              clearButtonMode="never"
+            />
+            {searchQuery.length > 0 ? (
+              <Pressable
+                onPress={() => setSearchQuery("")}
+                hitSlop={8}
+                style={styles.clearSearchBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
               >
-                <View style={styles.customGridIconCircle}>
-                  <Plus size={24} color={colors.white} />
-                </View>
-                <View>
-                  <Text style={styles.customGridCardTitle}>Custom Event</Text>
-                  <Text style={styles.customGridCardDesc}>
-                    Can't find your event? Type any celebration name
-                  </Text>
-                </View>
-              </LinearGradient>
-            </Pressable>
+                <X size={16} color={colors.primary} />
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
 
-            {/* All Catalog Event Cards */}
-            {filteredCatalog.map((item) => {
-              const imageSource = categoryImageFor(item.id);
+        {/* ── 3. Category / Filter Chips (Horizontally Scrollable) ──── */}
+        <View style={styles.tabsWrapper}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabsContainer}
+          >
+            {tabs.map((tab) => {
+              const isSelected = activeTab === tab.id;
               return (
                 <Pressable
-                  key={item.id}
-                  onPress={() => handleSelectEvent(item)}
-                  style={styles.eventCard}
+                  key={tab.id}
+                  onPress={() => {
+                    void selectionFeedback();
+                    setActiveTab(tab.id);
+                  }}
+                  style={[styles.tabChip, isSelected && styles.tabChipActive]}
                   accessibilityRole="button"
-                  accessibilityLabel={`${item.label} - ${item.tagline}`}
+                  accessibilityLabel={tab.label}
                 >
-                  <ImageBackground
-                    source={imageSource}
-                    style={styles.eventCardImage}
-                    imageStyle={styles.eventCardImageRadius}
-                    resizeMode="cover"
-                  >
-                    <LinearGradient
-                      colors={["rgba(17,10,4,0.15)", "rgba(17,10,4,0.45)", "rgba(17,10,4,0.92)"]}
-                      style={styles.eventCardGradient}
-                    >
-                      {/* Top Badge */}
-                      <View style={styles.cardBadge}>
-                        <Text style={styles.cardBadgeText}>{item.badgeLabel}</Text>
-                      </View>
-
-                      {/* Bottom Info */}
-                      <View style={styles.cardBottomInfo}>
-                        <Text style={styles.cardTitle} numberOfLines={1}>
-                          {item.label}
-                        </Text>
-                        <Text style={styles.cardTagline} numberOfLines={2}>
-                          {item.tagline}
-                        </Text>
-                      </View>
-                    </LinearGradient>
-                  </ImageBackground>
+                  <Text style={[styles.tabChipText, isSelected && styles.tabChipTextActive]}>
+                    {tab.label}
+                  </Text>
                 </Pressable>
               );
             })}
-          </View>
-        ) : (
-          /* Empty Search State */
-          <View style={styles.emptyState}>
-            <Search size={36} color={colors.muted} style={{ marginBottom: 12 }} />
-            <Text style={styles.emptyTitle}>No events matching "{searchQuery}"</Text>
-            <Text style={styles.emptyDesc}>
-              You can easily book "{searchQuery}" as a custom event and get matched with top photographers.
-            </Text>
-            <Pressable
-              onPress={() => handleStartCustomEvent(searchQuery)}
-              style={styles.emptyActionButton}
-              accessibilityRole="button"
-              accessibilityLabel={`Book ${searchQuery} as custom event`}
-            >
-              <Text style={styles.emptyActionText}>
-                Book "{searchQuery}" as Custom Event
-              </Text>
-            </Pressable>
-          </View>
-        )}
-      </ScrollView>
+          </ScrollView>
+        </View>
 
-      {/* Loading Overlay */}
+        {/* ── Main Scrollable Body ───────────────────────────────────── */}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* ── 4. Prominent Custom Event Card (Uses /public/customevent.png) ─ */}
+          <Pressable
+            style={styles.customBanner}
+            onPress={() => {
+              void selectionFeedback();
+              setCustomModalVisible(true);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Plan a custom event"
+          >
+            <ImageBackground
+              source={require("@/public/customevent.png")}
+              style={styles.customBannerBg}
+              imageStyle={styles.customBannerImageRadius}
+              resizeMode="cover"
+            >
+              <LinearGradient
+                colors={[
+                  "rgba(255, 247, 237, 0.96)",
+                  "rgba(255, 247, 237, 0.88)",
+                  "rgba(255, 247, 237, 0.45)",
+                  "rgba(255, 247, 237, 0.05)",
+                ]}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 0.82, y: 0.5 }}
+                style={styles.customBannerOverlay}
+              >
+                <View style={styles.customBannerContent}>
+                  <View style={styles.customBadge}>
+                    <Text style={styles.customBadgeText}>SPECIAL</Text>
+                  </View>
+                  <Text style={styles.customBannerTitle}>
+                    Plan a <Text style={styles.customBannerTitleOrange}>Custom Event</Text>
+                  </Text>
+                  <Text style={styles.customBannerDesc} numberOfLines={2}>
+                    Planning a unique milestone, college fest, expo, or private celebration? Tell us what you're planning.
+                  </Text>
+                  <View style={styles.customBannerCtaBtn}>
+                    <Text style={styles.customBannerCtaText}>Customize your event shoot →</Text>
+                  </View>
+                </View>
+              </LinearGradient>
+            </ImageBackground>
+          </Pressable>
+
+          {/* ── 5. Popular Events Section (NO VIEW ALL BUTTON) ────────── */}
+          {!searchQuery && activeTab === "all" ? (
+            <View style={styles.popularSection}>
+              <Text style={styles.sectionHeading}>Popular Events</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.popularScrollContent}
+              >
+                {popularItems.map((item) => {
+                  const visual = getEventVisualConfig(item.id, item.group);
+                  const IconComp = visual.icon;
+                  return (
+                    <Pressable
+                      key={`popular-${item.id}`}
+                      style={({ pressed }) => [styles.popularTile, pressed && styles.pressed]}
+                      onPress={() => handleSelectEvent(item)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Book ${item.label}`}
+                    >
+                      <View style={[styles.popularIconWrap, { backgroundColor: visual.bgColor }]}>
+                        <IconComp size={24} color={visual.iconColor} />
+                      </View>
+                      <Text style={styles.popularTileLabel} numberOfLines={1}>
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {/* ── 6. All Event Types (Compact Scannable Grid) ──────────── */}
+          <View style={styles.catalogSection}>
+            <View style={styles.catalogHeaderRow}>
+              <Text style={styles.sectionHeading}>
+                {activeTab === "all"
+                  ? "All Event Types"
+                  : activeTab === "popular"
+                  ? "Popular Events"
+                  : activeTab === "real_celebrations"
+                  ? "Real Celebrations"
+                  : `${EVENT_GROUP_LABEL[activeTab as keyof typeof EVENT_GROUP_LABEL] ?? activeTab} Events`}
+              </Text>
+              <Text style={styles.catalogCountText}>
+                {filteredCatalog.length} available
+              </Text>
+            </View>
+
+            {filteredCatalog.length > 0 ? (
+              <View style={styles.grid}>
+                {filteredCatalog.map((item) => {
+                  const visual = getEventVisualConfig(item.id, item.group);
+                  const IconComp = visual.icon;
+                  return (
+                    <Pressable
+                      key={item.id}
+                      onPress={() => handleSelectEvent(item)}
+                      style={({ pressed }) => [
+                        styles.eventCard,
+                        { width: cardWidth },
+                        pressed && styles.pressed,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={item.label}
+                    >
+                      <View style={[styles.eventCardIconWrap, { backgroundColor: visual.bgColor }]}>
+                        <IconComp size={18} color={visual.iconColor} />
+                      </View>
+                      <Text style={styles.eventCardLabel} numberOfLines={1}>
+                        {item.label}
+                      </Text>
+                      <ChevronRight size={15} color={colors.primary} style={styles.eventCardChevron} />
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : (
+              /* Empty Search State */
+              <View style={styles.emptyState}>
+                <Search size={32} color={colors.primary} style={{ marginBottom: 10 }} />
+                <Text style={styles.emptyTitle}>No events matching "{searchQuery}"</Text>
+                <Text style={styles.emptyDesc}>
+                  You can easily book "{searchQuery}" as a custom event and get matched with top photographers.
+                </Text>
+                <Pressable
+                  onPress={() => handleStartCustomEvent(searchQuery)}
+                  style={styles.emptyActionButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Book ${searchQuery} as custom event`}
+                >
+                  <Text style={styles.emptyActionText}>
+                    Book "{searchQuery}" as Custom Event →
+                  </Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </View>
+
+      {/* ── Loading Overlay ────────────────────────────────────────── */}
       {starting ? (
         <View style={styles.loadingOverlay}>
           <View style={styles.loadingBox}>
@@ -490,7 +558,7 @@ export default function AllEventsScreen() {
         </View>
       ) : null}
 
-      {/* Interactive Custom Event Modal */}
+      {/* ── Interactive Custom Event Modal (Preserved Functionality) ── */}
       <Modal
         visible={customModalVisible}
         animationType="slide"
@@ -508,7 +576,6 @@ export default function AllEventsScreen() {
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
 
-            {/* Modal Header */}
             <View style={styles.modalHeaderRow}>
               <View>
                 <Text style={styles.modalTitle}>Plan a Custom Event</Text>
@@ -521,11 +588,10 @@ export default function AllEventsScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Close dialog"
               >
-                <X size={20} color={colors.muted} />
+                <X size={20} color={colors.primary} />
               </Pressable>
             </View>
 
-            {/* Custom Event Name Input */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Event / Celebration Name</Text>
               <TextInput
@@ -540,7 +606,6 @@ export default function AllEventsScreen() {
               />
             </View>
 
-            {/* Quick Suggestions */}
             <View style={styles.suggestionsSection}>
               <Text style={styles.suggestionsLabel}>Popular Custom Occasions</Text>
               <View style={styles.suggestionsChipsRow}>
@@ -574,7 +639,6 @@ export default function AllEventsScreen() {
               </View>
             </View>
 
-            {/* Action Buttons */}
             <View style={styles.modalActions}>
               <Pressable
                 onPress={() => handleStartCustomEvent()}
@@ -596,431 +660,501 @@ export default function AllEventsScreen() {
   );
 }
 
-const screenWidth = Dimensions.get("window").width;
-const cardWidth = (screenWidth - spacing.lg * 2 - 12) / 2;
+// ─────────────────────────────────────────────────────────────────────────────
+// Production-Grade Compact & Scannable Stylesheet
+// ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: "#FFFDF9",
   },
+  mainContainer: {
+    flex: 1,
+    width: "100%",
+    maxWidth: 440,
+    alignSelf: "center",
+    backgroundColor: "#FFFDF9",
+  },
+  mainContainerWide: {
+    maxWidth: 960,
+  },
+  pressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.985 }],
+  },
+
+  // ── Header Bar ─────────────────────────────────────────────────────────────
   headerBar: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    gap: spacing.md,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
+    gap: 12,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.border,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#EDE8E1",
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  headerTextWrap: {
+    flex: 1,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: colors.text,
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0F172A",
     letterSpacing: -0.3,
   },
   headerSubtitle: {
     fontSize: 12,
-    color: colors.muted,
-    marginTop: 2,
+    color: "#64748B",
+    marginTop: 1,
   },
+
+  // ── Search Bar ─────────────────────────────────────────────────────────────
   searchSection: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 8,
   },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.card,
-    borderRadius: radiusSm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 999,
     height: 46,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "#EDE8E1",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
   },
   searchIcon: {
-    marginRight: spacing.sm,
+    marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
-    color: colors.text,
-    paddingVertical: 0,
+    fontSize: 13.5,
+    color: "#0F172A",
+    paddingVertical: 6,
   },
   clearSearchBtn: {
-    padding: 4,
+    padding: 6,
   },
+
+  // ── Filter Chips ───────────────────────────────────────────────────────────
   tabsWrapper: {
-    marginVertical: spacing.xs,
+    marginBottom: 6,
   },
   tabsContainer: {
-    paddingHorizontal: spacing.lg,
-    gap: 8,
+    paddingHorizontal: 16,
     paddingVertical: 4,
+    gap: 8,
   },
   tabChip: {
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: colors.card,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: colors.peachBorder,
+    borderColor: "#EDE8E1",
   },
   tabChipActive: {
     backgroundColor: colors.primary,
-    borderColor: colors.primaryDark,
+    borderColor: colors.primary,
   },
   tabChipText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.text,
+    fontSize: 12.5,
+    fontWeight: "600",
+    color: "#475569",
   },
   tabChipTextActive: {
-    color: colors.white,
+    color: "#FFFFFF",
+    fontWeight: "600",
   },
+
+  // ── Scroll Content ─────────────────────────────────────────────────────────
   scrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xxl * 2,
-    gap: spacing.md,
+    paddingBottom: 60,
   },
+
+  // ── Custom Event Banner (Uses customevent.png) ─────────────────────────────
   customBanner: {
-    borderRadius: radius,
-    borderWidth: 1.5,
-    borderColor: colors.peachBorder,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 20,
+    borderRadius: 18,
     overflow: "hidden",
-    ...elevation.card,
+    borderWidth: 1,
+    borderColor: "rgba(255, 107, 53, 0.20)",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
+    backgroundColor: "#FCE7D6",
   },
-  customBannerGradient: {
-    padding: spacing.md,
+  customBannerBg: {
+    width: "100%",
+    minHeight: 160,
+  },
+  customBannerImageRadius: {
+    borderRadius: 18,
+  },
+  customBannerOverlay: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    justifyContent: "center",
   },
   customBannerContent: {
-    gap: 4,
-  },
-  customBannerHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  customBannerTitle: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: colors.primaryDark,
+    maxWidth: "68%",
+    gap: 5,
   },
   customBadge: {
+    alignSelf: "flex-start",
     backgroundColor: colors.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
     borderRadius: 6,
   },
   customBadgeText: {
-    color: colors.white,
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.5,
+    fontSize: 9.5,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.8,
+  },
+  customBannerTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0F172A",
+    letterSpacing: -0.4,
+  },
+  customBannerTitleOrange: {
+    color: colors.primary,
   },
   customBannerDesc: {
-    fontSize: 12,
-    color: colors.muted,
-    lineHeight: 16,
+    fontSize: 11,
+    color: "#475569",
+    lineHeight: 15,
   },
-  customBannerActionRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  customBannerCtaBtn: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 6.5,
+    borderRadius: 999,
     marginTop: 4,
-    gap: 2,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  customBannerActionText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.primaryDark,
-  },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 4,
-  },
-  catalogHeading: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: colors.text,
-  },
-  catalogCount: {
-    fontSize: 12,
+  customBannerCtaText: {
+    fontSize: 11.5,
     fontWeight: "600",
-    color: colors.muted,
+    color: "#FFFFFF",
+  },
+
+  // ── Popular Events (Horizontal Compact Tiles) ──────────────────────────────
+  popularSection: {
+    marginBottom: 20,
+  },
+  sectionHeading: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0F172A",
+    letterSpacing: -0.3,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  popularScrollContent: {
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  popularTile: {
+    width: 96,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#EDE8E1",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  popularIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  popularTileLabel: {
+    fontSize: 11.5,
+    fontWeight: "600",
+    color: "#0F172A",
+    textAlign: "center",
+  },
+
+  // ── All Event Types (Scannable Grid) ───────────────────────────────────────
+  catalogSection: {
+    paddingHorizontal: 16,
+  },
+  catalogHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  catalogCountText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#94A3B8",
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    gap: 10,
   },
   eventCard: {
-    width: cardWidth,
-    height: 154,
-    borderRadius: radius,
-    overflow: "hidden",
-    ...elevation.card,
+    height: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: "#EDE8E1",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  eventCardImage: {
-    flex: 1,
-  },
-  eventCardImageRadius: {
-    borderRadius: radius,
-  },
-  eventCardGradient: {
-    flex: 1,
-    padding: 10,
-    justifyContent: "space-between",
-  },
-  cardBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(17, 24, 39, 0.75)",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  cardBadgeText: {
-    color: colors.white,
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-  },
-  cardBottomInfo: {
-    gap: 2,
-  },
-  cardTitle: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: "800",
-    ...Platform.select({
-      web: {
-        textShadow: "0px 1px 3px rgba(0, 0, 0, 0.6)",
-      } as any,
-      default: {
-        textShadowColor: "rgba(0, 0, 0, 0.6)",
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 3,
-      },
-    }),
-  },
-  cardTagline: {
-    color: "rgba(255, 255, 255, 0.85)",
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: "500",
-  },
-  customEventGridCard: {
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-  },
-  customGridGradient: {
-    flex: 1,
-    padding: 12,
-    justifyContent: "space-between",
-  },
-  customGridIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "rgba(255, 255, 255, 0.25)",
+  eventCardIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 9,
   },
-  customGridCardTitle: {
-    color: colors.white,
-    fontSize: 15,
-    fontWeight: "800",
-    marginBottom: 4,
+  eventCardLabel: {
+    flex: 1,
+    fontSize: 12.5,
+    fontWeight: "600",
+    color: "#0F172A",
+    letterSpacing: -0.2,
   },
-  customGridCardDesc: {
-    color: "rgba(255, 255, 255, 0.9)",
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: "500",
+  eventCardChevron: {
+    marginLeft: 4,
   },
+
+  // ── Empty State ────────────────────────────────────────────────────────────
   emptyState: {
+    padding: 32,
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: spacing.xxl,
-    paddingHorizontal: spacing.lg,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#EDE8E1",
+    marginTop: 8,
   },
   emptyTitle: {
     fontSize: 16,
-    fontWeight: "800",
-    color: colors.text,
-    textAlign: "center",
+    fontWeight: "700",
+    color: "#0F172A",
     marginBottom: 6,
+    textAlign: "center",
   },
   emptyDesc: {
     fontSize: 13,
-    color: colors.muted,
+    color: "#64748B",
     textAlign: "center",
     lineHeight: 18,
-    marginBottom: spacing.lg,
+    marginBottom: 16,
   },
   emptyActionButton: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: colors.primary,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderRadius: radiusSm,
+    borderRadius: 999,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
   },
   emptyActionText: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
   },
+
+  // ── Loading Overlay ────────────────────────────────────────────────────────
   loadingOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: "rgba(0, 0, 0, 0.4)",
-    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.40)",
     justifyContent: "center",
+    alignItems: "center",
     zIndex: 999,
   },
   loadingBox: {
-    backgroundColor: colors.card,
-    borderRadius: radius,
-    padding: spacing.xl,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 24,
     alignItems: "center",
-    gap: spacing.md,
-    ...elevation.raised,
+    gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
   loadingText: {
     fontSize: 14,
-    fontWeight: "700",
-    color: colors.text,
+    fontWeight: "600",
+    color: "#0F172A",
   },
+
+  // ── Custom Event Modal ─────────────────────────────────────────────────────
   modalBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    backgroundColor: "rgba(0, 0, 0, 0.50)",
     justifyContent: "flex-end",
   },
   modalDismissArea: {
     flex: 1,
   },
   modalSheet: {
-    backgroundColor: colors.card,
+    backgroundColor: "#FFFFFF",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: Platform.OS === "ios" ? 40 : spacing.xl,
-    gap: spacing.lg,
-    ...elevation.raised,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === "ios" ? 36 : 24,
+    maxHeight: "85%",
   },
   modalHandle: {
-    width: 44,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: colors.border,
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#CBD5E1",
     alignSelf: "center",
+    marginBottom: 14,
   },
   modalHeaderRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
+    marginBottom: 18,
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: "800",
-    color: colors.text,
+    fontWeight: "700",
+    color: "#0F172A",
   },
   modalSubtitle: {
     fontSize: 12,
-    color: colors.muted,
+    color: "#64748B",
+    marginTop: 2,
   },
   modalCloseBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.bg,
-    alignItems: "center",
-    justifyContent: "center",
+    padding: 6,
   },
   inputGroup: {
-    gap: 6,
+    marginBottom: 16,
   },
   inputLabel: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.text,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#475569",
+    marginBottom: 6,
   },
   customTextInput: {
-    backgroundColor: colors.bg,
-    borderWidth: 1.5,
-    borderColor: colors.peachBorder,
-    borderRadius: radiusSm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: 15,
-    color: colors.text,
-    fontWeight: "600",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#EDE8E1",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: "#0F172A",
   },
   suggestionsSection: {
-    gap: spacing.xs,
+    marginBottom: 20,
   },
   suggestionsLabel: {
     fontSize: 12,
-    fontWeight: "700",
-    color: colors.muted,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    fontWeight: "600",
+    color: "#475569",
+    marginBottom: 8,
   },
   suggestionsChipsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginTop: 4,
   },
   suggestionChip: {
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 16,
-    backgroundColor: colors.bg,
+    borderRadius: 999,
+    backgroundColor: "#F8FAFC",
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "#EDE8E1",
   },
   suggestionChipSelected: {
-    backgroundColor: colors.peach,
+    backgroundColor: "#FFF7ED",
     borderColor: colors.primary,
   },
   suggestionChipText: {
     fontSize: 12,
-    fontWeight: "600",
-    color: colors.text,
+    color: "#475569",
+    fontWeight: "500",
   },
   suggestionChipTextSelected: {
     color: colors.primaryDark,
     fontWeight: "700",
   },
   modalActions: {
-    marginTop: spacing.xs,
+    marginTop: 4,
   },
   confirmBtn: {
     backgroundColor: colors.primary,
-    borderRadius: radiusSm,
+    borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
   confirmBtnDisabled: {
     opacity: 0.5,
   },
   confirmBtnText: {
-    color: colors.white,
-    fontSize: 15,
+    color: "#FFFFFF",
+    fontSize: 14,
     fontWeight: "800",
   },
 });

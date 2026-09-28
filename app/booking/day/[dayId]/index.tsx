@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { Briefcase, CalendarPlus, Camera, Check, ChevronDown, ChevronUp, Film, Flame, Lock, MapPin, Plane, Radio, Sparkles, Tv, Video } from "lucide-react-native";
+import { Briefcase, CalendarPlus, Camera, Check, ChevronDown, ChevronUp, Film, Flame, Lock, MapPin, Plane, Radio, Sparkles, Tv, Video, X } from "lucide-react-native";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { Badge, Button, Card, Muted, SectionTitle } from "@/src/components/ui";
 import { Chip, ChipGroup } from "@/src/components/Chip";
@@ -38,8 +38,9 @@ import { sanitizeEventDay, hydrateEditorDay } from "@/src/domain/defaults";
 import * as bookingApi from "@/src/services/bookingApi";
 import { durationMinutes, formatDuration, inferOvernight, isEndAfterStart } from "@/src/utils/dateTime";
 import { normalizeRouteParam, safeBack } from "@/src/utils/routeParam";
+import { selectionFeedback } from "@/src/utils/haptics";
 import type { EventDay } from "@/src/types/booking";
-import { colors, radius, radiusSm, spacing } from "@/src/constants/theme";
+import { colors, fontWeights, radius, radiusSm, spacing } from "@/src/constants/theme";
 
 const GROUPS = ["wedding", "pooja", "personal", "commercial"] as const;
 
@@ -145,6 +146,7 @@ export default function DayEditorScreen() {
   const userNavigatedBackRef = useRef(false);
   const eventTransitionLockRef = useRef(false);
   const servicesTransitionLockRef = useRef(false);
+  const lastSyncedCustomEventRef = useRef<string | null>(null);
 
   useEffect(() => {
     activeDraftRef.current = activeDraft;
@@ -244,6 +246,22 @@ export default function DayEditorScreen() {
     );
   }, []);
 
+  const selectedCustomEventName = useMemo(() => {
+    if (!day?.eventTypeIds?.length) return null;
+    const custom = day.eventTypeIds.find(
+      (id) => !DEFAULT_EVENT_CATEGORIES.some((c) => c.id === id)
+    );
+    return custom ?? null;
+  }, [day?.eventTypeIds]);
+  const isCustomSelected = Boolean(selectedCustomEventName);
+
+  useEffect(() => {
+    if (selectedCustomEventName !== lastSyncedCustomEventRef.current) {
+      lastSyncedCustomEventRef.current = selectedCustomEventName;
+      setCustomEventInput(selectedCustomEventName ?? "");
+    }
+  }, [selectedCustomEventName]);
+
   if (!dayId) return null;
   if (!day) {
     return (
@@ -331,9 +349,25 @@ export default function DayEditorScreen() {
   const onApplyCustomEvent = (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
+    void selectionFeedback();
     setIsWeddingMode(false);
+    lastSyncedCustomEventRef.current = trimmed;
     applyDay((prev) => ({ ...prev, eventTypeIds: [trimmed] }), "event");
+    setCustomEventInput(trimmed);
     scrollToElementId("date-time-section", dateTimeLocationY);
+  };
+
+  const onRemoveCustomEvent = () => {
+    void selectionFeedback();
+    setCustomEventInput("");
+    lastSyncedCustomEventRef.current = null;
+    applyDay(
+      (prev) => ({
+        ...prev,
+        eventTypeIds: prev.eventTypeIds.filter((id) => DEFAULT_EVENT_CATEGORIES.some((c) => c.id === id)),
+      }),
+      "event",
+    );
   };
 
   const onAddAnotherDay = async () => {
@@ -542,7 +576,7 @@ export default function DayEditorScreen() {
                     onSelectOtherEventCard(c.id);
                   }
                 }}
-                height={110}
+                height={48}
               />
             );
           })}
@@ -552,31 +586,100 @@ export default function DayEditorScreen() {
         ) : null}
 
         {/* Custom Celebration Input Card */}
-        <View style={styles.customEventBox}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Sparkles size={16} color={colors.primaryDark} />
+        <View style={[styles.customEventBox, isCustomSelected && styles.customEventBoxSelected]}>
+          <View style={styles.customEventHeaderRow}>
             <Text style={styles.customEventBoxTitle}>Planning a different celebration?</Text>
+            {isCustomSelected ? (
+              <View style={styles.customSelectedBadge}>
+                <Check size={11} color={colors.white} strokeWidth={2.8} />
+                <Text style={styles.customSelectedBadgeText}>Selected</Text>
+              </View>
+            ) : null}
           </View>
+
+          {isCustomSelected ? (
+            <View style={styles.customActiveSelectionRow}>
+              <View style={styles.customActiveIconBadge}>
+                <Check size={13} color={colors.primaryDark} strokeWidth={2.8} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.customActiveNotice}>Selected Event for Day {day.order}</Text>
+                <Text style={styles.customActiveEventName}>{selectedCustomEventName}</Text>
+              </View>
+              <Pressable
+                onPress={onRemoveCustomEvent}
+                hitSlop={8}
+                style={({ pressed }) => [styles.customUndoSelectionBtn, pressed && { opacity: 0.7 }]}
+                accessibilityRole="button"
+                accessibilityLabel="Undo selected custom celebration"
+              >
+                <X size={12} color="#C2410C" strokeWidth={2.5} />
+                <Text style={styles.customUndoSelectionText}>Undo</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           <View style={styles.customEventInputRow}>
-            <TextInput
-              style={styles.customEventInput}
-              placeholder="e.g. Sangeet, Housewarming, Naming ceremony..."
-              placeholderTextColor="#94A3B8"
-              value={customEventInput}
-              onChangeText={setCustomEventInput}
-              onSubmitEditing={() => onApplyCustomEvent(customEventInput)}
-              returnKeyType="done"
-            />
+            <View style={[styles.customInputContainer, isCustomSelected && styles.customInputContainerActive]}>
+              <TextInput
+                style={styles.customEventInput}
+                placeholder="e.g. Sangeet, Silver Jubilee, Naming ceremony..."
+                placeholderTextColor="#94A3B8"
+                value={customEventInput}
+                onChangeText={setCustomEventInput}
+                onSubmitEditing={() => onApplyCustomEvent(customEventInput)}
+                returnKeyType="done"
+              />
+              {customEventInput.length > 0 ? (
+                <Pressable
+                  onPress={() => setCustomEventInput("")}
+                  hitSlop={8}
+                  style={styles.customClearInputBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear typed event name"
+                >
+                  <X size={14} color="#94A3B8" strokeWidth={2.2} />
+                </Pressable>
+              ) : null}
+            </View>
             <Pressable
               style={({ pressed }) => [
                 styles.customEventSubmitBtn,
-                !customEventInput.trim() && styles.customEventSubmitBtnDisabled,
+                !isCustomSelected && !customEventInput.trim() && styles.customEventSubmitBtnDisabled,
+                isCustomSelected &&
+                  customEventInput.trim().toLowerCase() === selectedCustomEventName?.toLowerCase() &&
+                  styles.customEventSubmitBtnActive,
+                isCustomSelected && !customEventInput.trim() && styles.customEventUndoBtn,
                 pressed && { opacity: 0.8 },
               ]}
-              disabled={!customEventInput.trim()}
-              onPress={() => onApplyCustomEvent(customEventInput)}
+              disabled={!isCustomSelected && !customEventInput.trim()}
+              onPress={() => {
+                if (isCustomSelected && !customEventInput.trim()) {
+                  onRemoveCustomEvent();
+                } else if (customEventInput.trim()) {
+                  onApplyCustomEvent(customEventInput);
+                }
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isCustomSelected && !customEventInput.trim() ? "Undo custom celebration" : "Select custom celebration"
+              }
             >
-              <Text style={styles.customEventSubmitText}>Select</Text>
+              <Text
+                style={[
+                  styles.customEventSubmitText,
+                  isCustomSelected && !customEventInput.trim() && styles.customEventUndoText,
+                ]}
+              >
+                {isCustomSelected && !customEventInput.trim()
+                  ? "Undo"
+                  : isCustomSelected &&
+                    customEventInput.trim().toLowerCase() === selectedCustomEventName?.toLowerCase()
+                  ? "Selected ✓"
+                  : isCustomSelected
+                  ? "Update"
+                  : "Select"}
+              </Text>
             </Pressable>
           </View>
         </View>
@@ -1155,14 +1258,14 @@ const styles = StyleSheet.create({
   },
   dropdownHeaderSub: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: colors.primaryDark,
     textTransform: "uppercase",
     letterSpacing: 0.6,
   },
   dropdownHeaderTitle: {
     fontSize: 16,
-    fontWeight: "900",
+    fontWeight: fontWeights.heading,
     color: colors.ink,
   },
   dropdownOptionsContainer: {
@@ -1198,7 +1301,7 @@ const styles = StyleSheet.create({
   },
   dropdownOptionLabel: {
     fontSize: 14.5,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: colors.ink,
   },
   dropdownOptionLabelSelected: {
@@ -1225,7 +1328,7 @@ const styles = StyleSheet.create({
   },
   activeBadgeText: {
     fontSize: 11,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: colors.primaryDark,
   },
   disabledBadge: {
@@ -1274,7 +1377,7 @@ const styles = StyleSheet.create({
   },
   actionOptionTitle: {
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: colors.ink,
     flex: 1,
   },
@@ -1321,7 +1424,7 @@ const styles = StyleSheet.create({
   },
   otherGroupTitle: {
     fontSize: 12.5,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#0F172A",
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -1350,12 +1453,12 @@ const styles = StyleSheet.create({
   },
   otherCategoryLabel: {
     fontSize: 13.5,
-    fontWeight: "700",
+    fontWeight: fontWeights.heading,
     color: "#1E293B",
   },
   otherCategoryLabelSelected: {
     color: "#EA580C",
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
   },
   otherCategoryTagline: {
     fontSize: 11,
@@ -1451,9 +1554,64 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 4,
   },
+  customEventBoxSelected: {
+    backgroundColor: "#FFF7ED",
+    borderColor: colors.primary,
+    borderWidth: 1.5,
+  },
+  customEventHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  customSelectedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 99,
+  },
+  customSelectedBadgeText: {
+    fontSize: 10.5,
+    fontWeight: fontWeights.heading,
+    color: colors.white,
+  },
+  customActiveSelectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FFFFFF",
+    borderRadius: radiusSm,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+  },
+  customActiveIconBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#FFEDD5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  customActiveNotice: {
+    fontSize: 10.5,
+    fontWeight: fontWeights.subheading,
+    color: colors.primaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  customActiveEventName: {
+    fontSize: 13,
+    fontWeight: fontWeights.heading,
+    color: colors.ink,
+  },
   customEventBoxTitle: {
     fontSize: 13.5,
-    fontWeight: "800",
+    fontWeight: fontWeights.heading,
     color: "#0F172A",
   },
   customEventInputRow: {
@@ -1461,17 +1619,45 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
   },
-  customEventInput: {
+  customInputContainer: {
     flex: 1,
-    height: 44,
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: colors.white,
     borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: radiusSm,
+    paddingRight: 6,
+  },
+  customInputContainerActive: {
+    borderColor: colors.primary,
+  },
+  customEventInput: {
+    flex: 1,
+    height: 44,
     paddingHorizontal: 12,
     fontSize: 13.5,
     color: colors.ink,
     fontWeight: "600",
+  },
+  customClearInputBtn: {
+    padding: 6,
+  },
+  customUndoSelectionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  customUndoSelectionText: {
+    fontSize: 11,
+    fontWeight: fontWeights.heading,
+    color: "#C2410C",
   },
   customEventSubmitBtn: {
     height: 44,
@@ -1481,9 +1667,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  customEventSubmitBtnActive: {
+    backgroundColor: colors.primary,
+  },
   customEventSubmitBtnDisabled: {
     backgroundColor: "#CBD5E1",
     opacity: 0.7,
+  },
+  customEventUndoBtn: {
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1.5,
+    borderColor: "#FDBA74",
+  },
+  customEventUndoText: {
+    color: "#C2410C",
+    fontWeight: fontWeights.heading,
   },
   customEventSubmitText: {
     color: colors.white,

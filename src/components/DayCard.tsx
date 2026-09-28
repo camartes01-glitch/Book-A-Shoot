@@ -4,7 +4,7 @@ import type { EventDay } from "@/src/types/booking";
 import { DEFAULT_EVENT_CATEGORIES } from "@/src/constants/eventCategories";
 import { dayMissingLabels, isDayComplete } from "@/src/engine/validation";
 import { formatDateLong, formatTime12h } from "@/src/utils/format";
-import { colors, radius, spacing } from "@/src/constants/theme";
+import { colors, fontWeights, radius, spacing } from "@/src/constants/theme";
 
 function categoryLabel(id: string): string {
   return DEFAULT_EVENT_CATEGORIES.find((c) => c.id === id)?.label ?? id;
@@ -135,11 +135,11 @@ const styles = StyleSheet.create({
   cardComplete: { borderColor: colors.success, backgroundColor: "#F0FDF8" },
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   dayBadge: { backgroundColor: colors.peach, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
-  dayBadgeText: { fontSize: 11, fontWeight: "800", color: colors.primaryDark },
+  dayBadgeText: { fontSize: 11, fontWeight: fontWeights.heading, color: colors.primaryDark },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  completeText: { fontSize: 11, fontWeight: "800", color: colors.success },
-  incompleteText: { fontSize: 11, fontWeight: "800", color: colors.warning },
-  title: { fontSize: 15, fontWeight: "800", color: colors.ink },
+  completeText: { fontSize: 11, fontWeight: fontWeights.heading, color: colors.success },
+  incompleteText: { fontSize: 11, fontWeight: fontWeights.heading, color: colors.warning },
+  title: { fontSize: 15, fontWeight: fontWeights.heading, color: colors.ink },
   meta: { fontSize: 12, color: colors.muted, flexShrink: 1 },
   missing: { fontSize: 12, fontWeight: "700", color: colors.warning, marginTop: 2 },
   locationRow: { flexDirection: "row", alignItems: "center", gap: 4 },

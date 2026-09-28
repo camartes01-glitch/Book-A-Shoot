@@ -5,7 +5,7 @@ import { Button, Card, Divider, Muted, SectionTitle, Title } from "@/src/compone
 import { useAppStore } from "@/src/state/AppProvider";
 import { DEFAULT_EVENT_CATEGORIES } from "@/src/constants/eventCategories";
 import { formatDateLong, formatInr, formatPackageOverallLabel, formatTime12h } from "@/src/utils/format";
-import { colors } from "@/src/constants/theme";
+import { colors, fontWeights } from "@/src/constants/theme";
 import { selectedPackageQuote } from "@/src/engine/pricing";
 import type { EventDay } from "@/src/types/booking";
 
@@ -19,7 +19,7 @@ function DaySummary({ day }: { day: EventDay }) {
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <Title>Day {day.order}</Title>
           <Pressable onPress={() => router.push(`/booking/day/${day.dayId}`)} hitSlop={8} accessibilityLabel="Edit day">
-            <Muted style={{ color: colors.primaryDark, fontWeight: "800" }}>Edit</Muted>
+            <Muted style={{ color: colors.primaryDark, fontWeight: fontWeights.heading }}>Edit</Muted>
           </Pressable>
       </View>
       <Muted>{day.eventTypeIds.map(categoryLabel).join(" + ") || "—"}</Muted>
@@ -30,28 +30,28 @@ function DaySummary({ day }: { day: EventDay }) {
       <Muted>{day.location.formattedAddress || "—"}</Muted>
 
       {day.photography.traditional || day.photography.candid ? (
-        <Muted style={{ fontWeight: "700", color: colors.ink, marginTop: 4 }}>
+        <Muted style={{ fontWeight: fontWeights.heading, color: colors.ink, marginTop: 4 }}>
           Photography: {day.photography.traditional ? `Traditional ${day.photography.traditionalCount}` : ""}
           {day.photography.traditional && day.photography.candid ? " · " : ""}
           {day.photography.candid ? `Candid ${day.photography.candidCount}` : ""}
         </Muted>
       ) : null}
       {day.videography.traditional || day.videography.candid ? (
-        <Muted style={{ fontWeight: "700", color: colors.ink }}>
+        <Muted style={{ fontWeight: fontWeights.heading, color: colors.ink }}>
           Videography: {day.videography.traditional ? `Traditional ${day.videography.traditionalCount}` : ""}
           {day.videography.traditional && day.videography.candid ? " · " : ""}
           {day.videography.candid ? `Candid ${day.videography.candidCount}` : ""}
         </Muted>
       ) : null}
       {day.aerial.drones > 0 ? (
-        <Muted style={{ fontWeight: "700", color: colors.ink }}>Aerial: {day.aerial.drones} drone(s)</Muted>
+        <Muted style={{ fontWeight: fontWeights.heading, color: colors.ink }}>Aerial: {day.aerial.drones} drone(s)</Muted>
       ) : null}
       {day.ledWall.enabled ? (
-        <Muted style={{ fontWeight: "700", color: colors.ink }}>
+        <Muted style={{ fontWeight: fontWeights.heading, color: colors.ink }}>
           LED Wall: {day.ledWall.size} · {day.ledWall.screenCount} screen(s)
         </Muted>
       ) : null}
-      {day.webLive.enabled ? <Muted style={{ fontWeight: "700", color: colors.ink }}>Web Live: {day.webLive.quality}</Muted> : null}
+      {day.webLive.enabled ? <Muted style={{ fontWeight: fontWeights.heading, color: colors.ink }}>Web Live: {day.webLive.quality}</Muted> : null}
     </View>
   );
 }
@@ -93,7 +93,7 @@ export default function BookingSummaryScreen() {
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
           <SectionTitle>Deliverables</SectionTitle>
           <Pressable onPress={() => router.push("/booking/deliverables")} hitSlop={8} accessibilityLabel="Edit deliverables">
-            <Muted style={{ color: colors.primaryDark, fontWeight: "800" }}>Edit</Muted>
+            <Muted style={{ color: colors.primaryDark, fontWeight: fontWeights.heading }}>Edit</Muted>
           </Pressable>
         </View>
         <Muted>Raw photos: {photo.rawPhotos ? "Yes" : "No"}</Muted>
@@ -108,7 +108,7 @@ export default function BookingSummaryScreen() {
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
           <SectionTitle>Expected delivery</SectionTitle>
           <Pressable onPress={() => router.push("/booking/delivery-date")} hitSlop={8} accessibilityLabel="Edit delivery date">
-            <Muted style={{ color: colors.primaryDark, fontWeight: "800" }}>Edit</Muted>
+            <Muted style={{ color: colors.primaryDark, fontWeight: fontWeights.heading }}>Edit</Muted>
           </Pressable>
         </View>
         <Muted>{formatDateLong(activeDraft.expectedDeliveryDate)}</Muted>
@@ -119,10 +119,10 @@ export default function BookingSummaryScreen() {
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
             <SectionTitle>Budget</SectionTitle>
             <Pressable onPress={() => router.push("/booking/budget")} hitSlop={8} accessibilityLabel="Edit budget">
-              <Muted style={{ color: colors.primaryDark, fontWeight: "800" }}>Edit</Muted>
+              <Muted style={{ color: colors.primaryDark, fontWeight: fontWeights.heading }}>Edit</Muted>
             </Pressable>
           </View>
-          <Muted style={{ fontWeight: "700", color: colors.ink }}>{formatInr(activeDraft.budget)}</Muted>
+          <Muted style={{ fontWeight: fontWeights.heading, color: colors.ink }}>{formatInr(activeDraft.budget)}</Muted>
         </Card>
       ) : null}
 
@@ -131,10 +131,10 @@ export default function BookingSummaryScreen() {
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
             <SectionTitle>Package</SectionTitle>
             <Pressable onPress={() => router.push("/booking/packages")} hitSlop={8} accessibilityLabel="Edit package">
-              <Muted style={{ color: colors.primaryDark, fontWeight: "800" }}>Edit</Muted>
+              <Muted style={{ color: colors.primaryDark, fontWeight: fontWeights.heading }}>Edit</Muted>
             </Pressable>
           </View>
-          <Muted style={{ fontWeight: "700", color: colors.ink }}>
+          <Muted style={{ fontWeight: fontWeights.heading, color: colors.ink }}>
             {formatPackageOverallLabel(pkgQuote.label, pkgQuote.minPrice, pkgQuote.maxPrice)}
           </Muted>
         </Card>

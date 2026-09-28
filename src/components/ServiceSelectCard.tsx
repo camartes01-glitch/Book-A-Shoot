@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Check } from "lucide-react-native";
-import { colors, elevation, radius, spacing } from "@/src/constants/theme";
+import { colors, elevation, fontWeights, radius, spacing } from "@/src/constants/theme";
 import { selectionFeedback } from "@/src/utils/haptics";
 
 export function ServiceSelectCard({
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  title: { fontSize: 16, fontWeight: "800", color: colors.ink },
+  title: { fontSize: 16, fontWeight: fontWeights.heading, color: colors.ink },
   subtitle: { fontSize: 12, color: colors.muted, fontWeight: "600" },
   check: {
     width: 24,
