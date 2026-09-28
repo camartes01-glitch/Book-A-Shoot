@@ -482,46 +482,21 @@ export async function sendMessage(
     }
   } catch {}
 
-  let finalId = Date.now();
-  let finalCreatedAt = new Date().toISOString();
-  let finalStatus = "sent";
+  const localId = Date.now();
+  const localCreatedAt = new Date().toISOString();
 
-  try {
-    const result = await camartesFetch<{ id?: number; status?: string; created_at?: string }>(
-      "/api/messages",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          recipient_id: recipientId,
-          message: text,
-          sender_id: senderUid || undefined,
-        }),
-      },
-      { auth: true, requireAuth: false },
-    );
-    if (result) {
-      finalId = result.id || finalId;
-      finalCreatedAt = result.created_at || finalCreatedAt;
-      finalStatus = result.status || "sent";
-    }
-  } catch (err) {
-    console.error("[Chat] Error delivering message to Camartes:", err);
-    throw err;
-  }
-
-  // Record in local thread
+  // 1. Immediately record in local thread so the UI is responsive and message is never lost
   const newMsg: ChatMessage = {
-    id: finalId,
+    id: localId,
     senderId: "me",
     recipientId: recipientId,
     message: text,
     read: true,
-    createdAt: finalCreatedAt,
+    createdAt: localCreatedAt,
     isMine: true,
   };
 
   const currentThread = await getLocalThread(recipientId);
-  // Remove transient duplicates with same text within 10s
   const filtered = currentThread.filter(
     (m) => !(m.isMine && m.message.trim() === text && Math.abs(new Date().getTime() - new Date(m.createdAt).getTime()) < 10000)
   );
@@ -541,7 +516,7 @@ export async function sendMessage(
     name: recipientMeta?.name || (existingIndex >= 0 ? conversations[existingIndex].name : "Photographer"),
     picture: recipientMeta?.picture !== undefined ? recipientMeta.picture : (existingIndex >= 0 ? conversations[existingIndex].picture : null),
     lastMessage: text,
-    lastMessageAt: finalCreatedAt,
+    lastMessageAt: localCreatedAt,
     unread: false,
     lastReadAt: nowTs,
   };
@@ -552,8 +527,42 @@ export async function sendMessage(
   conversations.unshift(updatedConv);
   await setLocalConversations(conversations);
 
-  // Notify active screens
+  // Notify active screens immediately
   notifyMessageListeners();
+
+  // 2. Deliver message to Camartes backend
+  let finalId = localId;
+  let finalCreatedAt = localCreatedAt;
+  let finalStatus = "sent";
+
+  try {
+    const result = await camartesFetch<{ id?: number; status?: string; created_at?: string }>(
+      "/api/messages",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          recipient_id: recipientId,
+          message: text,
+          sender_id: senderUid || undefined,
+        }),
+      },
+      { auth: true, requireAuth: false, timeoutMs: 25000 },
+    );
+    if (result) {
+      finalId = result.id || finalId;
+      finalCreatedAt = result.created_at || finalCreatedAt;
+      finalStatus = result.status || "sent";
+
+      if (result.id && result.id !== localId) {
+        newMsg.id = result.id;
+        newMsg.createdAt = finalCreatedAt;
+        await setLocalThread(recipientId, filtered);
+      }
+    }
+  } catch (err) {
+    console.warn("[Chat] Backend delivery delayed or offline:", err);
+    // Non-fatal: local message is already preserved
+  }
 
   return {
     id: finalId,

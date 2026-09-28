@@ -46,11 +46,13 @@ export default function RootLayout() {
           <Stack.Screen name="privacy" />
 
           <Stack.Screen name="(auth)" />
+          <Stack.Screen name="auth/callback" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="booking" />
           <Stack.Screen name="bookings" />
           <Stack.Screen name="chat" />
           <Stack.Screen name="events" />
+          <Stack.Screen name="+not-found" />
         </Stack>
       </AppProvider>
     </SafeAreaProvider>

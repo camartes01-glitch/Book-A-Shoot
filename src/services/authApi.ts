@@ -494,22 +494,17 @@ export async function updateProfile(patch: Partial<CustomerProfile>): Promise<Cu
 }
 
 export async function logout(): Promise<void> {
-  try {
-    await signOutSupabase();
-  } catch {
-    /* ignore */
-  }
+  // 1. Immediately clear local session, cached tokens, and profile so user is logged out instantaneously
+  await clearLocalSession();
 
   if (isDemoAuthMode()) {
     await logoutDemo();
     return;
   }
-  try {
-    await camartesFetch("/api/auth/logout", { method: "POST" }, { requireAuth: false });
-  } catch {
-    /* still clear the local session */
-  }
-  await clearLocalSession();
+
+  // 2. Clean up Supabase OAuth session and inform backend asynchronously without blocking the user
+  void signOutSupabase().catch(() => {});
+  void camartesFetch("/api/auth/logout", { method: "POST" }, { requireAuth: false, timeoutMs: 3000 }).catch(() => {});
 }
 
 /** Camartes password reset is email-OTP only (`POST /api/auth/send-password-reset-otp`). */

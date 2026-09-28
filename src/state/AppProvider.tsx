@@ -334,10 +334,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    await authApi.logout();
     setProfile(null);
     setBookings([]);
     setActiveDraft(null);
+    await authApi.logout();
   }, []);
 
   const updateProfileFn = useCallback(async (patch: Partial<CustomerProfile>) => {

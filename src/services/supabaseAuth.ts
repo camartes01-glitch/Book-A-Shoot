@@ -156,6 +156,11 @@ export async function signInWithGoogleViaSupabase(): Promise<GoogleUserInfo | nu
   }
 
   const authResult = await WebBrowser.openAuthSessionAsync(data.url, redirectUri);
+  try {
+    void WebBrowser.dismissAuthSession();
+  } catch {
+    // Ignore
+  }
 
   if (authResult.type === "cancel" || authResult.type === "dismiss" || authResult.type === "locked") {
     throw new GoogleSignInCancelledError();

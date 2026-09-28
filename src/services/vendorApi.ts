@@ -78,17 +78,57 @@ export type CatalogQuery = {
   longitude?: number | null;
 };
 
-function getTwinCity(city: string): string | null {
+const HYD_METRO_KEYWORDS = [
+  "hyderabad",
+  "secunderabad",
+  "hyd",
+  "secunder",
+  "cyberabad",
+  "gachibowli",
+  "madhapur",
+  "kondapur",
+  "hitec",
+  "kukatpally",
+  "banjara",
+  "jubilee",
+  "begumpet",
+  "ameerpet",
+  "somajiguda",
+  "manikonda",
+  "miyapur",
+  "nanakramguda",
+  "dilsukhnagar",
+  "uppal",
+  "alwal",
+  "kompally",
+  "ranga reddy",
+  "rangareddy",
+  "medchal",
+  "shamshabad",
+  "mehdipatnam",
+  "tolichowki",
+  "lingampally",
+  "chandanagar",
+];
+
+function isHydMetro(city: string): boolean {
   const c = (city || "").trim().toLowerCase();
-  if (c.includes("secunderabad") || c.includes("secunder")) return "Hyderabad";
-  if (c.includes("hyderabad") || c.includes("hyd")) return "Secunderabad";
-  return null;
+  return HYD_METRO_KEYWORDS.some((kw) => c.includes(kw));
+}
+
+function resolveSearchCity(rawCity: string): { mainCity: string; twinCity: string | null } {
+  const c = (rawCity || "").trim();
+  if (!c) return { mainCity: "", twinCity: null };
+  if (isHydMetro(c)) {
+    return { mainCity: "Hyderabad", twinCity: "Secunderabad" };
+  }
+  return { mainCity: c, twinCity: null };
 }
 
 async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): Promise<RawSearchHit[]> {
   try {
-    const mainCity = query.city?.trim() || "";
-    const twinCity = mainCity ? getTwinCity(mainCity) : null;
+    const rawCity = query.city?.trim() || "";
+    const { mainCity, twinCity } = resolveSearchCity(rawCity);
 
     const fetchForCity = async (cityStr: string | null): Promise<RawSearchHit[]> => {
       try {
@@ -104,7 +144,7 @@ async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): 
             "X-Client-App": "bookashoot",
             "X-Booking-Source": "book_a_shoot",
           },
-          signal: AbortSignal.timeout(15000),
+          signal: AbortSignal.timeout(25000),
         });
         if (getRes.ok) {
           const data = await getRes.json();
@@ -124,7 +164,7 @@ async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): 
             city: cityStr || null,
             radius_km: 100,
           }),
-          signal: AbortSignal.timeout(15000),
+          signal: AbortSignal.timeout(25000),
         });
         if (searchRes.ok) {
           const data = await searchRes.json();
@@ -138,11 +178,11 @@ async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): 
       return [];
     };
 
-    const mainHits = await fetchForCity(mainCity || null);
-    let twinHits: RawSearchHit[] = [];
-    if (twinCity) {
-      twinHits = await fetchForCity(twinCity);
-    }
+    // Query main city and twin city in parallel for optimum speed
+    const [mainHits, twinHits] = await Promise.all([
+      fetchForCity(mainCity || null),
+      twinCity ? fetchForCity(twinCity) : Promise.resolve([]),
+    ]);
 
     const combined = [...mainHits, ...twinHits];
     if (combined.length > 0) {
@@ -163,9 +203,12 @@ async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): 
 
 async function fetchGeneralProviders(query: CatalogQuery = {}): Promise<RawSearchHit[]> {
   try {
+    const rawCity = query.city?.trim() || "";
+    const { mainCity } = resolveSearchCity(rawCity);
+
     const url = new URL(`${CAMARTES_API}/api/providers/service/photography_firm`);
-    if (query.city?.trim()) {
-      url.searchParams.set("city", query.city.trim());
+    if (mainCity) {
+      url.searchParams.set("city", mainCity);
     }
     const getRes = await fetch(url.toString(), {
       method: "GET",
@@ -174,7 +217,7 @@ async function fetchGeneralProviders(query: CatalogQuery = {}): Promise<RawSearc
         "X-Client-App": "bookashoot",
         "X-Booking-Source": "book_a_shoot",
       },
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(25000),
     });
     if (getRes.ok) {
       const data = await getRes.json();
@@ -192,10 +235,10 @@ async function fetchGeneralProviders(query: CatalogQuery = {}): Promise<RawSearc
       },
       body: JSON.stringify({
         service_type: "photography_firm",
-        city: query.city?.trim() || null,
+        city: mainCity || null,
         radius_km: 100,
       }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(25000),
     });
     if (res.ok) {
       const data = await res.json();
@@ -414,12 +457,12 @@ function toCustomerVendor(acc: Aggregate, fetchedLive: boolean): CustomerVendor 
     photography: {
       traditional: acc.photographyTraditional,
       candid: acc.photographyCandid,
-      maxPhotographers: acc.photographyTraditional || acc.photographyCandid ? 4 : 0,
+      maxPhotographers: acc.photographyTraditional || acc.photographyCandid ? 20 : 0,
     },
     videography: {
       traditional: acc.videographyTraditional,
       candid: acc.videographyCandid,
-      maxVideographers: acc.videographyTraditional || acc.videographyCandid ? 3 : 0,
+      maxVideographers: acc.videographyTraditional || acc.videographyCandid ? 20 : 0,
     },
     aerial: {
       photography: acc.aerialPhotography,
@@ -491,13 +534,23 @@ export async function fetchVendorCatalog(query: CatalogQuery = {}): Promise<Vend
       byId.set(id, acc);
     });
 
-    const vendors = [...byId.values()].map((acc) => toCustomerVendor(acc, true));
+    let vendors = [...byId.values()].map((acc) => toCustomerVendor(acc, true));
 
     if (vendors.length) {
       await writeCache(vendors);
+    } else {
+      // Fallback: If network query returned 0 hits due to slow/sleeping backend, check local cache
+      const cached = await readCache();
+      if (cached.length) {
+        vendors = cached;
+      }
     }
-    return { vendors, live: true, fetchedAt: new Date().toISOString() };
+    return { vendors, live: vendors.length > 0 && allHits.length > 0, fetchedAt: new Date().toISOString() };
   } catch (error) {
+    const cached = await readCache();
+    if (cached.length) {
+      return { vendors: cached, live: false, fetchedAt: new Date().toISOString() };
+    }
     throw error instanceof Error ? error : new Error("Could not load providers from Camartes.");
   }
 }

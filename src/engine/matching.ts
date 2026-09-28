@@ -139,9 +139,42 @@ function vendorHasCapabilities(vendor: CustomerVendor, req: AggregatedRequiremen
   return true;
 }
 
+const HYD_METRO_KEYWORDS = [
+  "hyderabad",
+  "secunderabad",
+  "hyd",
+  "secunder",
+  "cyberabad",
+  "gachibowli",
+  "madhapur",
+  "kondapur",
+  "hitec",
+  "kukatpally",
+  "banjara",
+  "jubilee",
+  "begumpet",
+  "ameerpet",
+  "somajiguda",
+  "manikonda",
+  "miyapur",
+  "nanakramguda",
+  "dilsukhnagar",
+  "uppal",
+  "alwal",
+  "kompally",
+  "ranga reddy",
+  "rangareddy",
+  "medchal",
+  "shamshabad",
+  "mehdipatnam",
+  "tolichowki",
+  "lingampally",
+  "chandanagar",
+];
+
 export function isTwinCity(city: string): boolean {
   const c = (city || "").trim().toLowerCase();
-  return c.includes("hyderabad") || c.includes("secunderabad") || c.includes("hyd") || c.includes("secunder");
+  return HYD_METRO_KEYWORDS.some((kw) => c.includes(kw));
 }
 
 export function isCityMatch(targetCity: string, candidateCityOrArea: string): boolean {
