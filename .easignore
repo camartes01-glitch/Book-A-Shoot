@@ -4,6 +4,7 @@ node_modules/
 # Expo
 .expo/
 dist/
+dist-check/
 web-build/
 expo-env.d.ts
 
@@ -33,10 +34,11 @@ yarn-error.*
 *.tsbuildinfo
 
 # generated native folders
-/ios
-/android
-/apk-dist
-/build-output
+ios/
+android/
+apk-dist/
+build-output/
+dist-check/
 
 # tests
 coverage/
