@@ -2,7 +2,7 @@
   "expo": {
     "name": "BOOK A SHOOT",
     "slug": "book-a-shoot",
-    "owner": "camartes01",
+    "owner": "keerthika2712",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/applogo.png",
@@ -85,7 +85,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "8351bc32-b8c6-4300-8286-0f4190ed1c86"
+        "projectId": "ba406cb5-97a7-48e8-ba5e-21571c5d9f83"
       }
     }
   }
