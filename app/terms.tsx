@@ -1,10 +1,10 @@
 /**
- * Book A Shoot — Terms of Service
- * Real terms of service reflecting platform matching, 1-hour SLA,
- * KYC verified studios, auto-replacement guarantee, payments, and cancellations.
+ * Book A Shoot — Official Terms & Conditions
+ * Exact official terms as mandated, covering all 64 sections, platform operation
+ * by GURRAM SAI AMARNATH under Camartes Photography Ecosystem, using info@bookashoot.online.
  */
 
-import React from "react";
+import React, { useMemo } from "react";
 import {
   Image,
   Pressable,
@@ -17,8 +17,29 @@ import {
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UniversalFooter } from "@/src/components/UniversalFooter";
-import { ArrowLeft, FileText, ShieldCheck } from "lucide-react-native";
+import { ArrowLeft } from "lucide-react-native";
 import { colors, radius, spacing } from "@/src/constants/theme";
+import { TERMS_AND_CONDITIONS_TEXT } from "@/src/constants/termsAndConditions";
+
+type BlockType =
+  | "title"
+  | "header-meta"
+  | "date-badge"
+  | "divider"
+  | "section-heading"
+  | "sub-heading"
+  | "letter-heading"
+  | "category-heading"
+  | "bullet-list"
+  | "numbered-list"
+  | "paragraph"
+  | "end-notice";
+
+interface PolicyBlock {
+  type: BlockType;
+  content: string;
+  key: string;
+}
 
 export default function TermsPage() {
   const { width: W } = useWindowDimensions();
@@ -29,8 +50,50 @@ export default function TermsPage() {
 
   React.useEffect(() => {
     if (typeof document !== "undefined") {
-      document.title = "Terms of Service — Book A Shoot";
+      document.title = "Terms & Conditions — Book A Shoot";
     }
+  }, []);
+
+  const blocks = useMemo<PolicyBlock[]>(() => {
+    return TERMS_AND_CONDITIONS_TEXT.split(/\r?\n\r?\n/).map((block, index) => {
+      const trimmed = block.trim();
+      let type: BlockType = "paragraph";
+
+      if (trimmed === "---") {
+        type = "divider";
+      } else if (trimmed === "TERMS & CONDITIONS") {
+        type = "title";
+      } else if (/^\d+\.\s+[A-Z0-9\s?,.'()/-]+$/.test(trimmed)) {
+        type = "section-heading";
+      } else if (/^\d+\.\d+\s+/.test(trimmed)) {
+        type = "sub-heading";
+      } else if (/^[A-Z]\.\s+[A-Za-z\s]+$/.test(trimmed)) {
+        type = "letter-heading";
+      } else if (
+        ["Photography", "Videography", "Additional Services"].includes(trimmed)
+      ) {
+        type = "category-heading";
+      } else if (trimmed.startsWith("- ")) {
+        type = "bullet-list";
+      } else if (/^\d+\.\s+/.test(trimmed) && trimmed.includes("\n")) {
+        type = "numbered-list";
+      } else if (trimmed.startsWith("Book A Shoot\nOperated by:")) {
+        type = "header-meta";
+      } else if (
+        trimmed.startsWith("Effective Date:") &&
+        trimmed.includes("Last Updated:")
+      ) {
+        type = "date-badge";
+      } else if (trimmed === "End of Terms & Conditions") {
+        type = "end-notice";
+      }
+
+      return {
+        type,
+        content: trimmed,
+        key: `block-${index}`,
+      };
+    });
   }, []);
 
   return (
@@ -64,104 +127,104 @@ export default function TermsPage() {
       {/* ── Content ────────────────────────────────────────────────────── */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingTop: insets.top + 74, paddingBottom: 60 }}
+        contentContainerStyle={{ paddingTop: insets.top + 94, paddingBottom: 60 }}
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.container, isWide && styles.containerWide]}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Terms of Service</Text>
-            <Text style={styles.lastUpdated}>Effective Date: September 2025 · Camartes</Text>
-          </View>
-
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>1. Introduction & Overview</Text>
-            <Text style={styles.paragraph}>
-              Welcome to <Text style={styles.bold}>Book A Shoot</Text>, a product platform owned and
-              operated by Camartes ("Camartes", "we", "our", or "us"). These Terms of Service
-              govern your access to and use of the Book A Shoot mobile applications, web application, and
-              related services (collectively, the "Platform").
-            </Text>
-            <Text style={styles.paragraph}>
-              By creating an account, submitting a booking request, or otherwise using the Platform, you
-              agree to be bound by these Terms. If you do not agree, please do not use our services.
-            </Text>
+            {blocks.map((block) => {
+              switch (block.type) {
+                case "divider":
+                  return <View key={block.key} style={styles.divider} />;
 
-            <Text style={styles.sectionTitle}>2. Platform Service Model</Text>
-            <Text style={styles.paragraph}>
-              Book A Shoot functions as a premier matchmaking and workflow management ecosystem. We
-              connect clients ("Customers" or "Hosts") seeking event photography and videography services
-              with independent, professional photography firms and studios ("Production Partners" or "Vendors").
-            </Text>
-            <Text style={styles.paragraph}>
-              While Camartes verifies vendor credentials, enforces SLAs, and guarantees deliverable schedules,
-              the actual creative execution on the shoot day is performed by the assigned partner firm.
-            </Text>
+                case "title":
+                  return (
+                    <Text key={block.key} selectable style={styles.title}>
+                      {block.content}
+                    </Text>
+                  );
 
-            <Text style={styles.sectionTitle}>3. 100% KYC Verification Standards</Text>
-            <Text style={styles.paragraph}>
-              All production firms on Book A Shoot undergo mandatory Know Your Customer (KYC) verification,
-              including:
-            </Text>
-            <View style={styles.bulletList}>
-              <Text style={styles.bulletItem}>• Legal identity verification (PAN, Aadhaar, GSTIN)</Text>
-              <Text style={styles.bulletItem}>• Verification of studio address and registered commercial premises</Text>
-              <Text style={styles.bulletItem}>• Creative audit of raw portfolio files, color science, and past client deliverables</Text>
-              <Text style={styles.bulletItem}>• Equipment audit ensuring dual-card redundancy and professional full-frame hardware</Text>
-            </View>
+                case "header-meta":
+                  return (
+                    <View key={block.key} style={styles.metaBox}>
+                      <Text selectable style={styles.metaText}>
+                        {block.content}
+                      </Text>
+                    </View>
+                  );
 
-            <Text style={styles.sectionTitle}>4. Matchmaking & Automated Replacement Guarantee</Text>
-            <Text style={styles.paragraph}>
-              Upon submitting a booking request, our algorithmic matching engine routes your event parameters
-              to the most suitable verified partner studios. Studios have a strict 1-hour window to review and
-              accept the assignment.
-            </Text>
-            <Text style={styles.paragraph}>
-              <Text style={styles.bold}>Zero Cancellation Risk:</Text> If an assigned studio rejects the request,
-              fails to respond within the 1-hour SLA, or encounters an emergency prior to your shoot date, our
-              system automatically initiates an immediate backfill to match you with another equally qualified,
-              KYC-verified firm at no additional surcharge.
-            </Text>
+                case "date-badge":
+                  return (
+                    <View key={block.key} style={styles.dateBox}>
+                      <Text selectable style={styles.dateText}>
+                        {block.content}
+                      </Text>
+                    </View>
+                  );
 
-            <Text style={styles.sectionTitle}>5. Pricing, Deposits & Payments</Text>
-            <Text style={styles.paragraph}>
-              All quotes generated on Book A Shoot are transparent, itemized, and all-inclusive of specified
-              deliverables (e.g. edited photos, candid teaser, traditional video). An initial advance deposit
-              is collected securely via the Platform to lock the studio's calendar. Subsequent milestone payments
-              are held in escrow and released to the studio upon successful completion of milestones and raw rushes upload.
-            </Text>
+                case "section-heading":
+                  return (
+                    <Text key={block.key} selectable style={styles.sectionTitle}>
+                      {block.content}
+                    </Text>
+                  );
 
-            <Text style={styles.sectionTitle}>6. Deliverables & Timelines</Text>
-            <Text style={styles.paragraph}>
-              Every booking contract stipulates strict delivery windows:
-            </Text>
-            <View style={styles.bulletList}>
-              <Text style={styles.bulletItem}>• Raw photo rushes: Typically delivered via secure cloud link within 48 to 72 hours</Text>
-              <Text style={styles.bulletItem}>• Selected color-graded edits: Delivered within 14 to 21 business days</Text>
-              <Text style={styles.bulletItem}>• Cinematic 4K wedding films & teasers: Delivered within 30 to 45 business days</Text>
-            </View>
+                case "sub-heading":
+                  return (
+                    <Text key={block.key} selectable style={styles.subHeading}>
+                      {block.content}
+                    </Text>
+                  );
 
-            <Text style={styles.sectionTitle}>7. Cancellations & Rescheduling</Text>
-            <Text style={styles.paragraph}>
-              Events may be rescheduled up to 7 days before the shoot date without penalty, subject to studio
-              availability. Cancellations made more than 14 days prior to the event are eligible for full or partial
-              refunds in accordance with our cancellation tiers. In cases of sudden natural calamities or Force Majeure,
-              Camartes works directly with clients to facilitate date transfers or credits.
-            </Text>
+                case "letter-heading":
+                  return (
+                    <Text key={block.key} selectable style={styles.letterHeading}>
+                      {block.content}
+                    </Text>
+                  );
 
-            <Text style={styles.sectionTitle}>8. Intellectual Property & Privacy</Text>
-            <Text style={styles.paragraph}>
-              Customers receive perpetual, personal-use rights to all final delivered photographs and videos.
-              Partners retain moral authorship rights for portfolio showcase, unless the Customer has explicitly
-              requested private/NDA coverage during booking.
-            </Text>
+                case "category-heading":
+                  return (
+                    <Text key={block.key} selectable style={styles.categoryHeading}>
+                      {block.content}
+                    </Text>
+                  );
 
-            <Text style={styles.sectionTitle}>9. Contact & Support</Text>
-            <Text style={styles.paragraph}>
-              For any questions regarding these terms, contact our support team at info@bookashoot.online or reach out
-              via our platform in-app support chat or WhatsApp at +91 96032 15551.
-            </Text>
+                case "bullet-list":
+                  return (
+                    <View key={block.key} style={styles.bulletList}>
+                      <Text selectable style={styles.bulletItem}>
+                        {block.content}
+                      </Text>
+                    </View>
+                  );
+
+                case "numbered-list":
+                  return (
+                    <View key={block.key} style={styles.numberedList}>
+                      <Text selectable style={styles.numberedItem}>
+                        {block.content}
+                      </Text>
+                    </View>
+                  );
+
+                case "end-notice":
+                  return (
+                    <Text key={block.key} selectable style={styles.endNotice}>
+                      {block.content}
+                    </Text>
+                  );
+
+                case "paragraph":
+                default:
+                  return (
+                    <Text key={block.key} selectable style={styles.paragraph}>
+                      {block.content}
+                    </Text>
+                  );
+              }
+            })}
           </View>
-
         </View>
         <UniversalFooter />
       </ScrollView>
@@ -220,45 +283,12 @@ const styles = StyleSheet.create({
   },
   container: {
     paddingHorizontal: spacing.xl,
-    maxWidth: 800,
+    maxWidth: 860,
     alignSelf: "center",
     width: "100%",
   },
   containerWide: {
     paddingHorizontal: 32,
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: spacing.xl,
-    gap: spacing.xs,
-  },
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: colors.bgWarm,
-    borderRadius: 999,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: colors.peachBorder,
-    marginBottom: 4,
-  },
-  pillText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.primaryDark,
-    textTransform: "uppercase",
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "600",
-    color: colors.primaryDark,
-    textAlign: "center",
-  },
-  lastUpdated: {
-    fontSize: 13,
-    color: colors.muted,
   },
   card: {
     backgroundColor: colors.white,
@@ -266,51 +296,114 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: spacing.md,
     shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 2 },
     elevation: 1,
+    marginBottom: 40,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: colors.primaryDark,
+    textAlign: "center",
+    letterSpacing: 0.5,
+    marginBottom: spacing.md,
+  },
+  metaBox: {
+    backgroundColor: colors.bgWarm,
+    borderRadius: radius,
+    borderWidth: 1,
+    borderColor: colors.peachBorder,
+    padding: spacing.md,
+    marginVertical: spacing.xs,
+  },
+  metaText: {
+    fontSize: 14,
+    color: colors.primaryDark,
+    lineHeight: 22,
+    fontWeight: "500",
+  },
+  dateBox: {
+    alignSelf: "center",
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: 999,
+    marginVertical: spacing.sm,
+  },
+  dateText: {
+    fontSize: 13,
+    color: colors.muted,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.lg,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
+    color: colors.primaryDark,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+    lineHeight: 24,
+  },
+  subHeading: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  letterHeading: {
+    fontSize: 15,
+    fontWeight: "700",
     color: colors.primaryDark,
     marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  categoryHeading: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.primaryDark,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   paragraph: {
     fontSize: 14,
     color: "#374151",
     lineHeight: 22,
-  },
-  bold: {
-    fontWeight: "700",
-    color: colors.primaryDark,
+    marginVertical: 4,
   },
   bulletList: {
-    paddingLeft: spacing.sm,
-    gap: 6,
+    marginVertical: 4,
+    paddingLeft: spacing.xs,
   },
   bulletItem: {
     fontSize: 14,
     color: "#374151",
-    lineHeight: 21,
+    lineHeight: 22,
   },
-  footerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    marginTop: 40,
+  numberedList: {
+    marginVertical: 4,
+    paddingLeft: spacing.xs,
   },
-  footerLink: {
-    fontSize: 13,
+  numberedItem: {
+    fontSize: 14,
+    color: "#374151",
+    lineHeight: 22,
+  },
+  endNotice: {
+    fontSize: 16,
+    fontWeight: "700",
     color: colors.primaryDark,
-    fontWeight: "600",
-  },
-  footerDot: {
-    color: colors.disabledText,
+    textAlign: "center",
+    marginTop: spacing.xl,
+    marginBottom: spacing.xs,
   },
   pressed: {
     opacity: 0.8,

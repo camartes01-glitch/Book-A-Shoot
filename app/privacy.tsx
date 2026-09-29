@@ -1,10 +1,10 @@
 /**
- * Book A Shoot — Privacy Policy
- * Real privacy policy reflecting personal data handling, event media protection,
- * KYC documentation security, and client rights.
+ * Book A Shoot — Official Privacy Policy
+ * Exact official policy as mandated, covering all 44 sections, Indian DPDP Act compliance,
+ * platform operation by GURRAM SAI AMARNATH under Camartes Photography Ecosystem.
  */
 
-import React from "react";
+import React, { useMemo } from "react";
 import {
   Image,
   Pressable,
@@ -17,8 +17,29 @@ import {
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UniversalFooter } from "@/src/components/UniversalFooter";
-import { ArrowLeft, Lock, ShieldCheck } from "lucide-react-native";
+import { ArrowLeft } from "lucide-react-native";
 import { colors, radius, spacing } from "@/src/constants/theme";
+import { PRIVACY_POLICY_TEXT } from "@/src/constants/privacyPolicy";
+
+type BlockType =
+  | "title"
+  | "header-meta"
+  | "date-badge"
+  | "divider"
+  | "section-heading"
+  | "sub-heading"
+  | "letter-heading"
+  | "permission-name"
+  | "bullet-list"
+  | "numbered-list"
+  | "paragraph"
+  | "end-notice";
+
+interface PolicyBlock {
+  type: BlockType;
+  content: string;
+  key: string;
+}
 
 export default function PrivacyPage() {
   const { width: W } = useWindowDimensions();
@@ -31,6 +52,54 @@ export default function PrivacyPage() {
     if (typeof document !== "undefined") {
       document.title = "Privacy Policy — Book A Shoot";
     }
+  }, []);
+
+  const blocks = useMemo<PolicyBlock[]>(() => {
+    return PRIVACY_POLICY_TEXT.split(/\r?\n\r?\n/).map((block, index) => {
+      const trimmed = block.trim();
+      let type: BlockType = "paragraph";
+
+      if (trimmed === "---") {
+        type = "divider";
+      } else if (trimmed === "PRIVACY POLICY") {
+        type = "title";
+      } else if (/^\d+\.\s+[A-Z0-9\s?,.'()/-]+$/.test(trimmed)) {
+        type = "section-heading";
+      } else if (/^\d+\.\d+\s+/.test(trimmed)) {
+        type = "sub-heading";
+      } else if (/^[A-Z]\.\s+[A-Za-z\s]+$/.test(trimmed)) {
+        type = "letter-heading";
+      } else if (
+        [
+          "Camera",
+          "Photos / Media",
+          "Location",
+          "Notifications",
+          "Internet / Network Access",
+        ].includes(trimmed)
+      ) {
+        type = "permission-name";
+      } else if (trimmed.startsWith("- ")) {
+        type = "bullet-list";
+      } else if (/^\d+\.\s+/.test(trimmed) && trimmed.includes("\n")) {
+        type = "numbered-list";
+      } else if (trimmed.startsWith("Book A Shoot\nOperated by:")) {
+        type = "header-meta";
+      } else if (
+        trimmed.startsWith("Effective Date:") &&
+        trimmed.includes("Last Updated:")
+      ) {
+        type = "date-badge";
+      } else if (trimmed === "End of Privacy Policy") {
+        type = "end-notice";
+      }
+
+      return {
+        type,
+        content: trimmed,
+        key: `block-${index}`,
+      };
+    });
   }, []);
 
   return (
@@ -64,87 +133,108 @@ export default function PrivacyPage() {
       {/* ── Content ────────────────────────────────────────────────────── */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingTop: insets.top + 74, paddingBottom: 60 }}
+        contentContainerStyle={{ paddingTop: insets.top + 94, paddingBottom: 60 }}
         showsVerticalScrollIndicator={false}
       >
         <View style={[styles.container, isWide && styles.containerWide]}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Privacy Policy</Text>
-            <Text style={styles.lastUpdated}>Effective Date: September 2025 · Camartes</Text>
-          </View>
-
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>1. Privacy Commitment</Text>
-            <Text style={styles.paragraph}>
-              At <Text style={styles.bold}>Book A Shoot</Text> (a brand of Camartes), we hold
-              the privacy of your personal life, family moments, and confidential event details in the
-              highest regard. This Privacy Policy details how we collect, safeguard, process, and respect
-              your information.
-            </Text>
+            {blocks.map((block) => {
+              switch (block.type) {
+                case "divider":
+                  return <View key={block.key} style={styles.divider} />;
 
-            <Text style={styles.sectionTitle}>2. Information We Collect</Text>
-            <Text style={styles.paragraph}>
-              To coordinate seamless photography assignments, we collect:
-            </Text>
-            <View style={styles.bulletList}>
-              <Text style={styles.bulletItem}>
-                • <Text style={styles.bold}>Account & Contact Data:</Text> Name, phone number, email address, and billing location.
-              </Text>
-              <Text style={styles.bulletItem}>
-                • <Text style={styles.bold}>Event Details:</Text> Venue address, dates, ceremony timings, deliverable preferences, and customized instructions.
-              </Text>
-              <Text style={styles.bulletItem}>
-                • <Text style={styles.bold}>Vendor KYC Verification:</Text> Government identity, GST certificates, studio registration documents, and portfolio archives (for studios).
-              </Text>
-              <Text style={styles.bulletItem}>
-                • <Text style={styles.bold}>Transaction Records:</Text> Tokenized payment receipts and milestone escrow confirmations. We do not store raw card numbers.
-              </Text>
-            </View>
+                case "title":
+                  return (
+                    <Text key={block.key} selectable style={styles.title}>
+                      {block.content}
+                    </Text>
+                  );
 
-            <Text style={styles.sectionTitle}>3. Media Confidentiality & Asset Protection</Text>
-            <Text style={styles.paragraph}>
-              Photographs, raw video rushes, and final cinematic edits uploaded to our platform for review
-              are hosted in encrypted, access-controlled cloud storage buckets.
-            </Text>
-            <Text style={styles.paragraph}>
-              <Text style={styles.bold}>Private & NDA Option:</Text> Customers booking confidential personal
-              or commercial events may choose our private shoot option. In such cases, partner studios are contractually
-              forbidden from posting, sharing, or publishing any preview media on social media or personal portfolios.
-            </Text>
+                case "header-meta":
+                  return (
+                    <View key={block.key} style={styles.metaBox}>
+                      <Text selectable style={styles.metaText}>
+                        {block.content}
+                      </Text>
+                    </View>
+                  );
 
-            <Text style={styles.sectionTitle}>4. How We Share Information</Text>
-            <Text style={styles.paragraph}>
-              We share relevant event details strictly with the specific assigned and confirmed photography
-              firm to allow them to arrive punctually and execute your shoot. We never sell, rent, or trade your
-              personal information to third-party telemarketers or external advertising networks.
-            </Text>
+                case "date-badge":
+                  return (
+                    <View key={block.key} style={styles.dateBox}>
+                      <Text selectable style={styles.dateText}>
+                        {block.content}
+                      </Text>
+                    </View>
+                  );
 
-            <Text style={styles.sectionTitle}>5. Data Security & Storage</Text>
-            <Text style={styles.paragraph}>
-              We employ industry-standard TLS encryption for all data in transit, and AES-256 encryption for
-              stored credentials and customer documents. Access is restricted to authorized personnel who require
-              it to troubleshoot or facilitate bookings.
-            </Text>
+                case "section-heading":
+                  return (
+                    <Text key={block.key} selectable style={styles.sectionTitle}>
+                      {block.content}
+                    </Text>
+                  );
 
-            <Text style={styles.sectionTitle}>6. Your Rights & Data Controls</Text>
-            <Text style={styles.paragraph}>
-              Under applicable Indian privacy and digital data regulations, you have the right to request access
-              to your stored profile, update inaccurate records, download deliverables, or request permanent
-              account and data deletion after your event deliverables have been fulfilled.
-            </Text>
+                case "sub-heading":
+                  return (
+                    <Text key={block.key} selectable style={styles.subHeading}>
+                      {block.content}
+                    </Text>
+                  );
 
-            <Text style={styles.sectionTitle}>7. Grievance Officer & Contact</Text>
-            <Text style={styles.paragraph}>
-              In accordance with Information Technology rules, if you have any questions or concerns regarding
-              our privacy practices, please contact our Grievance Officer:
-            </Text>
-            <Text style={styles.paragraph}>
-              Grievance Officer, Book A Shoot{"\n"}
-              Email: info@bookashoot.online{"\n"}
-              HeadQuarters: RTIH Vijayawada, Andhra Pradesh
-            </Text>
+                case "letter-heading":
+                  return (
+                    <Text key={block.key} selectable style={styles.letterHeading}>
+                      {block.content}
+                    </Text>
+                  );
+
+                case "permission-name":
+                  return (
+                    <Text
+                      key={block.key}
+                      selectable
+                      style={styles.permissionHeading}
+                    >
+                      {block.content}
+                    </Text>
+                  );
+
+                case "bullet-list":
+                  return (
+                    <View key={block.key} style={styles.bulletList}>
+                      <Text selectable style={styles.bulletItem}>
+                        {block.content}
+                      </Text>
+                    </View>
+                  );
+
+                case "numbered-list":
+                  return (
+                    <View key={block.key} style={styles.numberedList}>
+                      <Text selectable style={styles.numberedItem}>
+                        {block.content}
+                      </Text>
+                    </View>
+                  );
+
+                case "end-notice":
+                  return (
+                    <Text key={block.key} selectable style={styles.endNotice}>
+                      {block.content}
+                    </Text>
+                  );
+
+                case "paragraph":
+                default:
+                  return (
+                    <Text key={block.key} selectable style={styles.paragraph}>
+                      {block.content}
+                    </Text>
+                  );
+              }
+            })}
           </View>
-
         </View>
         <UniversalFooter />
       </ScrollView>
@@ -203,45 +293,12 @@ const styles = StyleSheet.create({
   },
   container: {
     paddingHorizontal: spacing.xl,
-    maxWidth: 800,
+    maxWidth: 860,
     alignSelf: "center",
     width: "100%",
   },
   containerWide: {
     paddingHorizontal: 32,
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: spacing.xl,
-    gap: spacing.xs,
-  },
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: colors.bgWarm,
-    borderRadius: 999,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: colors.peachBorder,
-    marginBottom: 4,
-  },
-  pillText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.primaryDark,
-    textTransform: "uppercase",
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "600",
-    color: colors.primaryDark,
-    textAlign: "center",
-  },
-  lastUpdated: {
-    fontSize: 13,
-    color: colors.muted,
   },
   card: {
     backgroundColor: colors.white,
@@ -249,51 +306,113 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: spacing.md,
     shadowColor: "#000",
     shadowOpacity: 0.04,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 2 },
     elevation: 1,
+    marginBottom: 40,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: colors.primaryDark,
+    textAlign: "center",
+    letterSpacing: 0.5,
+    marginBottom: spacing.md,
+  },
+  metaBox: {
+    backgroundColor: colors.bgWarm,
+    borderRadius: radius,
+    borderWidth: 1,
+    borderColor: colors.peachBorder,
+    padding: spacing.md,
+    marginVertical: spacing.xs,
+  },
+  metaText: {
+    fontSize: 14,
+    color: colors.primaryDark,
+    lineHeight: 22,
+    fontWeight: "500",
+  },
+  dateBox: {
+    alignSelf: "center",
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: 999,
+    marginVertical: spacing.sm,
+  },
+  dateText: {
+    fontSize: 13,
+    color: colors.muted,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.lg,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
+    color: colors.primaryDark,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
+    lineHeight: 24,
+  },
+  subHeading: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.text,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  letterHeading: {
+    fontSize: 15,
+    fontWeight: "700",
     color: colors.primaryDark,
     marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  permissionHeading: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.primaryDark,
+    marginTop: spacing.xs,
   },
   paragraph: {
     fontSize: 14,
     color: "#374151",
     lineHeight: 22,
-  },
-  bold: {
-    fontWeight: "700",
-    color: colors.primaryDark,
+    marginVertical: 4,
   },
   bulletList: {
-    paddingLeft: spacing.sm,
-    gap: 6,
+    marginVertical: 4,
+    paddingLeft: spacing.xs,
   },
   bulletItem: {
     fontSize: 14,
     color: "#374151",
-    lineHeight: 21,
+    lineHeight: 22,
   },
-  footerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    marginTop: 40,
+  numberedList: {
+    marginVertical: 4,
+    paddingLeft: spacing.xs,
   },
-  footerLink: {
-    fontSize: 13,
+  numberedItem: {
+    fontSize: 14,
+    color: "#374151",
+    lineHeight: 22,
+  },
+  endNotice: {
+    fontSize: 16,
+    fontWeight: "700",
     color: colors.primaryDark,
-    fontWeight: "600",
-  },
-  footerDot: {
-    color: colors.disabledText,
+    textAlign: "center",
+    marginTop: spacing.xl,
+    marginBottom: spacing.xs,
   },
   pressed: {
     opacity: 0.8,
