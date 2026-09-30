@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 import {
+  AlertTriangle,
   Check,
   ChevronDown,
   ChevronUp,
@@ -26,6 +27,7 @@ import {
   Plus,
   Send,
   ShieldCheck,
+  Trash2,
   X,
 } from "lucide-react-native";
 import { ScreenContainer } from "@/src/components/ScreenContainer";
@@ -85,7 +87,7 @@ const FAQ_LIST: FAQItem[] = [
 ];
 
 export default function ProfileScreen() {
-  const { profile, updateProfile, logout } = useAppStore();
+  const { profile, updateProfile, logout, deleteAccount } = useAppStore();
   const [name, setName] = useState(profile?.name ?? "");
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -106,6 +108,12 @@ export default function ProfileScreen() {
   const [sendingFeedback, setSendingFeedback] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState(false);
   const [feedbackError, setFeedbackError] = useState("");
+
+  // Delete account state
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const onSave = async () => {
     if (!name.trim()) return;
@@ -217,6 +225,19 @@ export default function ProfileScreen() {
       setFeedbackError(err?.message || "Could not send feedback. Please try again.");
     } finally {
       setSendingFeedback(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteError("");
+    setDeletingAccount(true);
+    try {
+      await deleteAccount();
+      router.replace("/(auth)/login");
+    } catch (err: any) {
+      setDeleteError(err?.message || "Could not delete your account. Please try again or contact support.");
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -653,6 +674,107 @@ export default function ProfileScreen() {
           <LogOut size={17} color={colors.danger} />
           <Text style={styles.logoutBtnText}>Log Out</Text>
         </Pressable>
+      </View>
+
+      {/* Delete Account - Danger Zone */}
+      <View style={styles.deleteAccountSection}>
+        <Pressable
+          style={styles.deleteAccountHeaderPressable}
+          onPress={() => {
+            setShowDeleteAccount((prev) => !prev);
+            setDeleteConfirmText("");
+            setDeleteError("");
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Toggle Delete Account"
+          accessibilityState={{ expanded: showDeleteAccount }}
+        >
+          <View style={styles.sectionHeaderLeft}>
+            <View style={styles.deleteAccountIconCircle}>
+              <Trash2 size={20} color={colors.danger} />
+            </View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={styles.deleteAccountTitle}>Delete Account</Text>
+              <Text style={styles.deleteAccountSubtitle}>Permanently remove your account & data</Text>
+            </View>
+          </View>
+          {showDeleteAccount ? (
+            <ChevronUp size={20} color={colors.danger} />
+          ) : (
+            <ChevronDown size={20} color={colors.muted} />
+          )}
+        </Pressable>
+
+        {showDeleteAccount ? (
+          <View style={styles.deleteAccountBody}>
+            {/* Warning Card */}
+            <View style={styles.deleteWarningCard}>
+              <View style={styles.deleteWarningHeader}>
+                <AlertTriangle size={20} color="#B91C1C" />
+                <Text style={styles.deleteWarningTitle}>This action is irreversible</Text>
+              </View>
+              <Text style={styles.deleteWarningText}>
+                Deleting your account will permanently remove:
+              </Text>
+              <View style={styles.deleteWarningList}>
+                <Text style={styles.deleteWarningItem}>• Your profile and personal information</Text>
+                <Text style={styles.deleteWarningItem}>• All bookings, drafts and history</Text>
+                <Text style={styles.deleteWarningItem}>• Saved addresses and preferences</Text>
+                <Text style={styles.deleteWarningItem}>• Chat messages with photography firms</Text>
+                <Text style={styles.deleteWarningItem}>• All notifications and activity</Text>
+              </View>
+              <Text style={styles.deleteWarningNote}>
+                This data cannot be recovered once deleted. Active bookings (if any) will be cancelled.
+              </Text>
+            </View>
+
+            {/* Confirmation Input */}
+            <View style={styles.deleteConfirmSection}>
+              <Text style={styles.deleteConfirmLabel}>
+                Type <Text style={styles.deleteConfirmKeyword}>DELETE</Text> to confirm
+              </Text>
+              <TextInput
+                style={styles.deleteConfirmInput}
+                value={deleteConfirmText}
+                onChangeText={(val) => {
+                  setDeleteConfirmText(val);
+                  if (deleteError) setDeleteError("");
+                }}
+                placeholder="Type DELETE here"
+                placeholderTextColor={colors.muted}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                editable={!deletingAccount}
+              />
+            </View>
+
+            {deleteError ? (
+              <Text style={styles.deleteErrorText}>{deleteError}</Text>
+            ) : null}
+
+            {/* Delete Button */}
+            <Pressable
+              style={[
+                styles.deleteConfirmBtn,
+                (deleteConfirmText.trim().toUpperCase() !== "DELETE" || deletingAccount) &&
+                  styles.deleteConfirmBtnDisabled,
+              ]}
+              onPress={handleDeleteAccount}
+              disabled={deleteConfirmText.trim().toUpperCase() !== "DELETE" || deletingAccount}
+              accessibilityRole="button"
+              accessibilityLabel="Permanently delete account"
+            >
+              {deletingAccount ? (
+                <ActivityIndicator size="small" color={colors.white} />
+              ) : (
+                <>
+                  <Trash2 size={15} color={colors.white} />
+                  <Text style={styles.deleteConfirmBtnText}>Permanently Delete My Account</Text>
+                </>
+              )}
+            </Pressable>
+          </View>
+        ) : null}
       </View>
     </ScreenContainer>
   );
@@ -1152,5 +1274,138 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: colors.primaryDark,
+  },
+
+  // ── Delete Account Styles ─────────────────────────────────────────────────
+  deleteAccountSection: {
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    overflow: "hidden",
+    marginTop: 6,
+  },
+  deleteAccountHeaderPressable: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 12,
+  },
+  deleteAccountIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#FEE2E2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteAccountTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.danger,
+    letterSpacing: -0.2,
+  },
+  deleteAccountSubtitle: {
+    fontSize: 12,
+    color: colors.muted,
+  },
+  deleteAccountBody: {
+    paddingHorizontal: 16,
+    paddingBottom: 18,
+    paddingTop: 4,
+    gap: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#FECACA",
+    backgroundColor: "#FFF5F5",
+  },
+  deleteWarningCard: {
+    backgroundColor: "#FEF2F2",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    padding: 14,
+    gap: 8,
+  },
+  deleteWarningHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  deleteWarningTitle: {
+    fontSize: 14.5,
+    fontWeight: "700",
+    color: "#B91C1C",
+  },
+  deleteWarningText: {
+    fontSize: 13,
+    color: "#7F1D1D",
+    lineHeight: 18,
+    fontWeight: "500",
+  },
+  deleteWarningList: {
+    gap: 3,
+    paddingLeft: 4,
+  },
+  deleteWarningItem: {
+    fontSize: 12.5,
+    color: "#991B1B",
+    lineHeight: 17,
+  },
+  deleteWarningNote: {
+    fontSize: 11.5,
+    color: "#B91C1C",
+    fontStyle: "italic",
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  deleteConfirmSection: {
+    gap: 6,
+  },
+  deleteConfirmLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.text,
+  },
+  deleteConfirmKeyword: {
+    color: colors.danger,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  deleteConfirmInput: {
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: "#FECACA",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.danger,
+    letterSpacing: 2,
+    textAlign: "center",
+  },
+  deleteErrorText: {
+    fontSize: 12,
+    color: colors.danger,
+    textAlign: "center",
+  },
+  deleteConfirmBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: colors.danger,
+    borderRadius: 12,
+    paddingVertical: 13,
+  },
+  deleteConfirmBtnDisabled: {
+    opacity: 0.35,
+  },
+  deleteConfirmBtnText: {
+    fontSize: 13.5,
+    fontWeight: "700",
+    color: colors.white,
   },
 });

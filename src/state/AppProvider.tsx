@@ -51,6 +51,7 @@ type AppContextValue = {
     idTokenOrUserInfo: string | { google_id: string; email: string; name: string; picture?: string | null },
   ) => Promise<CustomerProfile>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   updateProfile: (patch: Partial<CustomerProfile>) => Promise<void>;
 
   bookings: Booking[];
@@ -340,6 +341,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await authApi.logout();
   }, []);
 
+  const deleteAccount = useCallback(async () => {
+    await authApi.deleteAccount();
+    setProfile(null);
+    setBookings([]);
+    setActiveDraft(null);
+    setNotifications([]);
+  }, []);
+
   const updateProfileFn = useCallback(async (patch: Partial<CustomerProfile>) => {
     const next = await authApi.updateProfile(patch);
     setProfile(next);
@@ -608,6 +617,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       signup,
       loginWithGoogle,
       logout,
+      deleteAccount,
       updateProfile: updateProfileFn,
       bookings,
       refreshBookings,
@@ -652,6 +662,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       signup,
       loginWithGoogle,
       logout,
+      deleteAccount,
       updateProfileFn,
       bookings,
       refreshBookings,

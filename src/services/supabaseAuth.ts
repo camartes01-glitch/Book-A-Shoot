@@ -218,6 +218,28 @@ export async function signInWithGoogleViaSupabase(): Promise<GoogleUserInfo | nu
 /**
  * Destroys any active Supabase Google OAuth session.
  */
+/**
+ * Permanently deletes the current Supabase user account.
+ * Uses the Camartes backend endpoint which has the service_role key
+ * to perform the actual deletion from Supabase auth.users.
+ * On the client side, we ensure the local session is fully destroyed.
+ */
+export async function deleteSupabaseAccount(): Promise<void> {
+  if (Platform.OS === "web" && typeof window !== "undefined" && window.sessionStorage) {
+    try {
+      window.sessionStorage.removeItem("camartes:oauth_in_progress");
+    } catch {
+      // Ignore
+    }
+  }
+  try {
+    // Sign out globally to invalidate all tokens
+    await supabase.auth.signOut({ scope: "global" });
+  } catch {
+    // Proceed even if signout fails; the account deletion on backend is what matters
+  }
+}
+
 export async function signOutSupabase(): Promise<void> {
   if (Platform.OS === "web" && typeof window !== "undefined" && window.sessionStorage) {
     try {

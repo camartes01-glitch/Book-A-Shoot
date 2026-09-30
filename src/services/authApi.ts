@@ -507,6 +507,84 @@ export async function logout(): Promise<void> {
   void camartesFetch("/api/auth/logout", { method: "POST" }, { requireAuth: false, timeoutMs: 3000 }).catch(() => {});
 }
 
+/**
+ * Permanently deletes the current user's account and all associated data.
+ *
+ * Workflow:
+ * 1. Calls the Camartes backend to delete the user (backend uses Supabase service_role to remove from auth.users).
+ * 2. Destroys the Supabase OAuth session on the client.
+ * 3. Clears all local AsyncStorage data (profile, bookings, registry, welcome flags, notifications).
+ */
+export async function deleteAccount(): Promise<void> {
+  const { deleteSupabaseAccount } = await import("./supabaseAuth");
+  const token = await getAuthToken();
+  const storedProfile = await getStoredProfile();
+
+  // 1. Ask Camartes backend to delete the user (server-side Supabase deletion with service_role key)
+  if (token && !isDemoAuthMode()) {
+    try {
+      await camartesFetch(
+        "/api/auth/delete-account",
+        { method: "DELETE" },
+        { requireAuth: true, timeoutMs: 10000 },
+      );
+    } catch (error) {
+      // If the backend deletion fails, we still want to clean up locally
+      // but re-throw so the UI can show the error
+      console.warn("[Auth] Backend account deletion error:", error);
+      throw new CamartesApiError(
+        "Could not delete your account from the server. Please contact support at info@bookashoot.online.",
+        500,
+      );
+    }
+  }
+
+  // 2. Destroy the Supabase OAuth session
+  try {
+    await deleteSupabaseAccount();
+  } catch {
+    // Non-fatal: local cleanup is more important
+  }
+
+  // 3. Clear all local data
+  await clearLocalSession();
+
+  // Remove profile from registry
+  if (storedProfile?.email) {
+    try {
+      const raw = await AsyncStorage.getItem(PROFILES_REGISTRY_KEY);
+      if (raw) {
+        const map = JSON.parse(raw) as Record<string, unknown>;
+        delete map[storedProfile.email.trim().toLowerCase()];
+        await AsyncStorage.setItem(PROFILES_REGISTRY_KEY, JSON.stringify(map));
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  // Clear bookings, notifications, and welcome flags
+  try {
+    await AsyncStorage.removeItem(BOOKINGS_KEY);
+  } catch {
+    // Non-fatal
+  }
+
+  if (storedProfile?.customerId) {
+    try {
+      await AsyncStorage.removeItem(`camartes-customer:welcome_shown:${storedProfile.customerId}`);
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  try {
+    await AsyncStorage.removeItem("camartes-customer:notifications:v1");
+  } catch {
+    // Non-fatal
+  }
+}
+
 /** Camartes password reset is email-OTP only (`POST /api/auth/send-password-reset-otp`). */
 export function parsePasswordResetEmail(value: string): string {
   const identifier = value.trim();
