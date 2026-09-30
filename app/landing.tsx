@@ -32,6 +32,9 @@ import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UniversalFooter } from "@/src/components/UniversalFooter";
 import { UniversalNavbar } from "@/src/components/UniversalNavbar";
+import { SEOHead } from "@/src/components/SEOHead";
+import { SEOImage } from "@/src/components/SEOImage";
+import { ORGANIZATION_SCHEMA, WEBSITE_SCHEMA } from "@/src/constants/seoSchemas";
 import Svg, { Path, Polygon } from "react-native-svg";
 import {
   ArrowRight,
@@ -55,65 +58,71 @@ import { useAppStore } from "@/src/state/AppProvider";
 // Data
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Desktop hero slides — Completely unchanged
+// Desktop hero slides — Optimized WebP with descriptive SEO alt text
 const DESKTOP_HERO_SLIDES = [
   {
     id: "1",
     headline: "Every Moment\nDeserves to Be\nRemembered",
     sub: "Book 100% KYC-verified photographers & cinematographers for your special day — in minutes.",
+    alt: "Verified Indian wedding photography and cinematography capturing bride and groom celebration",
     image:
       Platform.OS === "web"
-        ? { uri: "/hero1.png" }
-        : require("@/assets/images/home/home_hero_wedding.jpg"),
+        ? { uri: "/hero1.webp" }
+        : require("@/assets/images/hero1.webp"),
   },
   {
     id: "2",
     headline: "Pre-Wedding\nStories That\nLast Forever",
     sub: "Cinematic shoots, aerial drone coverage, and candid moments — matched with top studios.",
+    alt: "Cinematic pre-wedding photoshoot with aerial drone coverage and candid couple portrait",
     image:
       Platform.OS === "web"
-        ? { uri: "/hero2.png" }
-        : require("@/assets/images/home/category_pre_wedding.jpg"),
+        ? { uri: "/hero2.webp" }
+        : require("@/assets/images/hero2.webp"),
   },
   {
     id: "3",
     headline: "Weddings,\nBirthdays &\nEvery Celebration",
     sub: "From grand wedding mandaps to intimate rituals — our verified network covers every occasion.",
+    alt: "Grand Indian wedding ceremony and festive celebration photography by verified studio",
     image:
       Platform.OS === "web"
-        ? { uri: "/hero3.png" }
-        : require("@/assets/images/home/category_wedding.jpg"),
+        ? { uri: "/hero3.webp" }
+        : require("@/assets/images/hero3.webp"),
   },
 ] as const;
 
-// Phone hero slides — Using phonehero1.png, phonehero2.png, phonehero3.png exclusively on mobile
+// Phone hero slides — Optimized WebP with descriptive SEO alt text
 const PHONE_HERO_SLIDES = [
   {
     id: "1",
     headline: "Every Moment\nDeserves to Be\nRemembered",
     sub: "Book 100% KYC-verified photographers & cinematographers for your special day in minutes.",
+    alt: "Verified wedding photographer capturing bride and groom moments",
     image:
       Platform.OS === "web"
-        ? { uri: "/phonehero1.png" }
-        : require("@/assets/images/phonehero1.png"),
+        ? { uri: "/phonehero1.webp" }
+        : require("@/assets/images/phonehero1.webp"),
   },
   {
     id: "2",
     headline: "Pre-Wedding\nStories That\nLast Forever",
     sub: "Cinematic shoots, aerial drone coverage, and candid moments matched with top studios.",
+    alt: "Couple pre-wedding outdoor romantic photoshoot",
     image:
       Platform.OS === "web"
-        ? { uri: "/phonehero2.png" }
-        : require("@/assets/images/phonehero2.png"),
+        ? { uri: "/phonehero2.webp" }
+        : require("@/assets/images/phonehero2.webp"),
   },
   {
     id: "3",
     headline: "Weddings,\nBirthdays &\nCelebrations",
     sub: "From grand wedding mandaps to intimate rituals — our verified network covers every occasion.",
+    alt: "Traditional Indian family celebration event photography coverage",
     image:
       Platform.OS === "web"
-        ? { uri: "/phonehero3.png" }
-        : require("@/assets/images/phonehero3.png"),
+        ? { uri: "/phonehero3.webp" }
+        : require("@/assets/images/phonehero3.webp"),
   },
 ] as const;
 
@@ -198,26 +207,15 @@ const WHY_US = [
 // Blog posts for homepage preview
 const HOMEPAGE_BLOGS = [
   {
-    id: "pre-wedding-guide",
+    id: "indian-wedding-photography-trends-2026",
     image:
       Platform.OS === "web"
-        ? { uri: "/blog1.png" }
+        ? { uri: "/blog1.webp" }
         : require("@/assets/images/blog1.png"),
-    tag: "Cinematography & Styling",
-    readTime: "4 min read",
-    title: "How to Look Effortlessly Natural on Camera: The Pre-Wedding Survival Guide",
-    sub: "Ditch the stiff, robotic poses. Here are 7 director-approved secrets on framing, golden-hour lighting, and moving with real emotion.",
-  },
-  {
-    id: "elite-photographers-timeline",
-    image:
-      Platform.OS === "web"
-        ? { uri: "/blog2.png" }
-        : require("@/assets/images/blog2.png"),
-    tag: "Industry Secrets",
-    readTime: "6 min read",
-    title: "The Real Reason Elite Wedding Photographers Get Booked 6 Months in Advance",
-    sub: "Inside the wedding season rush: why booking multi-event bundles early saves your sanity and locks your favorite team's calendar.",
+    tag: "Wedding Photography",
+    readTime: "8–10 min read",
+    title: "Indian Wedding Photography Trends 2026: From Perfect Poses to Real Stories",
+    sub: "Discover how Indian weddings are moving beyond stiff poses to candid storytelling, cinematic films, Reels, drone coverage, and personalised visual narratives.",
   },
 ];
 
@@ -440,7 +438,15 @@ export default function LandingPage() {
 
   const renderHeroSlide = (slide: (typeof heroSlides)[number], idx: number) => (
     <View key={slide.id} style={[styles.heroSlide, { width: W, height: heroH }]}>
-      <Image source={slide.image} style={styles.heroImg} resizeMode="cover" />
+      <SEOImage
+        src={slide.image}
+        alt={(slide as any).alt || "Book A Shoot verified event photography"}
+        priority={idx === 0}
+        width={W}
+        height={heroH}
+        style={styles.heroImg}
+        resizeMode="cover"
+      />
       <View style={[styles.heroScrim, !isWide && styles.phoneHeroScrim]} />
       <View
         style={[
@@ -490,6 +496,23 @@ export default function LandingPage() {
 
   return (
     <View style={styles.root}>
+      <SEOHead
+        title="Book A Shoot — Hire KYC-Verified Photographers & Cinematographers"
+        description="Book vetted, 100% KYC-verified photography and cinematography studios across Hyderabad, Bangalore, and Andhra Pradesh with guaranteed milestone escrow and 1-hour auto-backfill."
+        canonicalPath="/"
+        ogImage="/hero1.webp"
+        keywords={[
+          "book a shoot",
+          "wedding photographers",
+          "hire photographers hyderabad",
+          "candid wedding photography",
+          "cinematography studios",
+          "drone photography",
+          "event photographers bangalore",
+        ]}
+        structuredData={[ORGANIZATION_SCHEMA, WEBSITE_SCHEMA]}
+      />
+
       {/* ── Initial Opening Splash Animation ───────────────────────────── */}
       {showSplash && (
         <Animated.View
@@ -715,12 +738,14 @@ export default function LandingPage() {
 
               {/* Right Column: Multiple Events Showcase Image (Flush top-to-bottom, diagonal slant) */}
               <View style={[styles.multiEventRight, isWide && styles.multiEventRightWide]}>
-                <Image
-                  source={
+                <SEOImage
+                  src={
                     Platform.OS === "web"
-                      ? { uri: "/multipleevents.png" }
-                      : require("@/assets/images/multipleevents.png")
+                      ? "/multipleevents.webp"
+                      : require("@/assets/images/multipleevents.webp")
                   }
+                  alt="Multi-event wedding celebration photography coverage across Haldi, Sangeet, Muhurtham and Reception"
+                  priority={false}
                   style={[
                     styles.multipleEventsImg,
                     Platform.OS === "web"
@@ -732,7 +757,6 @@ export default function LandingPage() {
                       : null,
                   ]}
                   resizeMode="cover"
-                  accessibilityLabel="Multiple Events Photography Showcase"
                 />
                 {isWide && (
                   <Svg
@@ -853,87 +877,61 @@ export default function LandingPage() {
             </Text>
           </View>
 
-          {isWide ? (
-            <View style={[styles.blogCardsRow, styles.blogCardsRowWide]}>
-              {HOMEPAGE_BLOGS.map((blog) => (
-                <Pressable
-                  key={blog.id}
-                  onPress={goToBlogs}
-                  style={({ pressed }) => [styles.homepageBlogCard, styles.homepageBlogCardWide, pressed && styles.pressed]}
-                  accessibilityRole="button"
-                >
-                  <View style={styles.homepageBlogImgFrame}>
-                    <Image source={blog.image} style={styles.homepageBlogImg} resizeMode="cover" />
-                    <View style={styles.blogTagOverlay}>
-                      <Text style={styles.blogTagText}>{blog.tag}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.homepageBlogBody}>
-                    <View style={styles.blogMetaRow}>
-                      <Clock size={12} color={colors.muted} />
-                      <Text style={styles.blogMetaText}>{blog.readTime}</Text>
-                    </View>
-                    <Text style={styles.homepageBlogTitle}>{blog.title}</Text>
-                    <Text style={styles.homepageBlogSub}>{blog.sub}</Text>
-                    <View style={styles.readArticleRow}>
-                      <Text style={styles.readArticleText}>Read Story</Text>
-                      <ArrowRight size={14} color={colors.primaryDark} />
-                    </View>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-          ) : (
-            <View style={styles.blogPhoneContainer}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.blogScrollPhone}
-                decelerationRate="fast"
-                snapToInterval={Math.min(W * 0.84, 320) + 16}
+          {/* ── Featured Blog Article (Single Pillar Article) ── */}
+          <View style={styles.featuredBlogWrapper}>
+            {HOMEPAGE_BLOGS.map((blog) => (
+              <Pressable
+                key={blog.id}
+                onPress={goToBlogs}
+                style={({ pressed }) => [
+                  styles.homepageBlogCard,
+                  isWide ? styles.homepageBlogCardWideFeatured : styles.homepageBlogCardPhone,
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel={blog.title}
               >
-                {HOMEPAGE_BLOGS.map((blog) => (
-                  <Pressable
-                    key={blog.id}
-                    onPress={goToBlogs}
-                    style={({ pressed }) => [
-                      styles.homepageBlogCard,
-                      styles.homepageBlogCardPhone,
-                      { width: Math.min(W * 0.84, 320) },
-                      pressed && styles.pressed,
-                    ]}
-                    accessibilityRole="button"
-                  >
-                    <View style={styles.homepageBlogImgFramePhone}>
-                      <Image source={blog.image} style={styles.homepageBlogImg} resizeMode="cover" />
-                      <View style={styles.blogTagOverlay}>
-                        <Text style={styles.blogTagText}>{blog.tag}</Text>
-                      </View>
-                    </View>
-                    <View style={styles.homepageBlogBody}>
-                      <View style={styles.blogMetaRow}>
-                        <Clock size={12} color={colors.muted} />
-                        <Text style={styles.blogMetaText}>{blog.readTime}</Text>
-                      </View>
-                      <Text style={styles.homepageBlogTitle}>{blog.title}</Text>
-                      <Text style={styles.homepageBlogSub} numberOfLines={2}>
-                        {blog.sub}
-                      </Text>
-                      <View style={styles.readArticleRow}>
-                        <Text style={styles.readArticleText}>Read Story</Text>
-                        <ArrowRight size={14} color={colors.primaryDark} />
-                      </View>
-                    </View>
-                  </Pressable>
-                ))}
-              </ScrollView>
-              <View style={styles.carouselDotsRow}>
-                {HOMEPAGE_BLOGS.map((_, i) => (
-                  <View key={i} style={styles.miniDot} />
-                ))}
-              </View>
-            </View>
-          )}
+                <View
+                  style={[
+                    styles.homepageBlogImgFrame,
+                    isWide ? styles.homepageBlogImgFrameWide : styles.homepageBlogImgFramePhone,
+                  ]}
+                >
+                  <SEOImage
+                    src={blog.image}
+                    alt="Indian Wedding Photography Trends 2026 candid documentary celebration"
+                    priority={false}
+                    style={styles.homepageBlogImg}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.blogTagOverlay}>
+                    <Text style={styles.blogTagText}>{blog.tag}</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.homepageBlogBody, isWide && styles.homepageBlogBodyWide]}>
+                  <View style={styles.blogMetaRow}>
+                    <Clock size={13} color={colors.muted} />
+                    <Text style={styles.blogMetaText}>{blog.readTime}</Text>
+                    <Text style={{ color: colors.muted, fontSize: 12 }}>•</Text>
+                    <Text style={styles.blogMetaText}>September 2026</Text>
+                  </View>
+
+                  <Text style={[styles.homepageBlogTitle, isWide && styles.homepageBlogTitleWide]}>
+                    {blog.title}
+                  </Text>
+                  <Text style={styles.homepageBlogSub}>
+                    {blog.sub}
+                  </Text>
+
+                  <View style={styles.readArticleRow}>
+                    <Text style={styles.readArticleText}>Read Full Article</Text>
+                    <ArrowRight size={15} color={colors.primaryDark} />
+                  </View>
+                </View>
+              </Pressable>
+            ))}
+          </View>
 
           <View style={styles.viewAllBlogsWrap}>
             <Pressable
@@ -950,15 +948,16 @@ export default function LandingPage() {
 
         {/* ── LAST SECTION: CTA BANNER (cta.png as Whole Background Image, NO COLOR COVER LAYER, Left-Aligned) ── */}
         <View style={styles.ctaBannerWrapper}>
-          <Image
-            source={
+          <SEOImage
+            src={
               Platform.OS === "web"
-                ? { uri: "/cta.png?v=2" }
-                : require("@/assets/images/cta.png")
+                ? "/cta.webp"
+                : require("@/assets/images/cta.webp")
             }
+            alt="Ready to book verified photographers and cinematographers with guaranteed milestone escrow"
+            priority={false}
             style={styles.ctaBackgroundImage}
             resizeMode="cover"
-            accessibilityLabel="Book A Shoot Call to Action Banner"
           />
 
           {/* No color scrim or cover layer — image displayed as is */}
@@ -1892,6 +1891,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     backgroundColor: colors.bg,
   },
+  featuredBlogWrapper: {
+    maxWidth: 960,
+    width: "100%",
+    alignSelf: "center",
+  },
   blogCardsRow: {
     gap: spacing.xl,
     maxWidth: 1040,
@@ -1915,6 +1919,25 @@ const styles = StyleSheet.create({
   },
   homepageBlogCardWide: {
     flex: 1,
+  },
+  homepageBlogCardWideFeatured: {
+    flexDirection: "row",
+    minHeight: 280,
+  },
+  homepageBlogImgFrameWide: {
+    width: "44%",
+    height: "100%",
+    minHeight: 280,
+  },
+  homepageBlogBodyWide: {
+    flex: 1,
+    padding: spacing.xl,
+    justifyContent: "center",
+    gap: 10,
+  },
+  homepageBlogTitleWide: {
+    fontSize: 22,
+    lineHeight: 30,
   },
   blogPhoneContainer: {
     width: "100%",

@@ -17,7 +17,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { router } from "expo-router";
+import { Link, router } from "expo-router";
 import { Mail, MapPin, Phone } from "lucide-react-native";
 import Svg, { Path } from "react-native-svg";
 import { colors, spacing } from "@/src/constants/theme";
@@ -80,14 +80,16 @@ export function UniversalFooter({ showHqLocation = true }: UniversalFooterProps 
     <View style={[styles.footer, isWide && styles.footerWide]}>
       {/* Brand & Tagline */}
       <View style={styles.footerBrand}>
-        <Pressable onPress={goToHome}>
-          <Image
-            source={require("@/assets/images/book-a-shoot-wordmark.png")}
-            style={styles.footerLogo}
-            resizeMode="contain"
-            accessibilityLabel="Book A Shoot"
-          />
-        </Pressable>
+        <Link href="/" asChild>
+          <Pressable accessibilityRole="link" accessibilityLabel="Book A Shoot Home">
+            <Image
+              source={require("@/assets/images/book-a-shoot-wordmark.png")}
+              style={styles.footerLogo}
+              resizeMode="contain"
+              accessibilityLabel="Book A Shoot"
+            />
+          </Pressable>
+        </Link>
         <Text style={styles.footerTagline}>
           India's trusted platform for booking verified event & wedding photographers.
         </Text>
@@ -175,21 +177,37 @@ export function UniversalFooter({ showHqLocation = true }: UniversalFooterProps 
 
       {/* Navigation Links */}
       <View style={styles.footerLinksRow}>
-        <Pressable onPress={goToHome}><Text style={styles.footerLinkText}>Home</Text></Pressable>
+        <Link href="/" asChild>
+          <Pressable accessibilityRole="link"><Text style={styles.footerLinkText}>Home</Text></Pressable>
+        </Link>
         <Text style={styles.footerDot}>•</Text>
-        <Pressable onPress={goToServices}><Text style={styles.footerLinkText}>Services</Text></Pressable>
+        <Link href="/services" asChild>
+          <Pressable accessibilityRole="link"><Text style={styles.footerLinkText}>Services</Text></Pressable>
+        </Link>
         <Text style={styles.footerDot}>•</Text>
-        <Pressable onPress={goToAbout}><Text style={styles.footerLinkText}>About Us</Text></Pressable>
+        <Link href="/about" asChild>
+          <Pressable accessibilityRole="link"><Text style={styles.footerLinkText}>About Us</Text></Pressable>
+        </Link>
         <Text style={styles.footerDot}>•</Text>
-        <Pressable onPress={goToBlogs}><Text style={styles.footerLinkText}>Blogs</Text></Pressable>
+        <Link href="/blogs" asChild>
+          <Pressable accessibilityRole="link"><Text style={styles.footerLinkText}>Blogs</Text></Pressable>
+        </Link>
         <Text style={styles.footerDot}>•</Text>
-        <Pressable onPress={goToContact}><Text style={styles.footerLinkText}>Contact Us</Text></Pressable>
+        <Link href="/contact" asChild>
+          <Pressable accessibilityRole="link"><Text style={styles.footerLinkText}>Contact Us</Text></Pressable>
+        </Link>
         <Text style={styles.footerDot}>•</Text>
-        <Pressable onPress={() => router.push("/careers")}><Text style={styles.footerLinkText}>Careers</Text></Pressable>
+        <Link href="/careers" asChild>
+          <Pressable accessibilityRole="link"><Text style={styles.footerLinkText}>Careers</Text></Pressable>
+        </Link>
         <Text style={styles.footerDot}>•</Text>
-        <Pressable onPress={() => router.push("/privacy")}><Text style={styles.footerLinkText}>Privacy</Text></Pressable>
+        <Link href="/privacy" asChild>
+          <Pressable accessibilityRole="link"><Text style={styles.footerLinkText}>Privacy</Text></Pressable>
+        </Link>
         <Text style={styles.footerDot}>•</Text>
-        <Pressable onPress={() => router.push("/terms")}><Text style={styles.footerLinkText}>Terms</Text></Pressable>
+        <Link href="/terms" asChild>
+          <Pressable accessibilityRole="link"><Text style={styles.footerLinkText}>Terms</Text></Pressable>
+        </Link>
       </View>
 
       <View style={styles.footerDivider} />

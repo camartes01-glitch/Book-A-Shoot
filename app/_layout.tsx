@@ -41,7 +41,10 @@ export default function RootLayout() {
           <Stack.Screen name="about" />
           <Stack.Screen name="services" />
           <Stack.Screen name="blogs" />
+          <Stack.Screen name="blog/indian-wedding-photography-trends-2026" />
           <Stack.Screen name="contact" />
+          <Stack.Screen name="photographers/[service]/[city]" />
+          <Stack.Screen name="cinematography/[service]/[city]" />
           <Stack.Screen name="terms" />
           <Stack.Screen name="privacy" />
 

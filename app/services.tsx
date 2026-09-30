@@ -24,6 +24,9 @@ import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UniversalFooter } from "@/src/components/UniversalFooter";
 import { UniversalNavbar } from "@/src/components/UniversalNavbar";
+import { SEOHead } from "@/src/components/SEOHead";
+import { SEOImage } from "@/src/components/SEOImage";
+import { SERVICES_SCHEMA, createBreadcrumbSchema } from "@/src/constants/seoSchemas";
 import {
   ArrowLeft,
   ArrowRight,
@@ -280,8 +283,30 @@ export default function ServicesPage() {
     });
   }, [searchQuery, selectedCategory]);
 
+  const breadcrumbSchema = createBreadcrumbSchema([
+    { name: "Home", path: "/" },
+    { name: "Services", path: "/services" },
+  ]);
+
   return (
     <View style={styles.root}>
+      <SEOHead
+        title="Event Photography Services & Cinematography — Book A Shoot"
+        description="Explore verified photography and videography services: Weddings, Candid, Drone, Pre-Wedding, Maternity, Sangeet, and Live Streaming across India."
+        canonicalPath="/services"
+        ogImage="/coverage.png"
+        keywords={[
+          "event photography services",
+          "wedding cinematography",
+          "drone photography services",
+          "pre wedding shoot packages",
+          "maternity photoshoot",
+          "sangeet photographer",
+          "live streaming services",
+        ]}
+        structuredData={[SERVICES_SCHEMA, breadcrumbSchema]}
+      />
+
       {/* ── Universal Constant Navbar ──────────────────────────────────────── */}
       <UniversalNavbar activeRoute="services" />
 
@@ -437,15 +462,16 @@ export default function ServicesPage() {
 
         {/* ── UNIFIED CTA BANNER (cta.png as Whole Background) ─────────── */}
         <View style={[styles.ctaBannerWrapper, !isWide && styles.ctaBannerWrapperPhone]}>
-          <Image
-            source={
+          <SEOImage
+            src={
               Platform.OS === "web"
-                ? { uri: "/cta.png?v=2" }
-                : require("@/assets/images/cta.png")
+                ? "/cta.webp"
+                : require("@/assets/images/cta.webp")
             }
+            alt="Find your photography event service and book verified studio with Book A Shoot"
+            priority={false}
             style={styles.ctaBackgroundImage}
             resizeMode="cover"
-            accessibilityLabel="Book A Shoot Call to Action Banner"
           />
 
           <View style={[styles.ctaLeftContainer, isWide ? styles.ctaLeftContainerWide : styles.ctaLeftContainerPhone]}>

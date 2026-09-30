@@ -20,6 +20,9 @@ import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UniversalFooter } from "@/src/components/UniversalFooter";
 import { UniversalNavbar } from "@/src/components/UniversalNavbar";
+import { SEOHead } from "@/src/components/SEOHead";
+import { SEOImage } from "@/src/components/SEOImage";
+import { ORGANIZATION_SCHEMA, createBreadcrumbSchema } from "@/src/constants/seoSchemas";
 import {
   ArrowLeft,
   ArrowRight,
@@ -105,8 +108,28 @@ export default function AboutPage() {
     }
   }, []);
 
+  const breadcrumbSchema = createBreadcrumbSchema([
+    { name: "Home", path: "/" },
+    { name: "About Us", path: "/about" },
+  ]);
+
   return (
     <View style={styles.root}>
+      <SEOHead
+        title="About Us — Book A Shoot | Powered by Camartes"
+        description="Learn how Book A Shoot by Camartes is transforming India's photography industry through KYC verification, transparent pricing, and milestone escrow security."
+        canonicalPath="/about"
+        ogImage="/aboutus.webp"
+        keywords={[
+          "about book a shoot",
+          "camartes technologies",
+          "photography marketplace india",
+          "kyc verified photographers",
+          "milestone escrow photography",
+        ]}
+        structuredData={[ORGANIZATION_SCHEMA, breadcrumbSchema]}
+      />
+
       {/* ── Universal Constant Navbar ──────────────────────────────────────── */}
       <UniversalNavbar activeRoute="about" />
 
@@ -119,15 +142,16 @@ export default function AboutPage() {
         {/* ── Hero Section ─────────────────────────────────────────────── */}
         {!isWide ? (
           <View style={styles.phoneHeroWrapper}>
-            <Image
-              source={
+            <SEOImage
+              src={
                 Platform.OS === "web"
-                  ? { uri: "/phoneabout.png" }
-                  : require("@/assets/images/phoneabout.png")
+                  ? "/phoneabout.webp"
+                  : require("@/assets/images/phoneabout.webp")
               }
+              alt="Book A Shoot team transforming photography industry with escrow protection"
+              priority={true}
               style={StyleSheet.absoluteFill}
               resizeMode="cover"
-              accessibilityLabel="About Book A Shoot"
             />
             {/* Rich scrim overlay for crisp contrast */}
             <View style={styles.phoneHeroOverlay} />
@@ -172,15 +196,16 @@ export default function AboutPage() {
 
             {/* Hero Image Container */}
             <View style={[styles.heroImageFrame, styles.heroImageFrameWide]}>
-              <Image
-                source={
+              <SEOImage
+                src={
                   Platform.OS === "web"
-                    ? { uri: "/aboutus.png" }
-                    : require("@/assets/images/aboutus.png")
+                    ? "/aboutus.webp"
+                    : require("@/assets/images/aboutus.webp")
                 }
+                alt="Book A Shoot professional photography crew and high-end camera equipment"
+                priority={true}
                 style={styles.heroImage}
                 resizeMode="cover"
-                accessibilityLabel="Book A Shoot Team and Professional Gear"
               />
               <View style={styles.imageOverlayBadge}>
                 <ShieldCheck size={18} color={colors.white} />
@@ -288,15 +313,16 @@ export default function AboutPage() {
 
         {/* ── Bottom CTA Banner (Consistently using cta.png) ───────────── */}
         <View style={[styles.ctaBannerWrapper, !isWide && styles.ctaBannerWrapperPhone]}>
-          <Image
-            source={
+          <SEOImage
+            src={
               Platform.OS === "web"
-                ? { uri: "/cta.png?v=2" }
-                : require("@/assets/images/cta.png")
+                ? "/cta.webp"
+                : require("@/assets/images/cta.webp")
             }
+            alt="Ready to capture your next big celebration with verified photographers"
+            priority={false}
             style={styles.ctaBackgroundImage}
             resizeMode="cover"
-            accessibilityLabel="Book A Shoot Call to Action Banner"
           />
 
           <View style={[styles.ctaLeftContainer, isWide ? styles.ctaLeftContainerWide : styles.ctaLeftContainerPhone]}>

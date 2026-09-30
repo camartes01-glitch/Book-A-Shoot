@@ -17,6 +17,7 @@ import {
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UniversalFooter } from "@/src/components/UniversalFooter";
+import { SEOHead } from "@/src/components/SEOHead";
 import { ArrowLeft } from "lucide-react-native";
 import { colors, radius, spacing } from "@/src/constants/theme";
 import { TERMS_AND_CONDITIONS_TEXT } from "@/src/constants/termsAndConditions";
@@ -98,6 +99,12 @@ export default function TermsPage() {
 
   return (
     <View style={styles.root}>
+      <SEOHead
+        title="Terms & Conditions — Book A Shoot"
+        description="Review the official platform terms, escrow payment policies, and cancellation conditions for Book A Shoot."
+        canonicalPath="/terms"
+      />
+
       {/* ── Top Navbar ─────────────────────────────────────────────────── */}
       <View style={[styles.navbar, { paddingTop: insets.top }]}>
         <View style={[styles.navInner, isWide && styles.navInnerWide]}>

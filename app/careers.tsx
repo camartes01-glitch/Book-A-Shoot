@@ -40,6 +40,8 @@ import {
 } from "lucide-react-native";
 import { UniversalFooter } from "@/src/components/UniversalFooter";
 import { UniversalNavbar } from "@/src/components/UniversalNavbar";
+import { SEOHead } from "@/src/components/SEOHead";
+import { createBreadcrumbSchema } from "@/src/constants/seoSchemas";
 import { colors, radius, spacing } from "@/src/constants/theme";
 import { CAMARTES_API } from "@/src/services/camartesClient";
 
@@ -207,8 +209,28 @@ export default function CareersPage() {
     setErrorMsg("");
   };
 
+  const breadcrumbSchema = createBreadcrumbSchema([
+    { name: "Home", path: "/" },
+    { name: "Careers", path: "/careers" },
+  ]);
+
   return (
     <View style={styles.root}>
+      <SEOHead
+        title="Careers at Camartes Book A Shoot — Build the Future of Visual Commerce"
+        description="Join the engineering, product, and operations team building India's premier KYC-audited photography and event services marketplace."
+        canonicalPath="/careers"
+        ogImage="/careers.webp"
+        keywords={[
+          "camartes careers",
+          "book a shoot jobs",
+          "startup jobs hyderabad",
+          "engineering jobs bangalore",
+          "product designer jobs",
+        ]}
+        structuredData={breadcrumbSchema}
+      />
+
       {/* ── Universal Constant Navbar ──────────────────────────────────────── */}
       <UniversalNavbar activeRoute="careers" />
 

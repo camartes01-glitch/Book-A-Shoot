@@ -1,0 +1,51 @@
+# ==============================================================================
+# Book A Shoot by Camartes — Production robots.txt
+# Standards Compliant Directives for Search Engines & AI Retrieval Agents
+# ==============================================================================
+
+User-agent: *
+Allow: /
+Allow: /landing
+Allow: /services
+Allow: /blogs
+Allow: /blog/*
+Allow: /about
+Allow: /contact
+Allow: /careers
+Allow: /terms
+Allow: /privacy
+Allow: /photographers/*
+Allow: /cinematography/*
+
+# Disallow private user accounts, interactive checkout & chat sessions
+Disallow: /(auth)/
+Disallow: /auth/
+Disallow: /booking/
+Disallow: /bookings/
+Disallow: /chat/
+Disallow: /api/
+
+# Explicit Directives for AI Search Agents (Perplexity, ChatGPT, Claude, Gemini)
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+# Canonical Sitemap Reference
+Sitemap: https://www.bookashoot.online/sitemap.xml

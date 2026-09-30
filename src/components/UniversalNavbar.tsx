@@ -22,7 +22,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { router } from "expo-router";
+import { Link, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ArrowRight,
@@ -84,7 +84,7 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
   const goToHome = () => {
     setIsMobileMenuOpen(false);
     setIsCompanyOpen(false);
-    router.push("/landing");
+    router.push("/");
   };
 
   const goToServices = () => {
@@ -151,44 +151,48 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
       <View style={[styles.navContainer, isWide && styles.navContainerWide]}>
         {/* Left: Brand Wordmark Logo */}
         <View style={styles.leftCol}>
-          <Pressable
-            id="nav-logo"
-            onPress={goToHome}
-            style={({ pressed }) => [styles.logoBtn, pressed && styles.pressed]}
-            accessibilityRole="link"
-            accessibilityLabel="Book A Shoot Home"
-          >
-            <Image
-              source={require("@/assets/images/book-a-shoot-wordmark.png")}
-              style={[styles.logoImg, !isWide && styles.logoImgPhone]}
-              resizeMode="contain"
-            />
-          </Pressable>
+          <Link href="/" asChild>
+            <Pressable
+              id="nav-logo"
+              onPress={goToHome}
+              style={({ pressed }) => [styles.logoBtn, pressed && styles.pressed]}
+              accessibilityRole="link"
+              accessibilityLabel="Book A Shoot Home"
+            >
+              <Image
+                source={require("@/assets/images/book-a-shoot-wordmark.png")}
+                style={[styles.logoImg, !isWide && styles.logoImgPhone]}
+                resizeMode="contain"
+              />
+            </Pressable>
+          </Link>
         </View>
 
         {/* Center: Desktop Navigation Links */}
         {isWide && (
           <View style={styles.centerNavLinks}>
             {/* Services Link */}
-            <Pressable
-              id="nav-link-services"
-              onPress={goToServices}
-              style={({ pressed }) => [
-                styles.navLinkItem,
-                activeRoute === "services" && styles.navLinkItemActive,
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="link"
-            >
-              <Text
-                style={[
-                  styles.navLinkText,
-                  activeRoute === "services" && styles.navLinkTextActive,
+            <Link href="/services" asChild>
+              <Pressable
+                id="nav-link-services"
+                onPress={goToServices}
+                style={({ pressed }) => [
+                  styles.navLinkItem,
+                  activeRoute === "services" && styles.navLinkItemActive,
+                  pressed && styles.pressed,
                 ]}
+                accessibilityRole="link"
               >
-                Services
-              </Text>
-            </Pressable>
+                <Text
+                  style={[
+                    styles.navLinkText,
+                    activeRoute === "services" && styles.navLinkTextActive,
+                  ]}
+                >
+                  Services
+                </Text>
+              </Pressable>
+            </Link>
 
             {/* Company Link with Slide-Down Dropdown */}
             <View
@@ -256,172 +260,180 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
                   <View style={styles.dropdownNotch} />
 
                   {/* 1. About Us */}
-                  <Pressable
-                    id="nav-dropdown-about"
-                    onPress={goToAbout}
-                    // @ts-ignore
-                    onMouseEnter={() => setHoveredItem("about")}
-                    // @ts-ignore
-                    onMouseLeave={() => setHoveredItem(null)}
-                    style={({ pressed }) => [
-                      styles.dropdownItem,
-                      hoveredItem === "about" && styles.dropdownItemHovered,
-                      activeRoute === "about" && styles.dropdownItemActive,
-                      pressed && styles.pressed,
-                    ]}
-                    accessibilityRole="link"
-                  >
-                    <View
-                      style={[
-                        styles.dropdownItemIconCircle,
-                        (hoveredItem === "about" || activeRoute === "about") &&
-                          styles.dropdownItemIconCircleActive,
+                  <Link href="/about" asChild>
+                    <Pressable
+                      id="nav-dropdown-about"
+                      onPress={goToAbout}
+                      // @ts-ignore
+                      onMouseEnter={() => setHoveredItem("about")}
+                      // @ts-ignore
+                      onMouseLeave={() => setHoveredItem(null)}
+                      style={({ pressed }) => [
+                        styles.dropdownItem,
+                        hoveredItem === "about" && styles.dropdownItemHovered,
+                        activeRoute === "about" && styles.dropdownItemActive,
+                        pressed && styles.pressed,
                       ]}
+                      accessibilityRole="link"
                     >
-                      <Users2
-                        size={17}
-                        color={
-                          hoveredItem === "about" || activeRoute === "about"
-                            ? colors.primary
-                            : "#64748B"
-                        }
-                      />
-                    </View>
-                    <View style={styles.dropdownItemTextCol}>
-                      <Text
+                      <View
                         style={[
-                          styles.dropdownItemTitle,
+                          styles.dropdownItemIconCircle,
                           (hoveredItem === "about" || activeRoute === "about") &&
-                            styles.dropdownItemTitleActive,
+                            styles.dropdownItemIconCircleActive,
                         ]}
                       >
-                        About Us
-                      </Text>
-                      <Text style={styles.dropdownItemDesc}>
-                        Our mission, KYC verification & quality standards
-                      </Text>
-                    </View>
-                  </Pressable>
+                        <Users2
+                          size={17}
+                          color={
+                            hoveredItem === "about" || activeRoute === "about"
+                              ? colors.primary
+                              : "#64748B"
+                          }
+                        />
+                      </View>
+                      <View style={styles.dropdownItemTextCol}>
+                        <Text
+                          style={[
+                            styles.dropdownItemTitle,
+                            (hoveredItem === "about" || activeRoute === "about") &&
+                              styles.dropdownItemTitleActive,
+                          ]}
+                        >
+                          About Us
+                        </Text>
+                        <Text style={styles.dropdownItemDesc}>
+                          Our mission, KYC verification & quality standards
+                        </Text>
+                      </View>
+                    </Pressable>
+                  </Link>
 
                   {/* 2. Careers */}
-                  <Pressable
-                    id="nav-dropdown-careers"
-                    onPress={goToCareers}
-                    // @ts-ignore
-                    onMouseEnter={() => setHoveredItem("careers")}
-                    // @ts-ignore
-                    onMouseLeave={() => setHoveredItem(null)}
-                    style={({ pressed }) => [
-                      styles.dropdownItem,
-                      hoveredItem === "careers" && styles.dropdownItemHovered,
-                      activeRoute === "careers" && styles.dropdownItemActive,
-                      pressed && styles.pressed,
-                    ]}
-                    accessibilityRole="link"
-                  >
-                    <View
-                      style={[
-                        styles.dropdownItemIconCircle,
-                        (hoveredItem === "careers" || activeRoute === "careers") &&
-                          styles.dropdownItemIconCircleActive,
+                  <Link href="/careers" asChild>
+                    <Pressable
+                      id="nav-dropdown-careers"
+                      onPress={goToCareers}
+                      // @ts-ignore
+                      onMouseEnter={() => setHoveredItem("careers")}
+                      // @ts-ignore
+                      onMouseLeave={() => setHoveredItem(null)}
+                      style={({ pressed }) => [
+                        styles.dropdownItem,
+                        hoveredItem === "careers" && styles.dropdownItemHovered,
+                        activeRoute === "careers" && styles.dropdownItemActive,
+                        pressed && styles.pressed,
                       ]}
+                      accessibilityRole="link"
                     >
-                      <Briefcase
-                        size={17}
-                        color={
-                          hoveredItem === "careers" || activeRoute === "careers"
-                            ? colors.primary
-                            : "#64748B"
-                        }
-                      />
-                    </View>
-                    <View style={styles.dropdownItemTextCol}>
-                      <Text
+                      <View
                         style={[
-                          styles.dropdownItemTitle,
+                          styles.dropdownItemIconCircle,
                           (hoveredItem === "careers" || activeRoute === "careers") &&
-                            styles.dropdownItemTitleActive,
+                            styles.dropdownItemIconCircleActive,
                         ]}
                       >
-                        Careers
-                      </Text>
-                      <Text style={styles.dropdownItemDesc}>
-                        Join our creative storytelling & tech team
-                      </Text>
-                    </View>
-                  </Pressable>
+                        <Briefcase
+                          size={17}
+                          color={
+                            hoveredItem === "careers" || activeRoute === "careers"
+                              ? colors.primary
+                              : "#64748B"
+                          }
+                        />
+                      </View>
+                      <View style={styles.dropdownItemTextCol}>
+                        <Text
+                          style={[
+                            styles.dropdownItemTitle,
+                            (hoveredItem === "careers" || activeRoute === "careers") &&
+                              styles.dropdownItemTitleActive,
+                          ]}
+                        >
+                          Careers
+                        </Text>
+                        <Text style={styles.dropdownItemDesc}>
+                          Join our creative storytelling & tech team
+                        </Text>
+                      </View>
+                    </Pressable>
+                  </Link>
 
                   {/* 3. Blogs */}
-                  <Pressable
-                    id="nav-dropdown-blogs"
-                    onPress={goToBlogs}
-                    // @ts-ignore
-                    onMouseEnter={() => setHoveredItem("blogs")}
-                    // @ts-ignore
-                    onMouseLeave={() => setHoveredItem(null)}
-                    style={({ pressed }) => [
-                      styles.dropdownItem,
-                      hoveredItem === "blogs" && styles.dropdownItemHovered,
-                      activeRoute === "blogs" && styles.dropdownItemActive,
-                      pressed && styles.pressed,
-                    ]}
-                    accessibilityRole="link"
-                  >
-                    <View
-                      style={[
-                        styles.dropdownItemIconCircle,
-                        (hoveredItem === "blogs" || activeRoute === "blogs") &&
-                          styles.dropdownItemIconCircleActive,
+                  <Link href="/blogs" asChild>
+                    <Pressable
+                      id="nav-dropdown-blogs"
+                      onPress={goToBlogs}
+                      // @ts-ignore
+                      onMouseEnter={() => setHoveredItem("blogs")}
+                      // @ts-ignore
+                      onMouseLeave={() => setHoveredItem(null)}
+                      style={({ pressed }) => [
+                        styles.dropdownItem,
+                        hoveredItem === "blogs" && styles.dropdownItemHovered,
+                        activeRoute === "blogs" && styles.dropdownItemActive,
+                        pressed && styles.pressed,
                       ]}
+                      accessibilityRole="link"
                     >
-                      <BookOpen
-                        size={17}
-                        color={
-                          hoveredItem === "blogs" || activeRoute === "blogs"
-                            ? colors.primary
-                            : "#64748B"
-                        }
-                      />
-                    </View>
-                    <View style={styles.dropdownItemTextCol}>
-                      <Text
+                      <View
                         style={[
-                          styles.dropdownItemTitle,
+                          styles.dropdownItemIconCircle,
                           (hoveredItem === "blogs" || activeRoute === "blogs") &&
-                            styles.dropdownItemTitleActive,
+                            styles.dropdownItemIconCircleActive,
                         ]}
                       >
-                        Blogs & Stories
-                      </Text>
-                      <Text style={styles.dropdownItemDesc}>
-                        Style guides, wedding advice & production tips
-                      </Text>
-                    </View>
-                  </Pressable>
+                        <BookOpen
+                          size={17}
+                          color={
+                            hoveredItem === "blogs" || activeRoute === "blogs"
+                              ? colors.primary
+                              : "#64748B"
+                          }
+                        />
+                      </View>
+                      <View style={styles.dropdownItemTextCol}>
+                        <Text
+                          style={[
+                            styles.dropdownItemTitle,
+                            (hoveredItem === "blogs" || activeRoute === "blogs") &&
+                              styles.dropdownItemTitleActive,
+                          ]}
+                        >
+                          Blogs & Stories
+                        </Text>
+                        <Text style={styles.dropdownItemDesc}>
+                          Style guides, wedding advice & production tips
+                        </Text>
+                      </View>
+                    </Pressable>
+                  </Link>
                 </View>
               )}
             </View>
 
             {/* Contact Us */}
-            <Pressable
-              id="nav-link-contact"
-              onPress={goToContact}
-              style={({ pressed }) => [
-                styles.navLinkItem,
-                activeRoute === "contact" && styles.navLinkItemActive,
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="link"
-            >
-              <Text
-                style={[
-                  styles.navLinkText,
-                  activeRoute === "contact" && styles.navLinkTextActive,
+            <Link href="/contact" asChild>
+              <Pressable
+                id="nav-link-contact"
+                onPress={goToContact}
+                style={({ pressed }) => [
+                  styles.navLinkItem,
+                  activeRoute === "contact" && styles.navLinkItemActive,
+                  pressed && styles.pressed,
                 ]}
+                accessibilityRole="link"
               >
-                Contact Us
-              </Text>
-            </Pressable>
+                <Text
+                  style={[
+                    styles.navLinkText,
+                    activeRoute === "contact" && styles.navLinkTextActive,
+                  ]}
+                >
+                  Contact Us
+                </Text>
+              </Pressable>
+            </Link>
 
             {/* Partner with Us */}
             <Pressable
@@ -499,19 +511,21 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
       {/* ── Mobile Accordion Drawer ────────────────────────────────────────── */}
       {!isWide && isMobileMenuOpen && (
         <View style={styles.mobileDrawer}>
-          <Pressable
-            onPress={goToServices}
-            style={[styles.mobileMenuItem, activeRoute === "services" && styles.mobileMenuItemActive]}
-          >
-            <Text
-              style={[
-                styles.mobileMenuText,
-                activeRoute === "services" && styles.mobileMenuTextActive,
-              ]}
+          <Link href="/services" asChild>
+            <Pressable
+              onPress={goToServices}
+              style={[styles.mobileMenuItem, activeRoute === "services" && styles.mobileMenuItemActive]}
             >
-              Services
-            </Text>
-          </Pressable>
+              <Text
+                style={[
+                  styles.mobileMenuText,
+                  activeRoute === "services" && styles.mobileMenuTextActive,
+                ]}
+              >
+                Services
+              </Text>
+            </Pressable>
+          </Link>
 
           {/* Company Group Header */}
           <View style={styles.mobileCompanyGroup}>
@@ -519,74 +533,82 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
               <Text style={styles.mobileCompanyTitle}>COMPANY</Text>
             </View>
 
-            <Pressable
-              onPress={goToAbout}
-              style={[
-                styles.mobileSubMenuItem,
-                activeRoute === "about" && styles.mobileMenuItemActive,
-              ]}
-            >
-              <Users2 size={16} color={activeRoute === "about" ? colors.primary : "#64748B"} />
-              <Text
+            <Link href="/about" asChild>
+              <Pressable
+                onPress={goToAbout}
                 style={[
-                  styles.mobileSubMenuText,
-                  activeRoute === "about" && styles.mobileMenuTextActive,
+                  styles.mobileSubMenuItem,
+                  activeRoute === "about" && styles.mobileMenuItemActive,
                 ]}
               >
-                About Us
-              </Text>
-            </Pressable>
+                <Users2 size={16} color={activeRoute === "about" ? colors.primary : "#64748B"} />
+                <Text
+                  style={[
+                    styles.mobileSubMenuText,
+                    activeRoute === "about" && styles.mobileMenuTextActive,
+                  ]}
+                >
+                  About Us
+                </Text>
+              </Pressable>
+            </Link>
 
-            <Pressable
-              onPress={goToCareers}
-              style={[
-                styles.mobileSubMenuItem,
-                activeRoute === "careers" && styles.mobileMenuItemActive,
-              ]}
-            >
-              <Briefcase size={16} color={activeRoute === "careers" ? colors.primary : "#64748B"} />
-              <Text
+            <Link href="/careers" asChild>
+              <Pressable
+                onPress={goToCareers}
                 style={[
-                  styles.mobileSubMenuText,
-                  activeRoute === "careers" && styles.mobileMenuTextActive,
+                  styles.mobileSubMenuItem,
+                  activeRoute === "careers" && styles.mobileMenuItemActive,
                 ]}
               >
-                Careers
-              </Text>
-            </Pressable>
+                <Briefcase size={16} color={activeRoute === "careers" ? colors.primary : "#64748B"} />
+                <Text
+                  style={[
+                    styles.mobileSubMenuText,
+                    activeRoute === "careers" && styles.mobileMenuTextActive,
+                  ]}
+                >
+                  Careers
+                </Text>
+              </Pressable>
+            </Link>
 
-            <Pressable
-              onPress={goToBlogs}
-              style={[
-                styles.mobileSubMenuItem,
-                activeRoute === "blogs" && styles.mobileMenuItemActive,
-              ]}
-            >
-              <BookOpen size={16} color={activeRoute === "blogs" ? colors.primary : "#64748B"} />
-              <Text
+            <Link href="/blogs" asChild>
+              <Pressable
+                onPress={goToBlogs}
                 style={[
-                  styles.mobileSubMenuText,
-                  activeRoute === "blogs" && styles.mobileMenuTextActive,
+                  styles.mobileSubMenuItem,
+                  activeRoute === "blogs" && styles.mobileMenuItemActive,
                 ]}
               >
-                Blogs & Stories
-              </Text>
-            </Pressable>
+                <BookOpen size={16} color={activeRoute === "blogs" ? colors.primary : "#64748B"} />
+                <Text
+                  style={[
+                    styles.mobileSubMenuText,
+                    activeRoute === "blogs" && styles.mobileMenuTextActive,
+                  ]}
+                >
+                  Blogs & Stories
+                </Text>
+              </Pressable>
+            </Link>
           </View>
 
-          <Pressable
-            onPress={goToContact}
-            style={[styles.mobileMenuItem, activeRoute === "contact" && styles.mobileMenuItemActive]}
-          >
-            <Text
-              style={[
-                styles.mobileMenuText,
-                activeRoute === "contact" && styles.mobileMenuTextActive,
-              ]}
+          <Link href="/contact" asChild>
+            <Pressable
+              onPress={goToContact}
+              style={[styles.mobileMenuItem, activeRoute === "contact" && styles.mobileMenuItemActive]}
             >
-              Contact Us
-            </Text>
-          </Pressable>
+              <Text
+                style={[
+                  styles.mobileMenuText,
+                  activeRoute === "contact" && styles.mobileMenuTextActive,
+                ]}
+              >
+                Contact Us
+              </Text>
+            </Pressable>
+          </Link>
 
           <Pressable onPress={goToPartner} style={styles.mobileMenuItem}>
             <Text style={styles.mobileMenuText}>Partner with Us</Text>

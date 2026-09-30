@@ -17,6 +17,7 @@ import {
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UniversalFooter } from "@/src/components/UniversalFooter";
+import { SEOHead } from "@/src/components/SEOHead";
 import { ArrowLeft } from "lucide-react-native";
 import { colors, radius, spacing } from "@/src/constants/theme";
 import { PRIVACY_POLICY_TEXT } from "@/src/constants/privacyPolicy";
@@ -104,6 +105,12 @@ export default function PrivacyPage() {
 
   return (
     <View style={styles.root}>
+      <SEOHead
+        title="Privacy Policy — Book A Shoot"
+        description="Learn how Book A Shoot protects your customer data, payment security, and personal information under India's Digital Personal Data Protection Act."
+        canonicalPath="/privacy"
+      />
+
       {/* ── Top Navbar ─────────────────────────────────────────────────── */}
       <View style={[styles.navbar, { paddingTop: insets.top }]}>
         <View style={[styles.navInner, isWide && styles.navInnerWide]}>

@@ -1,11 +1,10 @@
 /**
  * Supabase Client configuration for BOOK A SHOOT.
- * Uses AsyncStorage for cross-platform session persistence on Android, iOS, and Web.
+ * Uses a server-safe AsyncStorage adapter that safely handles SSR and static pre-rendering (Node.js)
+ * as well as client-side web and native environments.
  *
- * IMPORTANT: detectSessionInUrl=true on web means Supabase automatically processes
- * the ?code= PKCE callback from Google OAuth. Do NOT manually call
- * exchangeCodeForSession() on web — the code is single-use and Supabase already
- * consumed it. Use getSession() after the redirect instead.
+ * IMPORTANT: detectSessionInUrl is only active on the browser client so build-time static rendering
+ * does not attempt to access window.location.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient } from "@supabase/supabase-js";
@@ -30,14 +29,48 @@ export function getSupabaseAnonKey(): string {
 const supabaseUrl = getSupabaseUrl();
 const supabaseAnonKey = getSupabaseAnonKey();
 
+const isBrowser = typeof window !== "undefined";
+
+// Safe cross-platform storage adapter (prevents "window is not defined" during SSG export)
+const serverSafeStorage = {
+  getItem: async (key: string) => {
+    if (!isBrowser && Platform.OS === "web") {
+      return null;
+    }
+    try {
+      return await AsyncStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: async (key: string, value: string) => {
+    if (!isBrowser && Platform.OS === "web") {
+      return;
+    }
+    try {
+      await AsyncStorage.setItem(key, value);
+    } catch {
+      // Ignore write errors during build
+    }
+  },
+  removeItem: async (key: string) => {
+    if (!isBrowser && Platform.OS === "web") {
+      return;
+    }
+    try {
+      await AsyncStorage.removeItem(key);
+    } catch {
+      // Ignore
+    }
+  },
+};
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
-    autoRefreshToken: true,
-    persistSession: true,
-    // On web: Supabase auto-processes the OAuth callback URL (?code= or #access_token=).
-    // On native: We manually parse the deep-link URL in signInWithGoogleViaSupabase().
-    detectSessionInUrl: Platform.OS === "web",
+    storage: serverSafeStorage,
+    autoRefreshToken: isBrowser,
+    persistSession: isBrowser,
+    detectSessionInUrl: isBrowser && Platform.OS === "web",
   },
 });
 

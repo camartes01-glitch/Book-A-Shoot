@@ -29,6 +29,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 import { UniversalFooter } from "@/src/components/UniversalFooter";
 import { UniversalNavbar } from "@/src/components/UniversalNavbar";
+import { SEOHead } from "@/src/components/SEOHead";
+import { createBreadcrumbSchema } from "@/src/constants/seoSchemas";
 import {
   AlertCircle,
   ArrowLeft,
@@ -243,8 +245,27 @@ export default function ContactPage() {
     setErrorMsg("");
   };
 
+  const breadcrumbSchema = createBreadcrumbSchema([
+    { name: "Home", path: "/" },
+    { name: "Contact Us", path: "/contact" },
+  ]);
+
   return (
     <View style={styles.root}>
+      <SEOHead
+        title="Contact Us — Book A Shoot | Customer Support & Studio Onboarding"
+        description="Reach Book A Shoot customer support or apply as a verified photography studio. Available via phone, WhatsApp, and email across South India."
+        canonicalPath="/contact"
+        ogImage="/contact.webp"
+        keywords={[
+          "contact book a shoot",
+          "photography customer support",
+          "photographer studio onboarding",
+          "camartes support number",
+        ]}
+        structuredData={breadcrumbSchema}
+      />
+
       {/* ── Universal Constant Navbar ──────────────────────────────────────── */}
       <UniversalNavbar activeRoute="contact" />
 
