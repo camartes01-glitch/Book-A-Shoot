@@ -18,14 +18,18 @@ import {
   Images,
   Lock,
   MapPin,
+  MessageSquare,
   ShieldCheck,
   Sparkles,
   Star,
+  ThumbsUp,
   Video,
 } from "lucide-react-native";
 import { ImageLightboxModal } from "@/src/components/ImageLightboxModal";
+import { VendorReviewsModal } from "@/src/components/VendorReviewsModal";
 import { Button } from "@/src/components/ui";
 import { cacheVendorProfile, getCachedVendorProfile, getVendorProfile } from "@/src/services/bookingApi";
+import { fetchVendorReviews, type VendorReviewItem } from "@/src/services/reviewApi";
 import { useAppStore } from "@/src/state/AppProvider";
 import type { CustomerVendor } from "@/src/types/vendor";
 import { colors, fontWeights, spacing } from "@/src/constants/theme";
@@ -46,6 +50,7 @@ export default function VendorProfileScreen() {
     city?: string;
     rating?: string;
     image?: string;
+    highlightReviewId?: string;
   }>();
   const vendorId = params.vendorId;
   const { activeDraft } = useAppStore();
@@ -93,6 +98,13 @@ export default function VendorProfileScreen() {
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
 
+  // Reviews state & modal
+  const [reviewsModalVisible, setReviewsModalVisible] = useState(
+    Boolean(params.highlightReviewId)
+  );
+  const [vendorReviews, setVendorReviews] = useState<VendorReviewItem[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+
   useEffect(() => {
     (async () => {
       if (!vendor) setLoading(true);
@@ -110,12 +122,41 @@ export default function VendorProfileScreen() {
     })();
   }, [vendorId]);
 
+  // Fetch verified reviews for this vendor
+  useEffect(() => {
+    if (!vendorId) return;
+    void (async () => {
+      setLoadingReviews(true);
+      try {
+        const items = await fetchVendorReviews(vendorId);
+        if (Array.isArray(items)) {
+          setVendorReviews(items);
+        }
+      } catch {
+        // non-blocking
+      } finally {
+        setLoadingReviews(false);
+      }
+    })();
+  }, [vendorId]);
+
   const studioName = vendor?.studioName || match?.studioName || "Photography Firm";
   const city = vendor?.city || match?.city || "Hyderabad";
   const area = match?.area || vendor?.serviceAreas?.[0] || city;
-  const rating = vendor?.rating || match?.rating || 4.8;
   const bookings = vendor?.completedBookings || match?.completedBookings || 24;
   const expYears = vendor?.experienceYears || match?.experienceYears || 8;
+
+  // Real-time recalculation of average rating and total counts
+  const totalReviewsCount = vendorReviews.length;
+  const computedAvgRating =
+    totalReviewsCount > 0
+      ? vendorReviews.reduce((sum, r) => sum + (r.rating || 5), 0) / totalReviewsCount
+      : (vendor?.rating || match?.rating || 4.8);
+  const rating = computedAvgRating;
+  const ratingCountLabel =
+    totalReviewsCount > 0
+      ? `${totalReviewsCount} rating${totalReviewsCount === 1 ? "" : "s"}`
+      : `${bookings} shoots`;
 
   // Gather portfolio photos
   const rawImages = Array.from(
@@ -229,12 +270,22 @@ export default function VendorProfileScreen() {
 
                 {/* Key Factors Grid: Clean, uncluttered, no double ratings */}
                 <View style={styles.badgesGrid}>
-                  <View style={styles.badgePill}>
+                  <Pressable
+                    onPress={() => setReviewsModalVisible(true)}
+                    style={({ pressed }) => [
+                      styles.badgePill,
+                      styles.ratingBadgePill,
+                      pressed && styles.btnPressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Rating ${rating.toFixed(1)}, tap to view reviews`}
+                  >
                     <Star size={13} color="#F59E0B" fill="#F59E0B" />
                     <Text style={styles.badgePillText}>
-                      {rating.toFixed(1)} ({bookings} shoots)
+                      {rating.toFixed(1)} ({ratingCountLabel})
                     </Text>
-                  </View>
+                    <ChevronRight size={12} color="#94A3B8" />
+                  </Pressable>
 
                   <View style={styles.badgePill}>
                     <Award size={13} color="#64748B" />
@@ -355,6 +406,122 @@ export default function VendorProfileScreen() {
               </View>
             </View>
 
+            {/* Verified Client Reviews Section */}
+            <View style={styles.sectionCard}>
+              <View style={styles.reviewsSectionHeader}>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Star size={18} color="#EA580C" fill="#EA580C" />
+                    <Text style={styles.sectionTitle}>Client Ratings & Reviews</Text>
+                  </View>
+                  <Text style={styles.sectionSubtitle}>
+                    Verified feedback from completed shoot bookings
+                  </Text>
+                </View>
+
+                <Pressable
+                  onPress={() => setReviewsModalVisible(true)}
+                  style={({ pressed }) => [styles.seeAllReviewsBtn, pressed && styles.btnPressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="View all verified reviews"
+                >
+                  <Text style={styles.seeAllReviewsText}>View All</Text>
+                  <ChevronRight size={14} color="#EA580C" strokeWidth={2.5} />
+                </Pressable>
+              </View>
+
+              {/* Rating Summary Banner */}
+              <Pressable
+                onPress={() => setReviewsModalVisible(true)}
+                style={({ pressed }) => [styles.ratingBanner, pressed && styles.btnPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Rating summary banner, tap to open details"
+              >
+                <View style={styles.ratingBannerLeft}>
+                  <Text style={styles.ratingBannerScore}>{rating.toFixed(1)}</Text>
+                  <View>
+                    <View style={{ flexDirection: "row", gap: 2 }}>
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star
+                          key={s}
+                          size={13}
+                          color="#F59E0B"
+                          fill={s <= Math.round(rating) ? "#F59E0B" : "transparent"}
+                        />
+                      ))}
+                    </View>
+                    <Text style={styles.ratingBannerCount}>{ratingCountLabel}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.ratingBannerRight}>
+                  <View style={styles.verifiedClientTag}>
+                    <ShieldCheck size={12} color="#16A34A" />
+                    <Text style={styles.verifiedClientTagText}>100% Verified</Text>
+                  </View>
+                  <Text style={styles.tapToInspectText}>Tap to inspect</Text>
+                </View>
+              </Pressable>
+
+              {/* Review Previews */}
+              {vendorReviews.length > 0 ? (
+                <View style={styles.reviewPreviewsList}>
+                  {vendorReviews.slice(0, 2).map((rev) => {
+                    const revStars = Math.max(1, Math.min(5, Math.round(rev.rating || 5)));
+                    return (
+                      <View key={rev.id || `${rev.created_at}`} style={styles.previewCard}>
+                        <View style={styles.previewHeader}>
+                          <View style={styles.previewAvatar}>
+                            <Text style={styles.previewAvatarText}>V</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                              <Text style={styles.previewName}>Verified Customer</Text>
+                              <ShieldCheck size={11} color="#16A34A" />
+                            </View>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 2, marginTop: 2 }}>
+                              {[1, 2, 3, 4, 5].map((s) => (
+                                <Star
+                                  key={s}
+                                  size={10}
+                                  color="#F59E0B"
+                                  fill={s <= revStars ? "#F59E0B" : "transparent"}
+                                />
+                              ))}
+                            </View>
+                          </View>
+                        </View>
+                        {rev.comment ? (
+                          <Text style={styles.previewComment} numberOfLines={2}>
+                            "{rev.comment}"
+                          </Text>
+                        ) : null}
+                      </View>
+                    );
+                  })}
+
+                  <Pressable
+                    onPress={() => setReviewsModalVisible(true)}
+                    style={({ pressed }) => [styles.viewAllReviewsLink, pressed && styles.btnPressed]}
+                  >
+                    <Text style={styles.viewAllReviewsLinkText}>
+                      See all {vendorReviews.length} client review{vendorReviews.length === 1 ? "" : "s"} & ratings
+                    </Text>
+                    <ChevronRight size={14} color="#EA580C" strokeWidth={2.5} />
+                  </Pressable>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={() => setReviewsModalVisible(true)}
+                  style={styles.noReviewsPlaceholder}
+                >
+                  <Text style={styles.noReviewsPlaceholderText}>
+                    {studioName} maintains a {rating.toFixed(1)} rating. Tap to view ratings breakdown.
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+
             {/* Privacy & Contact Unlock Callout */}
             <View style={styles.contactNoticeCard}>
               <View style={styles.contactNoticeIcon}>
@@ -389,6 +556,20 @@ export default function VendorProfileScreen() {
         initialIndex={selectedPhotoIndex}
         title={`${studioName} Portfolio`}
         onClose={() => setLightboxVisible(false)}
+      />
+
+      {/* Vendor Reviews Breakdown Modal */}
+      <VendorReviewsModal
+        visible={reviewsModalVisible}
+        onClose={() => setReviewsModalVisible(false)}
+        vendorName={studioName}
+        vendorId={vendorId}
+        averageRating={rating}
+        totalRatingsCount={totalReviewsCount > 0 ? totalReviewsCount : bookings}
+        reviews={vendorReviews}
+        loading={loadingReviews}
+        isVendorOwner={false}
+        highlightReviewId={params.highlightReviewId}
       />
     </SafeAreaView>
   );
@@ -754,6 +935,149 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#EF4444",
     fontWeight: "600",
+    textAlign: "center",
+  },
+  ratingBadgePill: {
+    borderColor: "#FCD34D",
+    backgroundColor: "#FFFBEB",
+  },
+  reviewsSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  seeAllReviewsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: "#FFF7ED",
+  },
+  seeAllReviewsText: {
+    fontSize: 12,
+    fontWeight: fontWeights.heading,
+    color: "#EA580C",
+  },
+  ratingBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFFBEB",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    padding: 14,
+    marginBottom: 12,
+  },
+  ratingBannerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  ratingBannerScore: {
+    fontSize: 32,
+    fontWeight: "800",
+    color: "#0F172A",
+    letterSpacing: -0.5,
+  },
+  ratingBannerCount: {
+    fontSize: 11.5,
+    color: "#78350F",
+    fontWeight: fontWeights.subheading,
+    marginTop: 2,
+  },
+  ratingBannerRight: {
+    alignItems: "flex-end",
+    gap: 4,
+  },
+  verifiedClientTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#DCFCE7",
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 999,
+  },
+  verifiedClientTagText: {
+    fontSize: 10,
+    fontWeight: fontWeights.heading,
+    color: "#16A34A",
+  },
+  tapToInspectText: {
+    fontSize: 10.5,
+    color: "#92400E",
+    fontWeight: fontWeights.subheading,
+  },
+  reviewPreviewsList: {
+    gap: 10,
+  },
+  previewCard: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  previewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  previewAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewAvatarText: {
+    fontSize: 11,
+    fontWeight: fontWeights.heading,
+    color: "#64748B",
+  },
+  previewName: {
+    fontSize: 12,
+    fontWeight: fontWeights.heading,
+    color: "#334155",
+  },
+  previewComment: {
+    fontSize: 12,
+    color: "#475569",
+    marginTop: 6,
+    fontStyle: "italic",
+    lineHeight: 16,
+  },
+  viewAllReviewsLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    paddingVertical: 10,
+    backgroundColor: "#FFF7ED",
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  viewAllReviewsLinkText: {
+    fontSize: 12.5,
+    fontWeight: fontWeights.heading,
+    color: "#EA580C",
+  },
+  noReviewsPlaceholder: {
+    paddingVertical: 14,
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  noReviewsPlaceholderText: {
+    fontSize: 12,
+    color: "#64748B",
     textAlign: "center",
   },
 });

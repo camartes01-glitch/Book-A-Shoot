@@ -323,3 +323,30 @@ Two things worth knowing if/when the backend evolves this further:
 
 1. **1-hour accept window is currently a client-side assumption, not a verified backend contract.** The client starts its own 1-hour clock from the moment it first observes a firm assigned, and treats a firm as dead (triggering a replacement search) if that clock runs out with no `has_accepted`. If Camartes' vendor platform already enforces (or later enforces) its own lock at 1 hour server-side, reflecting that back explicitly — e.g. `assigned_photographers[].status: "timed_out"` — would let the client retire its own timer in favor of the authoritative one. The row shape already has room for this: the client parses `has_rejected` / `is_rejected` / `status` off each `assigned_photographers` entry today (`src/domain/bookingRequest.ts`), it just isn't sent yet.
 2. **A per-firm decline currently has no customer-visible signal at all** (per the note on §D above — "Decline" just removes the lead from that vendor's own feed). Sending `status: "rejected"` on that firm's row the next time the customer polls `GET /api/bookings/{id}` (instead of silently omitting it) is the single highest-value change here: it's what lets the client fire an accurate "**{firm_name}** rejected your request" notification and count that slot as open, instead of relying on the weaker "firm silently disappeared from the list" heuristic it falls back to today.
+
+---
+
+## 5. Business Hours SLA Engine (9:00 AM – 9:00 PM IST · 60-Minute Response Window)
+
+To support lakhs of concurrent users without unfair expirations during the night, both the backend (`backend/routes_bookings.py`) and customer app (`src/engine/businessHours.ts`) enforce a **strict 9:00 AM to 9:00 PM IST business window**:
+
+### A. The 60-Minute Business Clock Rules
+1. **Operating Hours**: 9:00 AM to 9:00 PM IST (12 active hours / 720 active minutes daily).
+2. **Night Off-Hours (9:00 PM to 9:00 AM next day)**: The 60-minute countdown is **frozen / paused**.
+   - Example: A request received at 10:00 PM still dispatches immediately to photographers, but the 60-minute SLA countdown officially starts at **9:00 AM tomorrow**, expiring at **10:00 AM tomorrow**.
+3. **Late Evening Rollover (8:00 PM to 9:00 PM)**:
+   - Example: A request received at 8:30 PM has 30 minutes left in today's window. Those 30 minutes tick until 9:00 PM, and the remaining 30 minutes roll over to tomorrow morning: expires at **9:30 AM tomorrow**.
+4. **Daytime Requests (9:00 AM to 8:00 PM)**:
+   - Full 60 minutes are consumed immediately on the same day (e.g. 2:00 PM expires at 3:00 PM).
+
+### B. High-Scale Mathematical Guarantees ($O(1)$)
+- **Zero Drift, Zero Memory Leaks**: Evaluated via constant-time epoch timestamp arithmetic. No polling minute counters or memory-resident state.
+- **Unified Across Client & Server**:
+  - Frontend TypeScript engine: `src/engine/businessHours.ts` (tested in `src/engine/__tests__/businessHours.test.ts`).
+  - Backend Python engine: `calculate_business_sla_py()` and `has_firm_timed_out_py()` in `routes_bookings.py`.
+- **Database Fields on `booking_requests`**:
+  - `sla_active_from`: ISO timestamp when response clock begins.
+  - `expires_at`: ISO timestamp when the 60-minute window closes.
+  - `sla_window`: `"9:00 AM - 9:00 PM IST"`.
+  - `provider_assigned_at`: Map of `{ provider_id: iso_timestamp }` for exact per-firm tracking.
+

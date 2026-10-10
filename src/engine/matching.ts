@@ -203,15 +203,12 @@ function vendorServesCity(vendor: CustomerVendor, city: string): boolean {
   return vendor.serviceAreas.some((area) => isCityMatch(target, area));
 }
 
-/** Check vendor availability based on minimum wallet balance (₹500). */
+/** Check vendor availability based on required capabilities. */
 export function checkVendorAvailability(
   vendor: CustomerVendor,
   _days?: EventDay[],
   req?: AggregatedRequirement,
 ): { available: boolean; reason?: string } {
-  if (vendor.walletBalance !== undefined && vendor.walletBalance < 500) {
-    return { available: false, reason: "Insufficient wallet balance (minimum ₹500 required)." };
-  }
   if (req && !vendorHasCapabilities(vendor, req)) {
     return { available: false, reason: "Doesn't offer all requested services." };
   }
@@ -298,17 +295,25 @@ export function matchVendors(
   // 2. Location preference / Event city
   // 3. Active wallet balance (balance >= 500)
   // Add-ons (LED walls, drones, etc.) NEVER filter out photography firms!
+    // Filter for photography firms:
+  // Strictly filter only by:
+  // 1. Photography firm exclusivity
+  // 2. Location preference / Event city
+  // (Wallet balance is NOT filtered out - requests are dispatched to all qualified studios,
+  // studios with < 500 balance receive it in a locked state).
+  // Add-ons (LED walls, drones, etc.) NEVER filter out photography firms!
   const candidates = vendors.filter(
     (v) =>
       (!excludedVendorIds || !excludedVendorIds.includes(v.vendorId)) &&
       isPhotographyFirm(v) &&
       vendorServesLocationPreference(v, locationPref, eventCity) &&
-      (v.walletBalance === undefined || v.walletBalance >= 500) &&
       checkVendorAvailability(v, booking.days as EventDay[], req).available,
   );
 
   const results = candidates.map((vendor) => {
     const availability = checkVendorAvailability(vendor, booking.days as EventDay[], req);
+    const isLocked = vendor.walletBalance !== undefined && vendor.walletBalance < 500;
+    const hasMinBalance = !isLocked;
     const estimatedPrice = estimateVendorPrice(vendor, booking, tier);
     const matchScore = scoreVendor(vendor, booking, req, availability, tier, budget);
     const tierMatched = firmMatchesBudgetTier(vendor, targetBudgetTier);
@@ -335,6 +340,9 @@ export function matchVendors(
         isStudio: true,
         isFirm: true,
         budgetPreference: vendor.budgetPreference,
+        walletBalance: vendor.walletBalance,
+        isLocked,
+        hasMinBalance,
       } as VendorMatchResult,
       tierMatched,
       locationMatched,

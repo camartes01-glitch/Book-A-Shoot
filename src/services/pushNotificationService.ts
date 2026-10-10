@@ -133,6 +133,34 @@ class PushNotificationService {
     }
   }
 
+  /**
+   * Immediately presents a system banner & sound notification on the device
+   * (works on native when locked or minimized; falls back to browser notifications on web).
+   */
+  async presentLocalNotification(title: string, body: string, data?: Record<string, unknown>): Promise<void> {
+    if (Platform.OS === "web") {
+      this.showWebNotification(title, body, data);
+      return;
+    }
+    const Notifications = await this.loadNotificationsModule();
+    if (!Notifications) return;
+    if (!(await this.ensurePermission(Notifications))) return;
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          data,
+          sound: true,
+          priority: Notifications.AndroidNotificationPriority ? Notifications.AndroidNotificationPriority.HIGH : undefined,
+        },
+        trigger: null,
+      });
+    } catch (e) {
+      if (__DEV__) console.log("[PushNotifications] presentLocalNotification error:", e);
+    }
+  }
+
   private async initNativeNotifications(): Promise<void> {
     try {
       // Safely load expo-notifications if present

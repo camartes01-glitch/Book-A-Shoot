@@ -101,8 +101,21 @@ export function resolveNotificationRoute(n: AppNotification, bookings: Booking[]
     case "event_reminder":
     case "reminder":
       return bookingRoute(n);
-    case "draft_resume_nudge":
-      return draftResumeRoute(n, bookings);
+    case "new_review":
+    case "review": {
+      const data = n.data || {};
+      const vendorId = str(data.provider_id) || str(data.vendor_id) || n.firmId;
+      if (vendorId) {
+        return {
+          pathname: "/booking/vendor/[vendorId]",
+          params: {
+            vendorId,
+            ...(str(data.review_id) ? { highlightReviewId: str(data.review_id) } : {}),
+          },
+        };
+      }
+      return findBookingId(n) ? bookingRoute(n) : NOTIFICATIONS_ROUTE;
+    }
     case "welcome":
     case "marketing_nudge":
       return HOME_ROUTE;

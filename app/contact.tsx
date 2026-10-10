@@ -647,128 +647,188 @@ export default function ContactPage() {
               </Text>
             </View>
 
-            <View style={styles.socialProGrid}>
-              {/* WhatsApp Concierge */}
-              <Pressable
-                onPress={handleWhatsApp}
-                style={({ pressed }) => [styles.socialProCard, pressed && styles.pressed]}
-                accessibilityRole="link"
-                accessibilityLabel="WhatsApp Concierge"
-              >
-                <View style={styles.socialProCardTop}>
-                  <View style={[styles.socialProIconBadge, { backgroundColor: "rgba(37, 211, 102, 0.12)" }]}>
-                    <WhatsAppOfficialIcon size={26} />
-                  </View>
-                  <View style={styles.socialProActionArrow}>
-                    <ArrowUpRight size={17} color="#64748B" />
-                  </View>
-                </View>
-                <View style={styles.socialProCardBody}>
-                  <Text style={styles.socialProCardName}>WhatsApp Concierge</Text>
-                  <Text style={styles.socialProCardHandle}>+91 96032 15551</Text>
-                  <Text style={styles.socialProCardDesc}>
-                    Direct instant chat for live shoot dates, custom packages, and fast pricing.
-                  </Text>
-                </View>
-                <View style={styles.socialProCardFooter}>
-                  <View style={styles.socialProOnlineDot} />
-                  <Text style={styles.socialProFooterStatus}>Online · 9 AM – 9 PM IST</Text>
-                </View>
-              </Pressable>
+            {!isWide ? (
+              <View style={styles.socialMobileRow}>
+                {/* WhatsApp */}
+                <Pressable
+                  onPress={handleWhatsApp}
+                  style={({ pressed }) => [
+                    styles.socialMobileBtn,
+                    { backgroundColor: "rgba(37, 211, 102, 0.12)", borderColor: "rgba(37, 211, 102, 0.25)" },
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="link"
+                  accessibilityLabel="WhatsApp Concierge"
+                >
+                  <WhatsAppOfficialIcon size={26} />
+                </Pressable>
 
-              {/* Instagram */}
-              <Pressable
-                onPress={() => openUrl(SOCIAL_LINKS.instagram)}
-                style={({ pressed }) => [styles.socialProCard, pressed && styles.pressed]}
-                accessibilityRole="link"
-                accessibilityLabel="Instagram @bookashootonline"
-              >
-                <View style={styles.socialProCardTop}>
-                  <View style={[styles.socialProIconBadge, { backgroundColor: "rgba(225, 48, 108, 0.10)" }]}>
-                    <Image
-                      source={require("@/assets/images/instagram.png")}
-                      style={styles.socialProBadgeImg}
-                      resizeMode="contain"
-                    />
-                  </View>
-                  <View style={styles.socialProActionArrow}>
-                    <ArrowUpRight size={17} color="#64748B" />
-                  </View>
-                </View>
-                <View style={styles.socialProCardBody}>
-                  <Text style={styles.socialProCardName}>Instagram</Text>
-                  <Text style={styles.socialProCardHandle}>@bookashootonline</Text>
-                  <Text style={styles.socialProCardDesc}>
-                    Cinematic reels, bride & groom portraits, baby shoots & daily behind-the-scenes stories.
-                  </Text>
-                </View>
-                <View style={styles.socialProCardFooter}>
-                  <Text style={styles.socialProFooterTag}>Visual Portfolio</Text>
-                </View>
-              </Pressable>
+                {/* Instagram */}
+                <Pressable
+                  onPress={() => openUrl(SOCIAL_LINKS.instagram)}
+                  style={({ pressed }) => [
+                    styles.socialMobileBtn,
+                    { backgroundColor: "rgba(225, 48, 108, 0.10)", borderColor: "rgba(225, 48, 108, 0.20)" },
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="link"
+                  accessibilityLabel="Instagram"
+                >
+                  <Image
+                    source={require("@/assets/images/instagram.png")}
+                    style={styles.socialMobileImg}
+                    resizeMode="contain"
+                  />
+                </Pressable>
 
-              {/* Facebook */}
-              <Pressable
-                onPress={() => openUrl(SOCIAL_LINKS.facebook)}
-                style={({ pressed }) => [styles.socialProCard, pressed && styles.pressed]}
-                accessibilityRole="link"
-                accessibilityLabel="Facebook @bookashootonline"
-              >
-                <View style={styles.socialProCardTop}>
-                  <View style={[styles.socialProIconBadge, { backgroundColor: "rgba(24, 119, 242, 0.10)" }]}>
-                    <Image
-                      source={require("@/assets/images/facebook.png")}
-                      style={styles.socialProBadgeImg}
-                      resizeMode="contain"
-                    />
-                  </View>
-                  <View style={styles.socialProActionArrow}>
-                    <ArrowUpRight size={17} color="#64748B" />
-                  </View>
-                </View>
-                <View style={styles.socialProCardBody}>
-                  <Text style={styles.socialProCardName}>Facebook</Text>
-                  <Text style={styles.socialProCardHandle}>bookashootonline</Text>
-                  <Text style={styles.socialProCardDesc}>
-                    Verified client reviews, complete event photo albums, and festival coverage updates.
-                  </Text>
-                </View>
-                <View style={styles.socialProCardFooter}>
-                  <Text style={styles.socialProFooterTag}>Community & Reviews</Text>
-                </View>
-              </Pressable>
+                {/* Facebook */}
+                <Pressable
+                  onPress={() => openUrl(SOCIAL_LINKS.facebook)}
+                  style={({ pressed }) => [
+                    styles.socialMobileBtn,
+                    { backgroundColor: "rgba(24, 119, 242, 0.10)", borderColor: "rgba(24, 119, 242, 0.20)" },
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="link"
+                  accessibilityLabel="Facebook"
+                >
+                  <Image
+                    source={require("@/assets/images/facebook.png")}
+                    style={styles.socialMobileImg}
+                    resizeMode="contain"
+                  />
+                </Pressable>
 
-              {/* LinkedIn */}
-              <Pressable
-                onPress={() => openUrl(SOCIAL_LINKS.linkedin)}
-                style={({ pressed }) => [styles.socialProCard, pressed && styles.pressed]}
-                accessibilityRole="link"
-                accessibilityLabel="LinkedIn Book A Shoot"
-              >
-                <View style={styles.socialProCardTop}>
-                  <View style={[styles.socialProIconBadge, { backgroundColor: "rgba(10, 102, 194, 0.10)" }]}>
-                    <Image
-                      source={require("@/assets/images/linkedin.png")}
-                      style={styles.socialProBadgeImg}
-                      resizeMode="contain"
-                    />
+                {/* LinkedIn */}
+                <Pressable
+                  onPress={() => openUrl(SOCIAL_LINKS.linkedin)}
+                  style={({ pressed }) => [
+                    styles.socialMobileBtn,
+                    { backgroundColor: "rgba(10, 102, 194, 0.10)", borderColor: "rgba(10, 102, 194, 0.20)" },
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="link"
+                  accessibilityLabel="LinkedIn"
+                >
+                  <Image
+                    source={require("@/assets/images/linkedin.png")}
+                    style={styles.socialMobileImg}
+                    resizeMode="contain"
+                  />
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.socialProGrid}>
+                {/* WhatsApp Concierge */}
+                <Pressable
+                  onPress={handleWhatsApp}
+                  style={({ pressed }) => [styles.socialProCard, pressed && styles.pressed]}
+                  accessibilityRole="link"
+                  accessibilityLabel="WhatsApp Concierge"
+                >
+                  <View style={styles.socialProCardTop}>
+                    <View style={[styles.socialProIconBadge, { backgroundColor: "rgba(37, 211, 102, 0.12)" }]}>
+                      <WhatsAppOfficialIcon size={26} />
+                    </View>
+                    <View style={styles.socialProActionArrow}>
+                      <ArrowUpRight size={17} color="#64748B" />
+                    </View>
                   </View>
-                  <View style={styles.socialProActionArrow}>
-                    <ArrowUpRight size={17} color="#64748B" />
+                  <View style={styles.socialProCardBody}>
+                    <Text style={styles.socialProCardName}>WhatsApp Concierge</Text>
+                    <Text style={styles.socialProCardHandle}>+91 96032 15551</Text>
                   </View>
-                </View>
-                <View style={styles.socialProCardBody}>
-                  <Text style={styles.socialProCardName}>LinkedIn</Text>
-                  <Text style={styles.socialProCardHandle}>Book A Shoot</Text>
-                  <Text style={styles.socialProCardDesc}>
-                    Creative industry network, studio partnerships, company culture & announcements.
-                  </Text>
-                </View>
-                <View style={styles.socialProCardFooter}>
-                  <Text style={styles.socialProFooterTag}>Company & Network</Text>
-                </View>
-              </Pressable>
-            </View>
+                  <View style={styles.socialProCardFooter}>
+                    <View style={styles.socialProOnlineDot} />
+                    <Text style={styles.socialProFooterStatus}>Online · 9 AM – 9 PM IST</Text>
+                  </View>
+                </Pressable>
+
+                {/* Instagram */}
+                <Pressable
+                  onPress={() => openUrl(SOCIAL_LINKS.instagram)}
+                  style={({ pressed }) => [styles.socialProCard, pressed && styles.pressed]}
+                  accessibilityRole="link"
+                  accessibilityLabel="Instagram @bookashootonline"
+                >
+                  <View style={styles.socialProCardTop}>
+                    <View style={[styles.socialProIconBadge, { backgroundColor: "rgba(225, 48, 108, 0.10)" }]}>
+                      <Image
+                        source={require("@/assets/images/instagram.png")}
+                        style={styles.socialProBadgeImg}
+                        resizeMode="contain"
+                      />
+                    </View>
+                    <View style={styles.socialProActionArrow}>
+                      <ArrowUpRight size={17} color="#64748B" />
+                    </View>
+                  </View>
+                  <View style={styles.socialProCardBody}>
+                    <Text style={styles.socialProCardName}>Instagram</Text>
+                    <Text style={styles.socialProCardHandle}>@bookashootonline</Text>
+                  </View>
+                  <View style={styles.socialProCardFooter}>
+                    <Text style={styles.socialProFooterTag}>Visual Portfolio</Text>
+                  </View>
+                </Pressable>
+
+                {/* Facebook */}
+                <Pressable
+                  onPress={() => openUrl(SOCIAL_LINKS.facebook)}
+                  style={({ pressed }) => [styles.socialProCard, pressed && styles.pressed]}
+                  accessibilityRole="link"
+                  accessibilityLabel="Facebook @bookashootonline"
+                >
+                  <View style={styles.socialProCardTop}>
+                    <View style={[styles.socialProIconBadge, { backgroundColor: "rgba(24, 119, 242, 0.10)" }]}>
+                      <Image
+                        source={require("@/assets/images/facebook.png")}
+                        style={styles.socialProBadgeImg}
+                        resizeMode="contain"
+                      />
+                    </View>
+                    <View style={styles.socialProActionArrow}>
+                      <ArrowUpRight size={17} color="#64748B" />
+                    </View>
+                  </View>
+                  <View style={styles.socialProCardBody}>
+                    <Text style={styles.socialProCardName}>Facebook</Text>
+                    <Text style={styles.socialProCardHandle}>bookashootonline</Text>
+                  </View>
+                  <View style={styles.socialProCardFooter}>
+                    <Text style={styles.socialProFooterTag}>Community & Reviews</Text>
+                  </View>
+                </Pressable>
+
+                {/* LinkedIn */}
+                <Pressable
+                  onPress={() => openUrl(SOCIAL_LINKS.linkedin)}
+                  style={({ pressed }) => [styles.socialProCard, pressed && styles.pressed]}
+                  accessibilityRole="link"
+                  accessibilityLabel="LinkedIn Book A Shoot"
+                >
+                  <View style={styles.socialProCardTop}>
+                    <View style={[styles.socialProIconBadge, { backgroundColor: "rgba(10, 102, 194, 0.10)" }]}>
+                      <Image
+                        source={require("@/assets/images/linkedin.png")}
+                        style={styles.socialProBadgeImg}
+                        resizeMode="contain"
+                      />
+                    </View>
+                    <View style={styles.socialProActionArrow}>
+                      <ArrowUpRight size={17} color="#64748B" />
+                    </View>
+                  </View>
+                  <View style={styles.socialProCardBody}>
+                    <Text style={styles.socialProCardName}>LinkedIn</Text>
+                    <Text style={styles.socialProCardHandle}>Book A Shoot</Text>
+                  </View>
+                  <View style={styles.socialProCardFooter}>
+                    <Text style={styles.socialProFooterTag}>Company & Network</Text>
+                  </View>
+                </Pressable>
+              </View>
+            )}
           </View>
         </View>
 
@@ -1008,6 +1068,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 16,
+  },
+  socialMobileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
+    marginTop: 18,
+    paddingVertical: 10,
+  },
+  socialMobileBtn: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  socialMobileImg: {
+    width: 26,
+    height: 26,
   },
   socialProCard: {
     flex: 1,

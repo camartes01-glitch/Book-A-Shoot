@@ -947,7 +947,7 @@ export default function LandingPage() {
         </View>
 
         {/* ── LAST SECTION: CTA BANNER (cta.png as Whole Background Image, NO COLOR COVER LAYER, Left-Aligned) ── */}
-        <View style={styles.ctaBannerWrapper}>
+        <View style={[styles.ctaBannerWrapper, !isWide && styles.ctaBannerWrapperPhone]}>
           <SEOImage
             src={
               Platform.OS === "web"
@@ -961,13 +961,13 @@ export default function LandingPage() {
           />
 
           {/* No color scrim or cover layer — image displayed as is */}
-          <View style={[styles.ctaLeftContainer, isWide && styles.ctaLeftContainerWide]}>
-            <Text style={[styles.ctaTitleLeft, isWide && styles.ctaTitleLeftWide]}>
+          <View style={[styles.ctaLeftContainer, isWide ? styles.ctaLeftContainerWide : styles.ctaLeftContainerPhone]}>
+            <Text style={[styles.ctaTitleLeft, isWide ? styles.ctaTitleLeftWide : styles.ctaTitleLeftPhone]}>
               Ready to Book Your{"\n"}
               <Text style={{ color: colors.primaryDark }}>Verified Photographer?</Text>
             </Text>
 
-            <Text style={styles.ctaSubLeft}>
+            <Text style={[styles.ctaSubLeft, !isWide && styles.ctaSubLeftPhone]}>
               Join thousands of families and businesses who trust Book A Shoot for life's most precious celebrations.
             </Text>
 
@@ -982,7 +982,7 @@ export default function LandingPage() {
               <ArrowRight size={18} color={colors.white} />
             </Pressable>
 
-            <Text style={styles.ctaDisclaimerLeft}>
+            <Text style={[styles.ctaDisclaimerLeft, !isWide && styles.ctaDisclaimerLeftPhone]}>
               100% KYC-Verified Studios · Automated Replacement Guarantee · Transparent Escrow
             </Text>
           </View>
@@ -2044,8 +2044,12 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     minHeight: 460,
     justifyContent: "center",
-    paddingVertical: 72,
-    paddingHorizontal: spacing.xl,
+    marginTop: 84,
+    marginBottom: 40,
+  },
+  ctaBannerWrapperPhone: {
+    minHeight: 380,
+    marginTop: 40,
   },
   ctaBackgroundImage: {
     position: "absolute",
@@ -2057,33 +2061,49 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   ctaLeftContainer: {
-    maxWidth: 580,
-    alignItems: "flex-start",
+    paddingHorizontal: spacing.xl,
+    paddingVertical: 64,
+    maxWidth: 620,
+    gap: 16,
     zIndex: 2,
-    gap: spacing.md,
+    alignItems: "flex-start",
   },
   ctaLeftContainerWide: {
-    paddingLeft: 48,
-    maxWidth: 640,
+    paddingLeft: 72,
+  },
+  ctaLeftContainerPhone: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 40,
+    maxWidth: 340,
+    gap: 12,
   },
   ctaTitleLeft: {
     fontSize: 32,
     fontWeight: "600",
-    color: colors.text,
+    color: "#111827",
     textAlign: "left",
-    lineHeight: 42,
+    lineHeight: 40,
     letterSpacing: -0.5,
   },
   ctaTitleLeftWide: {
-    fontSize: 44,
-    lineHeight: 54,
+    fontSize: 40,
+    lineHeight: 48,
+  },
+  ctaTitleLeftPhone: {
+    fontSize: 24,
+    lineHeight: 32,
   },
   ctaSubLeft: {
     fontSize: 16,
-    color: colors.text,
+    color: "#374151",
     textAlign: "left",
-    lineHeight: 24,
+    lineHeight: 25,
     maxWidth: 480,
+  },
+  ctaSubLeftPhone: {
+    fontSize: 14,
+    lineHeight: 21,
+    maxWidth: 320,
   },
   ctaBtnOrange: {
     marginTop: spacing.xs,
@@ -2091,8 +2111,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingHorizontal: 36,
-    paddingVertical: 16,
+    paddingHorizontal: 32,
+    paddingVertical: 15,
     borderRadius: radius,
     shadowColor: colors.primaryDark,
     shadowOpacity: 0.28,
@@ -2102,15 +2122,21 @@ const styles = StyleSheet.create({
   },
   ctaBtnTextWhite: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
     letterSpacing: 0.2,
   },
   ctaDisclaimerLeft: {
     fontSize: 12,
-    color: colors.muted,
-    marginTop: spacing.xs,
+    color: "#6B7280",
+    lineHeight: 18,
+    marginTop: 4,
     textAlign: "left",
+  },
+  ctaDisclaimerLeftPhone: {
+    fontSize: 11,
+    lineHeight: 16,
+    maxWidth: 320,
   },
 
   // ── Footer ────────────────────────────────────────────────────────────

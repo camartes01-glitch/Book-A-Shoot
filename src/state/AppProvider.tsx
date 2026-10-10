@@ -13,6 +13,8 @@ import { isCompletedBooking } from "@/src/domain/bookingFilters";
 import type { BudgetFeasibilityResult } from "@/src/engine/pricing";
 import { router } from "expo-router";
 import { InAppNotificationToast } from "@/src/components/InAppNotificationToast";
+import { PostEventRatingModal } from "@/src/components/PostEventRatingModal";
+import { getPendingReviewBooking } from "@/src/services/reviewApi";
 import { pushNotificationService } from "@/src/services/pushNotificationService";
 import { markNotificationRead } from "@/src/services/notificationsStore";
 import { selectionFeedback } from "@/src/utils/haptics";
@@ -30,7 +32,7 @@ async function maybeSendWelcomeNotification(profile: CustomerProfile): Promise<v
   } catch {
     return;
   }
-  const { title, body } = buildNotificationContent("welcome", { customerName: profile.name });
+  const { title, body } = buildNotificationContent("welcome", { customerName: profile.name }, `welcome-${profile.customerId}`);
   await addNotification({
     id: makeId("ntf"),
     title,
@@ -39,6 +41,8 @@ async function maybeSendWelcomeNotification(profile: CustomerProfile): Promise<v
     category: categoryForType("welcome"),
     createdAt: new Date().toISOString(),
     read: false,
+    userId: profile.customerId,
+    data: { customerId: profile.customerId },
   });
 }
 
@@ -102,6 +106,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [activeDraft, setActiveDraft] = useState<Booking | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [activeToastNotification, setActiveToastNotification] = useState<AppNotification | null>(null);
+  const [pendingReviewBooking, setPendingReviewBooking] = useState<Booking | null>(null);
   const seenNotifIdsRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
   const activeDraftRef = useRef<Booking | null>(null);
@@ -260,13 +265,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setActiveToastNotification(newest);
           selectionFeedback().catch(() => {});
 
-          if (typeof document !== "undefined" && document.hidden) {
-            pushNotificationService.showWebNotification(newest.title, newest.body, {
-              sender_id: newest.userId || newest.firmId,
-              sender_name: newest.firmName,
-              booking_id: newest.bookingId,
-            });
-          }
+          // Trigger system banner & sound so alerts appear even when phone is locked or app is minimized
+          void pushNotificationService.presentLocalNotification(newest.title, newest.body, {
+            sender_id: newest.userId || newest.firmId,
+            sender_name: newest.firmName,
+            booking_id: newest.bookingId,
+            type: newest.type,
+          });
         }
       } catch {
         // Ignore network poll errors
@@ -293,6 +298,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const timer = setInterval(() => void tick(), 60000);
     return () => clearInterval(timer);
   }, []);
+
+  // Post-event rating slider check: when app is ready or bookings update,
+  // check if any completed shoot has not been rated yet.
+  useEffect(() => {
+    if (!ready || bookings.length === 0) return;
+    let cancelled = false;
+    const checkReviews = async () => {
+      try {
+        const candidate = await getPendingReviewBooking(bookings);
+        if (!cancelled && candidate) {
+          // Subtle delay so screen transition finishes before slider appears
+          setTimeout(() => {
+            if (!cancelled) setPendingReviewBooking(candidate);
+          }, 1200);
+        }
+      } catch {
+        // best effort
+      }
+    };
+    void checkReviews();
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, bookings]);
 
   const handleToastPress = useCallback((notif: AppNotification) => {
     setActiveToastNotification(null);
@@ -707,6 +736,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         notification={activeToastNotification}
         onPress={handleToastPress}
         onDismiss={() => setActiveToastNotification(null)}
+      />
+      <PostEventRatingModal
+        visible={Boolean(pendingReviewBooking)}
+        booking={pendingReviewBooking}
+        customerName={profile?.name || "Customer"}
+        onClose={() => setPendingReviewBooking(null)}
+        onSubmitSuccess={() => {
+          setPendingReviewBooking(null);
+          void refreshBookings();
+        }}
       />
       {children}
     </Ctx.Provider>

@@ -10,9 +10,11 @@ import {
 import { Check, CheckCircle2, X, XCircle, ChevronRight, Clock, Lock, MapPin, MessageCircle, MessageSquare, Phone, Star } from "lucide-react-native";
 import type { AssignedPhotographer } from "@/src/types/booking";
 import { maskPhoneNumber } from "@/src/domain/bookingRequest";
+import { calculateBusinessSla } from "@/src/engine/businessHours";
 
 interface CandidateFirmCardProps {
   firm: AssignedPhotographer;
+  bookingCreatedAt?: string | null;
   onConfirm?: (firm: AssignedPhotographer) => void;
   confirmLoading?: boolean;
   onChat?: (firm: AssignedPhotographer) => void;
@@ -32,6 +34,7 @@ function getInitials(name: string): string {
 
 export function CandidateFirmCard({
   firm,
+  bookingCreatedAt,
   onConfirm,
   confirmLoading = false,
   onChat,
@@ -42,6 +45,9 @@ export function CandidateFirmCard({
   const isRejected = Boolean(firm.has_rejected || firm.is_rejected || firm.status === "rejected" || (firm as any).status === "timed_out");
   const hasAccepted = Boolean(firm.has_accepted) && !isRejected;
   const canConfirm = Boolean(firm.can_confirm) && !isConfirmed && !isRejected;
+
+  const assignedTime = firm.assigned_at || bookingCreatedAt;
+  const sla = assignedTime ? calculateBusinessSla(assignedTime) : null;
 
   const rawPhone = firm.contact_phone || "";
   const digitsOnly = (firm.contact_whatsapp || rawPhone).replace(/\D/g, "");
@@ -141,7 +147,9 @@ export function CandidateFirmCard({
         ) : (
           <View style={styles.awaitingBadge}>
             <Clock size={11} color="#B45309" />
-            <Text style={styles.awaitingBadgeText}>Awaiting</Text>
+            <Text style={styles.awaitingBadgeText}>
+              {sla ? sla.badgeText : "Awaiting"}
+            </Text>
           </View>
         )}
       </Pressable>
@@ -178,7 +186,7 @@ export function CandidateFirmCard({
             <Text style={styles.maskedPhoneText}>{displayMaskedPhone}</Text>
           </View>
           <Text style={styles.maskedHintText}>
-            Direct contact unlocks once firm accepts
+            {sla ? sla.hintText : "Direct contact unlocks once firm accepts"}
           </Text>
         </View>
       )}

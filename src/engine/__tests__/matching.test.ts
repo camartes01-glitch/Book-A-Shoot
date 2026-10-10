@@ -226,7 +226,7 @@ describe("photography firm exclusivity & 3-tier budget matching", () => {
       expect(results[0].available).toBe(true);
     });
 
-    test("filters out photography firms with insufficient wallet balance (< 500)", () => {
+    test("does not filter out photography firms with low wallet balance (< 500), but marks them locked", () => {
       const day = eventDay();
       const firmLowBalance = vendor({
         vendorId: "firm-broke",
@@ -240,8 +240,15 @@ describe("photography firm exclusivity & 3-tier budget matching", () => {
       });
 
       const results = matchVendors({ days: [day], deliverables: emptyDeliverables() }, [firmLowBalance, firmGoodBalance], "signature", 250000);
-      expect(results).toHaveLength(1);
-      expect(results[0].vendorId).toBe("firm-good");
+      expect(results).toHaveLength(2);
+      const low = results.find((r) => r.vendorId === "firm-broke");
+      const good = results.find((r) => r.vendorId === "firm-good");
+      expect(low).toBeDefined();
+      expect(low?.isLocked).toBe(true);
+      expect(low?.hasMinBalance).toBe(false);
+      expect(good).toBeDefined();
+      expect(good?.isLocked).toBe(false);
+      expect(good?.hasMinBalance).toBe(true);
     });
 
     test("filters photography firms based on location preference", () => {

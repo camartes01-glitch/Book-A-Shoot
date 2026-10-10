@@ -83,6 +83,10 @@ describe("Notification engine diffing", () => {
     await AsyncStorage.clear();
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   test("fires vendor_accepted exactly once when a firm's has_accepted flips true", async () => {
     const pending = makeBooking({
       assigned_photographers: [
@@ -201,7 +205,8 @@ describe("Notification engine diffing", () => {
   });
 
   test("fires vendor_rejected with timed_out reason when a firm exceeds the 1-hour response window without accepting", async () => {
-    const baseTime = 1700000000000;
+    // 2:00 PM IST on 2026-10-15 (within 9 AM - 9 PM business window)
+    const baseTime = new Date("2026-10-15T14:00:00+05:30").getTime();
     jest.spyOn(Date, "now").mockReturnValue(baseTime);
 
     const pendingFirm = makeBooking({
@@ -222,18 +227,18 @@ describe("Notification engine diffing", () => {
       ],
     });
 
-    // First tick: records firmFirstSeenAt at baseTime
+    // First tick: records firmFirstSeenAt at baseTime (2:00 PM)
     await runEngineTick([pendingFirm], profile);
     let list = await getNotifications();
     expect(list.filter((n) => n.type === "vendor_rejected")).toHaveLength(0);
 
-    // 30 minutes later: still pending, no timeout
+    // 30 minutes later (2:30 PM): still pending, no timeout
     (Date.now as jest.Mock).mockReturnValue(baseTime + 30 * 60 * 1000);
     await runEngineTick([pendingFirm], profile);
     list = await getNotifications();
     expect(list.filter((n) => n.type === "vendor_rejected")).toHaveLength(0);
 
-    // 65 minutes later: exceeds 1-hour window -> fires vendor_rejected with timed_out copy
+    // 65 minutes later (3:05 PM): exceeds 1-hour window -> fires vendor_rejected with timed_out copy
     (Date.now as jest.Mock).mockReturnValue(baseTime + 65 * 60 * 1000);
     await runEngineTick([pendingFirm], profile);
     list = await getNotifications();
@@ -249,7 +254,89 @@ describe("Notification engine diffing", () => {
     expect(list.filter((n) => n.type === "vendor_rejected")).toHaveLength(1);
   });
 
+  test("does not time out a firm overnight when requested at 10:00 PM until 10:00 AM next morning", async () => {
+    // 10:00 PM IST on 2026-10-15 (night off-hours)
+    const nightBaseTime = new Date("2026-10-15T22:00:00+05:30").getTime();
+    jest.spyOn(Date, "now").mockReturnValue(nightBaseTime);
+
+    const nightPendingFirm = makeBooking({
+      bookingId: "bk_night_timeout",
+      remoteBookingId: "bk_night_timeout",
+      assigned_photographers: [
+        {
+          id: "p_night",
+          provider_id: "p_night",
+          name: "Night Owls Studio",
+          rating: 4.8,
+          city: "Bangalore",
+          has_accepted: false,
+          is_confirmed: false,
+          can_confirm: false,
+          contact_unlocked: false,
+        },
+      ],
+    });
+
+    // Tick 1 at 10:00 PM: records first seen
+    await runEngineTick([nightPendingFirm], profile);
+    let list = await getNotifications();
+    expect(list.filter((n) => n.type === "vendor_rejected")).toHaveLength(0);
+
+    // 2 hours later at 12:00 AM midnight: still paused overnight, NO timeout!
+    (Date.now as jest.Mock).mockReturnValue(nightBaseTime + 2 * 60 * 60 * 1000);
+    await runEngineTick([nightPendingFirm], profile);
+    list = await getNotifications();
+    expect(list.filter((n) => n.type === "vendor_rejected")).toHaveLength(0);
+
+    // 11 hours later at 9:00 AM next morning: SLA window just opens, NO timeout!
+    const nextMorning9Am = new Date("2026-10-16T09:00:00+05:30").getTime();
+    (Date.now as jest.Mock).mockReturnValue(nextMorning9Am);
+    await runEngineTick([nightPendingFirm], profile);
+    list = await getNotifications();
+    expect(list.filter((n) => n.type === "vendor_rejected")).toHaveLength(0);
+
+    // At 9:45 AM next morning (45 mins into SLA): still active, NO timeout!
+    const nextMorning945Am = new Date("2026-10-16T09:45:00+05:30").getTime();
+    (Date.now as jest.Mock).mockReturnValue(nextMorning945Am);
+    await runEngineTick([nightPendingFirm], profile);
+    list = await getNotifications();
+    expect(list.filter((n) => n.type === "vendor_rejected")).toHaveLength(0);
+
+    // At 10:05 AM next morning (65 mins after 9 AM): now TIMED OUT!
+    const nextMorning1005Am = new Date("2026-10-16T10:05:00+05:30").getTime();
+    (Date.now as jest.Mock).mockReturnValue(nextMorning1005Am);
+    await runEngineTick([nightPendingFirm], profile);
+    list = await getNotifications();
+    const rejects = list.filter((n) => n.type === "vendor_rejected" && n.body.includes("Night Owls Studio"));
+    expect(rejects).toHaveLength(1);
+  });
+
   test("fires vendor_rejected immediately when a firm is explicitly rejected", async () => {
+    const pendingBooking = makeBooking({
+      bookingId: "bk_rejected",
+      remoteBookingId: "bk_rejected",
+      assigned_photographers: [
+        {
+          id: "p_rej",
+          provider_id: "p_rej",
+          name: "Busy Studio",
+          rating: 4.7,
+          city: "Hyderabad",
+          has_accepted: false,
+          has_rejected: false,
+          is_confirmed: false,
+          can_confirm: false,
+          contact_unlocked: false,
+        },
+      ],
+    });
+
+    // Tick 1: establish baseline
+    await runEngineTick([pendingBooking], profile);
+    let list = await getNotifications();
+    expect(list.filter((n) => n.type === "vendor_rejected")).toHaveLength(0);
+
+    // Tick 2: photographer declines
     const rejectedBooking = makeBooking({
       bookingId: "bk_rejected",
       remoteBookingId: "bk_rejected",
@@ -270,7 +357,7 @@ describe("Notification engine diffing", () => {
     });
 
     await runEngineTick([rejectedBooking], profile);
-    const list = await getNotifications();
+    list = await getNotifications();
     const rejects = list.filter((n) => n.type === "vendor_rejected");
     expect(rejects).toHaveLength(1);
     expect(rejects[0].title).toContain("Busy Studio can't make it this time");

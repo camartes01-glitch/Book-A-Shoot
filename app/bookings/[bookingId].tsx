@@ -395,6 +395,7 @@ export default function BookingDetailScreen() {
                 <CandidateFirmCard
                   key={firm.provider_id || firm.id}
                   firm={firm}
+                  bookingCreatedAt={booking?.createdAt}
                   onPress={(f) => setSelectedFirmModal(f)}
                   onConfirm={(f) => setFirmToConfirm(f)}
                   confirmLoading={busy && confirmingFirmId === firm.provider_id}

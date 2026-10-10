@@ -22,13 +22,15 @@ import { getDraftResumeRoute } from "@/src/domain/bookingRequest";
 import { formatDateLong, formatTime12h } from "@/src/utils/format";
 import { makeId } from "@/src/utils/id";
 import { pushNotificationService } from "@/src/services/pushNotificationService";
+import { hasFirmTimedOut, calculateBusinessSla } from "@/src/engine/businessHours";
 
 const STATE_KEY = "camartes-customer:notif_engine_state:v1";
 const DRAFT_NUDGE_AFTER_HOURS = 20;
 const MARKETING_NUDGE_EVERY_DAYS = 3;
-/** Firms are given 1 hour to accept/reject on the vendor side before Camartes
- * locks the lead — the client enforces this same window independently, since
- * whether the backend reflects a lock back to us at all isn't guaranteed. */
+/**
+ * Firms are given 60 active business minutes to accept/reject between 9:00 AM and 9:00 PM.
+ * Requests placed overnight (after 9 PM) only count down starting from 9:00 AM the next morning.
+ */
 const FIRM_RESPONSE_WINDOW_HOURS = 1;
 const MAX_ACTIVE_FIRMS = 6;
 const REPLACEMENT_RETRY_COOLDOWN_HOURS = 1;
@@ -256,7 +258,8 @@ async function processAcceptRejectDiff(booking: Booking, profile: CustomerProfil
     }
 
     const explicitlyDead = isFirmRejected(f);
-    const timedOut = !f.has_accepted && hoursSince(bstate.firmFirstSeenAt[id]) >= FIRM_RESPONSE_WINDOW_HOURS;
+    const assignedTime = f.assigned_at || bstate.firmFirstSeenAt[id] || booking.createdAt;
+    const timedOut = !f.has_accepted && hasFirmTimedOut(assignedTime);
     if ((explicitlyDead || timedOut) && !bstate.rejectedFirmIds.includes(id) && !bstate.acceptedFirmIds.includes(id)) {
       await fire(
         "vendor_rejected",
@@ -322,7 +325,7 @@ async function processEventReminder(booking: Booking, profile: CustomerProfile, 
     };
 
     if (isTomorrow(day.eventDate) && !bstate.remindedKeys.includes(key)) {
-      await fire("event_reminder", params, { bookingId: booking.bookingId, firmName });
+      await fire("event_reminder", params, { bookingId: booking.bookingId, firmName, data: { dayId: day.dayId, eventDate: day.eventDate } });
       bstate.remindedKeys.push(key);
       await pushNotificationService.cancelScheduledNotification(scheduleKey);
       changed = true;

@@ -179,6 +179,9 @@ export type VendorMatchResult = {
   isStudio?: boolean;
   isFirm?: boolean;
   budgetPreference?: Array<"basic" | "medium" | "elite">;
+  walletBalance?: number;
+  isLocked?: boolean;
+  hasMinBalance?: boolean;
 };
 
 export type ProviderLocationPreference = {
@@ -208,6 +211,8 @@ export type AssignedPhotographer = {
   contact_email?: string;
   contact_whatsapp?: string;
   accepted_at?: string | null;
+  /** Timestamp when firm was assigned to the lead (used for 60m SLA). */
+  assigned_at?: string | null;
   /** Set by the backend once a firm has declined/timed out on this lead. */
   has_rejected?: boolean;
   is_rejected?: boolean;
@@ -263,6 +268,14 @@ export type Booking = {
   eventType?: string | null;
   eventName?: string | null;
   replacedBookingId?: string | null;
+  /** Business hours SLA window (e.g. "9:00 AM - 9:00 PM IST"). */
+  sla_window?: string | null;
+  /** Timestamp when 60m response window begins. */
+  sla_active_from?: string | null;
+  /** Timestamp when request times out if not accepted. */
+  expires_at?: string | null;
+  provider_assigned_at?: Record<string, string>;
+  dispatched_at?: string | null;
   excludedVendorIds?: string[];
   /**
    * Remote booking ids from automatic per-slot replacement dispatches (see
@@ -306,7 +319,9 @@ export type AppNotificationType =
   | "booking"
   | "system"
   | "reminder"
-  | "match";
+  | "match"
+  | "new_review"
+  | "review";
 
 export type AppNotification = {
   id: string;

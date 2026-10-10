@@ -21,6 +21,18 @@ import { categoryForType, isPaymentRelated } from "@/src/domain/notificationCont
 const KEY = "camartes-customer:notifications:v1";
 const READ_IDS_KEY = "camartes-customer:read_notification_ids:v1";
 const DELETED_IDS_KEY = "camartes-customer:deleted_notification_ids:v1";
+const DELIVERED_KEYS_KEY = "camartes-customer:delivered_notification_keys:v2";
+const LAST_TIME_BY_CATEGORY_KEY = "camartes-customer:last_notif_time_by_cat:v1";
+
+/**
+ * Long gap between notifications of the SAME category (e.g. multiple welcome lines, multiple marketing lines).
+ * Welcome notifications do NOT block draft notifications or vice versa.
+ */
+export const CATEGORY_MIN_SPACING_MS: Record<string, number> = {
+  welcome: 7 * 24 * 60 * 60 * 1000, // 7 days long gap between welcome messages
+  marketing_nudge: 3 * 24 * 60 * 60 * 1000, // 3 days long gap between marketing lines
+  draft_resume_nudge: 24 * 60 * 60 * 1000, // 24 hours long gap between draft nudges
+};
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
@@ -57,6 +69,91 @@ async function saveDeletedNotificationIds(set: Set<string>): Promise<void> {
   } catch {
     // Ignore
   }
+}
+
+async function getDeliveredNotificationIds(): Promise<Set<string>> {
+  try {
+    const raw = await AsyncStorage.getItem(DELIVERED_KEYS_KEY);
+    if (!raw) return new Set<string>();
+    const parsed = JSON.parse(raw) as string[];
+    return new Set<string>(parsed || []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
+async function saveDeliveredNotificationIds(set: Set<string>): Promise<void> {
+  try {
+    // Keep up to 200 delivered keys to avoid unbounded storage growth
+    const arr = Array.from(set).slice(-200);
+    await AsyncStorage.setItem(DELIVERED_KEYS_KEY, JSON.stringify(arr));
+  } catch {
+    // Ignore
+  }
+}
+
+async function getLastTimeForCategory(category: string): Promise<number> {
+  try {
+    const raw = await AsyncStorage.getItem(LAST_TIME_BY_CATEGORY_KEY);
+    if (!raw) return 0;
+    const map = JSON.parse(raw);
+    return typeof map[category] === "number" ? map[category] : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function recordCategoryFired(category: string): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(LAST_TIME_BY_CATEGORY_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[category] = Date.now();
+    await AsyncStorage.setItem(LAST_TIME_BY_CATEGORY_KEY, JSON.stringify(map));
+  } catch {
+    // Ignore
+  }
+}
+
+export function getDeterministicNotificationKey(n: Partial<AppNotification>): string {
+  const type = n.type || "";
+  const bid = n.bookingId || (n.data?.booking_id as string) || (n.data?.bookingId as string) || "";
+  const fid = n.firmId || n.userId || (n.data?.firm_id as string) || "";
+
+  const titleNorm = (n.title || "").trim();
+  const bodyNorm = (n.body || "").trim();
+
+  if (type === "welcome") {
+    const custId = (n.data?.customerId as string) || n.userId || "customer";
+    return `welcome:${custId}:${titleNorm}:${bodyNorm}`;
+  }
+  if (type === "draft_resume_nudge") {
+    return `draft_resume:${bid || "draft"}:${titleNorm}:${bodyNorm}`;
+  }
+  if (type === "marketing_nudge") {
+    return `marketing_nudge:${titleNorm}:${bodyNorm}`;
+  }
+  if (type === "vendor_accepted") {
+    return `vendor_accepted:${bid}:${fid}`;
+  }
+  if (type === "vendor_rejected") {
+    return `vendor_rejected:${bid}:${fid}`;
+  }
+  if (type === "request_sent") {
+    return `request_sent:${bid}`;
+  }
+  if (type === "new_search_dispatched") {
+    const count = (n.data?.firm_count as number) || (n.data?.firmCount as number) || (n.data?.firm_names as string[])?.length || 1;
+    return `new_search_dispatched:${bid}:${count}`;
+  }
+  if (type === "event_reminder" || type === "reminder") {
+    const dayId = (n.data?.dayId as string) || (n.data?.eventDate as string) || "day";
+    return `event_reminder:${bid}:${dayId}`;
+  }
+  if (type === "chat_message" || type === "message") {
+    const msgId = (n.data?.message_id as string) || (n.data?.id as string) || `${fid}:${(n.body || "").slice(0, 30)}`;
+    return `chat_message:${bid}:${msgId}`;
+  }
+  return `${type}:${bid}:${fid}:${titleNorm}:${bodyNorm}`;
 }
 
 function getNotificationContentKey(n: Partial<AppNotification>): string {
@@ -299,20 +396,46 @@ export async function addNotification(notification: AppNotification): Promise<vo
   const deletedIds = await getDeletedNotificationIds();
   const strId = String(notification.id || "");
   const newContentKey = getNotificationContentKey(notification);
-  if (deletedIds.has(strId) || (newContentKey && deletedIds.has(newContentKey))) {
+  const detKey = getDeterministicNotificationKey(notification);
+
+  if (deletedIds.has(strId) || (newContentKey && deletedIds.has(newContentKey)) || (detKey && deletedIds.has(detKey))) {
     return;
+  }
+
+  // 1. Strict deduplication: check persisted delivered keys so notifications never fire repeatedly
+  const deliveredKeys = await getDeliveredNotificationIds();
+  if (deliveredKeys.has(detKey)) {
+    return;
+  }
+
+  // 2. Intra-category spacing:
+  // For notifications with multiple lines/variants within the same category (e.g. welcome, marketing_nudge, draft_resume_nudge),
+  // enforce a long gap between notifications of the SAME category itself.
+  // Categories are independent: welcome does NOT block draft notifications or vice versa.
+  if (notification.type && CATEGORY_MIN_SPACING_MS[notification.type]) {
+    const minSpacing = CATEGORY_MIN_SPACING_MS[notification.type];
+    const lastTime = await getLastTimeForCategory(notification.type);
+    const elapsed = Date.now() - lastTime;
+    if (lastTime > 0 && elapsed < minSpacing) {
+      return;
+    }
+    await recordCategoryFired(notification.type);
   }
 
   const list = await getNotifications();
 
   const exists = list.some((n) => {
     const existingContentKey = getNotificationContentKey(n);
-    return existingContentKey === newContentKey;
+    const existingDetKey = getDeterministicNotificationKey(n);
+    return existingContentKey === newContentKey || existingDetKey === detKey;
   });
 
   if (exists) {
     return;
   }
+
+  deliveredKeys.add(detKey);
+  await saveDeliveredNotificationIds(deliveredKeys);
 
   const updated = deduplicateNotifications([notification, ...list]).slice(0, 100);
   await AsyncStorage.setItem(KEY, JSON.stringify(updated));
