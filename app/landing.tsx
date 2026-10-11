@@ -46,6 +46,7 @@ import {
   Menu,
   RotateCcw,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   X,
   Zap,
@@ -127,9 +128,21 @@ const PHONE_HERO_SLIDES = [
 ] as const;
 
 const STATS = [
-  { value: "500+", label: "KYC-Verified\nStudios" },
-  { value: "10K+", label: "Celebrations\nCaptured" },
-  { value: "99.4%", label: "On-Time Delivery\nGuarantee" },
+  {
+    icon: ShieldCheck,
+    value: "Top Professionals",
+    label: "Handpicked & Gear-Audited Studios",
+  },
+  {
+    icon: SlidersHorizontal,
+    value: "Customised Budget",
+    label: "Tailored Packages in Your Range",
+  },
+  {
+    icon: Clock,
+    value: "On-Time Delivery",
+    label: "Contractual Album Deadlines",
+  },
 ] as const;
 
 const HOW_IT_WORKS = [
@@ -585,15 +598,21 @@ export default function LandingPage() {
 
         {/* ── STATS STRIP ───────────────────────────────────────────── */}
         <View style={[styles.statsStrip, !isWide && styles.statsStripPhone]}>
-          {STATS.map((s, i) => (
-            <View
-              key={s.label}
-              style={[styles.statItem, i < STATS.length - 1 && styles.statDivider]}
-            >
-              <Text style={[styles.statValue, !isWide && styles.statValuePhone]}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
-            </View>
-          ))}
+          {STATS.map((s, i) => {
+            const Icon = s.icon;
+            return (
+              <View
+                key={s.value}
+                style={[styles.statItem, i < STATS.length - 1 && styles.statDivider]}
+              >
+                <View style={[styles.statIconWrap, !isWide && styles.statIconWrapPhone]}>
+                  <Icon size={isWide ? 18 : 15} color={colors.primary} />
+                </View>
+                <Text style={[styles.statValue, !isWide && styles.statValuePhone]}>{s.value}</Text>
+                <Text style={[styles.statLabel, !isWide && styles.statLabelPhone]}>{s.label}</Text>
+              </View>
+            );
+          })}
         </View>
 
         {/* ── HOW IT WORKS (Eyebrow Removed) ────────────────────────── */}
@@ -1392,33 +1411,58 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
   },
   statsStripPhone: {
-    paddingVertical: spacing.md,
+    paddingVertical: 14,
     paddingHorizontal: spacing.xs,
   },
   statItem: {
     flex: 1,
     alignItems: "center",
-    gap: 3,
+    justifyContent: "flex-start",
+    paddingHorizontal: 4,
+    gap: 2,
   },
   statDivider: {
     borderRightWidth: 1,
     borderRightColor: colors.border,
   },
+  statIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#FFF7ED",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  statIconWrapPhone: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginBottom: 3,
+  },
   statValue: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: colors.primary,
-    letterSpacing: -0.5,
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.text,
+    letterSpacing: -0.2,
+    textAlign: "center",
+    marginBottom: 2,
   },
   statValuePhone: {
-    fontSize: 21,
-    letterSpacing: -0.5,
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 1,
   },
   statLabel: {
     fontSize: 12,
+    fontWeight: "400",
     color: colors.muted,
     textAlign: "center",
-    lineHeight: 17,
+    lineHeight: 16,
+  },
+  statLabelPhone: {
+    fontSize: 10.5,
+    lineHeight: 14,
   },
 
   // ── Generic Section Chrome ─────────────────────────────────────────────

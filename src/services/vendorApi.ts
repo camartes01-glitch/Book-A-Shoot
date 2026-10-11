@@ -68,6 +68,9 @@ type RawSearchHit = {
   services_offered?: string[];
   wallet_balance?: number;
   balance?: number;
+  leads_today?: number;
+  last_lead_dispatched_at?: string;
+  active_pending_leads?: number;
 };
 
 export type CatalogQuery = {
@@ -313,6 +316,9 @@ type Aggregate = {
   webLiveAvailable: boolean;
   webLiveQualities: Set<"HD" | "4K">;
   walletBalance?: number;
+  leadsToday?: number;
+  lastLeadDispatchedAt?: string;
+  activePendingLeads?: number;
 };
 
 function newAggregate(vendorId: string): Aggregate {
@@ -366,6 +372,9 @@ function mergeHit(acc: Aggregate, hit: RawSearchHit) {
   if (hit.kyc_verified === true) acc.kycVerified = true;
   if (typeof hit.wallet_balance === "number") acc.walletBalance = hit.wallet_balance;
   if (typeof hit.balance === "number") acc.walletBalance = hit.balance;
+  if (typeof hit.leads_today === "number") acc.leadsToday = hit.leads_today;
+  if (typeof hit.active_pending_leads === "number") acc.activePendingLeads = hit.active_pending_leads;
+  if (hit.last_lead_dispatched_at) acc.lastLeadDispatchedAt = hit.last_lead_dispatched_at;
   for (const area of hit.coverage_areas ?? []) acc.serviceAreas.add(area);
   if (hit.coverage_area) acc.serviceAreas.add(hit.coverage_area);
 
@@ -487,6 +496,9 @@ function toCustomerVendor(acc: Aggregate, fetchedLive: boolean): CustomerVendor 
     listedAvailable: acc.isAvailable,
     contactMaskedUntilAccepted: true,
     phone: acc.phone,
+    leadsToday: acc.leadsToday ?? 0,
+    lastLeadDispatchedAt: acc.lastLeadDispatchedAt,
+    activePendingLeads: acc.activePendingLeads ?? 0,
   };
 }
 

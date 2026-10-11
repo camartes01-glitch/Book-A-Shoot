@@ -235,7 +235,7 @@ export async function login(emailOrPhone: string, password: string): Promise<Cus
       "/api/auth/login",
       {
         method: "POST",
-        body: JSON.stringify({ email_or_phone: identifier, password }),
+        body: JSON.stringify({ email_or_phone: identifier, password, source: "book_a_shoot", client_app: "bookashoot" }),
       },
       { auth: false },
     );
@@ -262,7 +262,7 @@ export async function signup(input: { name: string; email: string; phone: string
       "/api/auth/signup",
       {
         method: "POST",
-        body: JSON.stringify({ name, email, phone_number: phone, password: input.password }),
+        body: JSON.stringify({ name, email, phone_number: phone, password: input.password, source: "book_a_shoot", client_app: "bookashoot" }),
       },
       { auth: false },
     );
@@ -297,7 +297,7 @@ export async function loginWithGoogle(
         "/api/auth/google",
         {
           method: "POST",
-          body: JSON.stringify({ id_token: token }),
+          body: JSON.stringify({ id_token: token, source: "book_a_shoot", client_app: "bookashoot" }),
         },
         { auth: false, requireAuth: false },
       );
@@ -307,7 +307,7 @@ export async function loginWithGoogle(
           "/api/auth/google-userinfo",
           {
             method: "POST",
-            body: JSON.stringify({ id_token: token }),
+            body: JSON.stringify({ id_token: token, source: "book_a_shoot", client_app: "bookashoot" }),
           },
           { auth: false, requireAuth: false },
         );
@@ -326,7 +326,7 @@ export async function loginWithGoogle(
         "/api/auth/google-userinfo",
         {
           method: "POST",
-          body: JSON.stringify(idTokenOrUserInfo),
+          body: JSON.stringify({ ...idTokenOrUserInfo, source: "book_a_shoot", client_app: "bookashoot" }),
         },
         { auth: false, requireAuth: false },
       );

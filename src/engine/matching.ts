@@ -11,6 +11,28 @@ import type { Booking, EventDay, PackageTierId, ProviderLocationPreference, Vend
 import type { CustomerVendor } from "@/src/types/vendor";
 
 export const MAX_MATCHES = 6;
+export const MAX_CONCURRENT_LEADS = 3;
+
+/**
+ * The "Fair-Queue" Gauge (The Hunger Score).
+ * Studios with 0 leads today get highest priority (1.50x),
+ * studios with 1 lead today get 1.00x, 2 leads get 0.75x, etc.
+ * Idle wait bonus: if last dispatch was > 6 hours ago, adds +0.10.
+ */
+export function calculateFairQueueBoost(vendor: CustomerVendor): number {
+  const leadsToday = Math.max(0, vendor.leadsToday ?? 0);
+  const baseHunger = 1.5 / (1.0 + 0.5 * leadsToday);
+
+  let idleBonus = 0;
+  if (vendor.lastLeadDispatchedAt) {
+    const elapsedMs = Date.now() - new Date(vendor.lastLeadDispatchedAt).getTime();
+    if (!isNaN(elapsedMs) && elapsedMs > 6 * 3600 * 1000) {
+      idleBonus = 0.1;
+    }
+  }
+
+  return baseHunger + idleBonus;
+}
 
 export const MATCH_WEIGHTS = {
   availability: 0.3,
@@ -246,15 +268,17 @@ export function scoreVendor(
   const eventCity = booking.days[0]?.location.city ?? "";
   const locationScore = vendorServesCity(vendor, eventCity) ? 1 : 0.3;
 
-  return (
+  const baseScore =
     availabilityScore * MATCH_WEIGHTS.availability +
     reqScore * MATCH_WEIGHTS.requirementMatch +
     budgetScore * MATCH_WEIGHTS.budgetMatch +
     ratingScore * MATCH_WEIGHTS.rating +
     experienceScore * MATCH_WEIGHTS.experience +
     portfolioScore * MATCH_WEIGHTS.portfolio +
-    locationScore * MATCH_WEIGHTS.location
-  );
+    locationScore * MATCH_WEIGHTS.location;
+
+  const fairQueueBoost = calculateFairQueueBoost(vendor);
+  return Math.round(baseScore * fairQueueBoost * 1000) / 1000;
 }
 
 function vendorServesLocationPreference(
@@ -302,11 +326,14 @@ export function matchVendors(
   // (Wallet balance is NOT filtered out - requests are dispatched to all qualified studios,
   // studios with < 500 balance receive it in a locked state).
   // Add-ons (LED walls, drones, etc.) NEVER filter out photography firms!
+  // Active Concurrency Cap: Studios with >= MAX_CONCURRENT_LEADS (3) active pending leads
+  // are temporarily skipped to prevent overloading and give other studios an equal opportunity.
   const candidates = vendors.filter(
     (v) =>
       (!excludedVendorIds || !excludedVendorIds.includes(v.vendorId)) &&
       isPhotographyFirm(v) &&
       vendorServesLocationPreference(v, locationPref, eventCity) &&
+      ((v.activePendingLeads ?? 0) < MAX_CONCURRENT_LEADS) &&
       checkVendorAvailability(v, booking.days as EventDay[], req).available,
   );
 
@@ -322,6 +349,7 @@ export function matchVendors(
     if (vendor.photography.traditional || vendor.photography.candid) services.push("Photography");
     if (vendor.videography.traditional || vendor.videography.candid) services.push("Videography");
     return {
+      vendor,
       match: {
         vendorId: vendor.vendorId,
         studioName: vendor.studioName,
@@ -349,7 +377,7 @@ export function matchVendors(
     };
   });
 
-  // Rank by: [Tier Match] -> [Location/City Match] -> [Rating / Reviews / matchScore]
+  // Rank by: [Tier Match] -> [Location/City Match] -> [Fair-Queue matchScore] -> [Idle Time]
   const ranked = results
     .filter((r) => r.match.available)
     .sort((a, b) => {
@@ -359,7 +387,12 @@ export function matchVendors(
       if (a.locationMatched !== b.locationMatched) {
         return a.locationMatched ? -1 : 1;
       }
-      return b.match.matchScore - a.match.matchScore;
+      if (Math.abs(b.match.matchScore - a.match.matchScore) > 0.0001) {
+        return b.match.matchScore - a.match.matchScore;
+      }
+      const aTime = a.vendor.lastLeadDispatchedAt ? new Date(a.vendor.lastLeadDispatchedAt).getTime() : 0;
+      const bTime = b.vendor.lastLeadDispatchedAt ? new Date(b.vendor.lastLeadDispatchedAt).getTime() : 0;
+      return aTime - bTime;
     });
 
   const seenIds = new Set<string>();

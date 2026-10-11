@@ -78,7 +78,11 @@ export async function updateSupabaseUserProfile(patch: { name?: string; mobile?:
       return;
     }
 
-    const data: Record<string, unknown> = {};
+    const data: Record<string, unknown> = {
+      app_source: "book_a_shoot",
+      source: "book_a_shoot",
+      is_book_a_shoot: true,
+    };
     if (patch.name) {
       data.name = patch.name;
       data.full_name = patch.name;

@@ -42,7 +42,17 @@ export function CandidateFirmCard({
   testID,
 }: CandidateFirmCardProps) {
   const isConfirmed = Boolean(firm.is_confirmed);
-  const isRejected = Boolean(firm.has_rejected || firm.is_rejected || firm.status === "rejected" || (firm as any).status === "timed_out");
+    const is24hExpired = bookingCreatedAt
+    ? (Date.now() - new Date(bookingCreatedAt).getTime()) >= 24 * 60 * 60 * 1000
+    : false;
+  const isRejected = Boolean(
+    firm.has_rejected ||
+    firm.is_rejected ||
+    firm.status === "rejected" ||
+    (firm as any).status === "timed_out" ||
+    (firm as any).status === "expired" ||
+    (is24hExpired && !firm.is_confirmed)
+  );
   const hasAccepted = Boolean(firm.has_accepted) && !isRejected;
   const canConfirm = Boolean(firm.can_confirm) && !isConfirmed && !isRejected;
 
@@ -122,7 +132,7 @@ export function CandidateFirmCard({
             <View style={styles.locationRow}>
               <MapPin size={11} color="#64748B" />
               <Text style={styles.cityText} numberOfLines={1}>
-                {firm.city || "Bangalore"}
+                {firm.city || ""}
               </Text>
             </View>
           </View>
@@ -137,7 +147,7 @@ export function CandidateFirmCard({
         ) : isRejected ? (
           <View style={styles.rejectedBadge}>
             <XCircle size={11} color="#DC2626" />
-            <Text style={styles.rejectedBadgeText}>Declined</Text>
+            <Text style={styles.rejectedBadgeText}>{is24hExpired ? "Expired" : ((firm as any).status === "timed_out" ? "Timed Out" : "Declined")}</Text>
           </View>
         ) : hasAccepted ? (
           <View style={styles.acceptedBadge}>

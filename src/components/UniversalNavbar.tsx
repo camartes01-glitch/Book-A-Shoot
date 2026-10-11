@@ -26,15 +26,12 @@ import { Link, router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ArrowRight,
-  BookOpen,
-  Briefcase,
   ChevronDown,
   ExternalLink,
   Heart,
   Menu,
   MessageSquare,
   Sparkles,
-  Users2,
   X,
 } from "lucide-react-native";
 import { colors, radius, radiusSm, spacing } from "@/src/constants/theme";
@@ -276,36 +273,15 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
                       ]}
                       accessibilityRole="link"
                     >
-                      <View
+                      <Text
                         style={[
-                          styles.dropdownItemIconCircle,
+                          styles.dropdownItemTitle,
                           (hoveredItem === "about" || activeRoute === "about") &&
-                            styles.dropdownItemIconCircleActive,
+                            styles.dropdownItemTitleActive,
                         ]}
                       >
-                        <Users2
-                          size={17}
-                          color={
-                            hoveredItem === "about" || activeRoute === "about"
-                              ? colors.primary
-                              : "#64748B"
-                          }
-                        />
-                      </View>
-                      <View style={styles.dropdownItemTextCol}>
-                        <Text
-                          style={[
-                            styles.dropdownItemTitle,
-                            (hoveredItem === "about" || activeRoute === "about") &&
-                              styles.dropdownItemTitleActive,
-                          ]}
-                        >
-                          About Us
-                        </Text>
-                        <Text style={styles.dropdownItemDesc}>
-                          Our mission, KYC verification & quality standards
-                        </Text>
-                      </View>
+                        About Us
+                      </Text>
                     </Pressable>
                   </Link>
 
@@ -326,36 +302,15 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
                       ]}
                       accessibilityRole="link"
                     >
-                      <View
+                      <Text
                         style={[
-                          styles.dropdownItemIconCircle,
+                          styles.dropdownItemTitle,
                           (hoveredItem === "careers" || activeRoute === "careers") &&
-                            styles.dropdownItemIconCircleActive,
+                            styles.dropdownItemTitleActive,
                         ]}
                       >
-                        <Briefcase
-                          size={17}
-                          color={
-                            hoveredItem === "careers" || activeRoute === "careers"
-                              ? colors.primary
-                              : "#64748B"
-                          }
-                        />
-                      </View>
-                      <View style={styles.dropdownItemTextCol}>
-                        <Text
-                          style={[
-                            styles.dropdownItemTitle,
-                            (hoveredItem === "careers" || activeRoute === "careers") &&
-                              styles.dropdownItemTitleActive,
-                          ]}
-                        >
-                          Careers
-                        </Text>
-                        <Text style={styles.dropdownItemDesc}>
-                          Join our creative storytelling & tech team
-                        </Text>
-                      </View>
+                        Careers
+                      </Text>
                     </Pressable>
                   </Link>
 
@@ -376,36 +331,15 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
                       ]}
                       accessibilityRole="link"
                     >
-                      <View
+                      <Text
                         style={[
-                          styles.dropdownItemIconCircle,
+                          styles.dropdownItemTitle,
                           (hoveredItem === "blogs" || activeRoute === "blogs") &&
-                            styles.dropdownItemIconCircleActive,
+                            styles.dropdownItemTitleActive,
                         ]}
                       >
-                        <BookOpen
-                          size={17}
-                          color={
-                            hoveredItem === "blogs" || activeRoute === "blogs"
-                              ? colors.primary
-                              : "#64748B"
-                          }
-                        />
-                      </View>
-                      <View style={styles.dropdownItemTextCol}>
-                        <Text
-                          style={[
-                            styles.dropdownItemTitle,
-                            (hoveredItem === "blogs" || activeRoute === "blogs") &&
-                              styles.dropdownItemTitleActive,
-                          ]}
-                        >
-                          Blogs & Stories
-                        </Text>
-                        <Text style={styles.dropdownItemDesc}>
-                          Style guides, wedding advice & production tips
-                        </Text>
-                      </View>
+                        Blogs & Stories
+                      </Text>
                     </Pressable>
                   </Link>
                 </View>
@@ -541,7 +475,6 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
                   activeRoute === "about" && styles.mobileMenuItemActive,
                 ]}
               >
-                <Users2 size={16} color={activeRoute === "about" ? colors.primary : "#64748B"} />
                 <Text
                   style={[
                     styles.mobileSubMenuText,
@@ -561,7 +494,6 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
                   activeRoute === "careers" && styles.mobileMenuItemActive,
                 ]}
               >
-                <Briefcase size={16} color={activeRoute === "careers" ? colors.primary : "#64748B"} />
                 <Text
                   style={[
                     styles.mobileSubMenuText,
@@ -581,7 +513,6 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
                   activeRoute === "blogs" && styles.mobileMenuItemActive,
                 ]}
               >
-                <BookOpen size={16} color={activeRoute === "blogs" ? colors.primary : "#64748B"} />
                 <Text
                   style={[
                     styles.mobileSubMenuText,
@@ -751,45 +682,42 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: "100%",
     left: "50%",
-    transform: [{ translateX: -140 }],
-    width: 290,
+    transform: [{ translateX: -80 }],
+    width: 160,
     marginTop: 8,
     backgroundColor: "#FFFFFF",
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#FED7AA",
-    paddingVertical: 8,
-    paddingHorizontal: 8,
+    borderColor: "#E2E8F0",
+    paddingVertical: 5,
+    paddingHorizontal: 5,
     shadowColor: "#0F172A",
-    shadowOpacity: 0.12,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 12,
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
     zIndex: 1001,
   },
   dropdownNotch: {
     position: "absolute",
-    top: -6,
-    left: 138,
-    width: 12,
-    height: 12,
+    top: -5,
+    left: 75,
+    width: 10,
+    height: 10,
     backgroundColor: "#FFFFFF",
     borderTopWidth: 1,
     borderLeftWidth: 1,
-    borderTopColor: "#FED7AA",
-    borderLeftColor: "#FED7AA",
+    borderTopColor: "#E2E8F0",
+    borderLeftColor: "#E2E8F0",
     transform: [{ rotate: "45deg" }],
   },
   dropdownItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 10,
+    paddingVertical: 9,
     paddingHorizontal: 12,
-    borderRadius: 10,
+    borderRadius: 6,
     // @ts-ignore
     cursor: "pointer",
-    transition: "background-color 0.15s ease",
+    transition: "all 0.15s ease",
   },
   dropdownItemHovered: {
     backgroundColor: "#FFF7ED",
@@ -797,37 +725,15 @@ const styles = StyleSheet.create({
   dropdownItemActive: {
     backgroundColor: "#FFF7ED",
   },
-  dropdownItemIconCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#F8FAFC",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-  },
-  dropdownItemIconCircleActive: {
-    backgroundColor: "#FFEDD5",
-    borderColor: "#FED7AA",
-  },
-  dropdownItemTextCol: {
-    flex: 1,
-  },
   dropdownItemTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#0F172A",
-    letterSpacing: -0.2,
+    fontSize: 13.5,
+    fontWeight: "500",
+    color: "#334155",
+    letterSpacing: -0.1,
   },
   dropdownItemTitleActive: {
     color: colors.primary,
-  },
-  dropdownItemDesc: {
-    fontSize: 11,
-    color: "#64748B",
-    marginTop: 2,
-    lineHeight: 14,
+    fontWeight: "600",
   },
 
   // Right Column Auth & Actions
@@ -939,15 +845,13 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   mobileSubMenuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 10,
-    paddingLeft: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    borderRadius: 6,
   },
   mobileSubMenuText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
     color: "#334155",
   },
   mobileDrawerFooter: {

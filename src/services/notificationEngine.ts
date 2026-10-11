@@ -368,7 +368,14 @@ async function processMarketingNudge(bookings: Booking[], profile: CustomerProfi
     );
   }
 
-  const daysSinceLast = state.lastMarketingNudgeAt ? hoursSince(state.lastMarketingNudgeAt) / 24 : Infinity;
+  // When first evaluated (fresh login / newly joined), start the cooldown clock from NOW.
+  // Never fire an idle marketing nudge immediately alongside the welcome notification!
+  if (!state.lastMarketingNudgeAt) {
+    state.lastMarketingNudgeAt = nowIso();
+    return true;
+  }
+
+  const daysSinceLast = hoursSince(state.lastMarketingNudgeAt) / 24;
   if (daysSinceLast < MARKETING_NUDGE_EVERY_DAYS) return false;
 
   await fire("marketing_nudge", { customerName: profile.name }, {});

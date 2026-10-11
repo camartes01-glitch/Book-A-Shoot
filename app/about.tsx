@@ -63,10 +63,10 @@ const PILLARS = [
 ];
 
 const STATS = [
-  { value: "500+", label: "KYC-Verified Studios" },
-  { value: "10K+", label: "Celebrations Captured" },
-  { value: "99.4%", label: "On-Time Delivery Rate" },
-  { value: "4.9★", label: "Average Client Rating" },
+  { value: "Top Professionals", label: "Handpicked & Gear-Audited Studios" },
+  { value: "Customised Budget", label: "Tailored Packages in Your Range" },
+  { value: "On-Time Delivery", label: "Contractual Album Deadlines" },
+  { value: "Zero Cancellation", label: "Guaranteed Standby Protection" },
 ];
 
 const ONBOARDING_STEPS = [
@@ -659,15 +659,16 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   statCardValueMobile: {
-    fontSize: 26,
-    fontWeight: "800",
-    color: colors.primary,
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.text,
     marginBottom: 4,
-    letterSpacing: -0.5,
+    letterSpacing: -0.2,
+    textAlign: "center",
   },
   statCardLabelMobile: {
-    fontSize: 12,
-    fontWeight: "600",
+    fontSize: 11.5,
+    fontWeight: "400",
     color: colors.muted,
     textAlign: "center",
     lineHeight: 16,
@@ -702,12 +703,15 @@ const styles = StyleSheet.create({
     borderRightColor: colors.border,
   },
   statValue: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: colors.primary,
+    fontSize: 16,
+    fontWeight: "600",
+    color: colors.text,
+    letterSpacing: -0.2,
+    textAlign: "center",
   },
   statLabel: {
     fontSize: 12,
+    fontWeight: "400",
     color: colors.muted,
     marginTop: 4,
     textAlign: "center",

@@ -53,6 +53,9 @@ export type CustomerVendor = {
   serviceType?: string;
   budgetPreference?: Array<"basic" | "medium" | "elite">;
   walletBalance?: number;
+  leadsToday?: number;
+  lastLeadDispatchedAt?: string;
+  activePendingLeads?: number;
 };
 
 export type VendorAvailabilityCheck = {

@@ -391,8 +391,8 @@ export default function ContactPage() {
                   <View style={styles.locationItem}>
                     <MapPin size={18} color={colors.primary} style={{ marginTop: 2 }} />
                     <View style={{ flex: 1, gap: 2 }}>
-                      <Text style={styles.locationTitle}>HeadQuarters — RTIH Vijayawada</Text>
-                      <Text style={styles.locationDesc}>RTIH, Vijayawada, Andhra Pradesh</Text>
+                      <Text style={styles.locationTitle}>HeadQuarters — Ratan Tata Innovation Hub Vijayawada</Text>
+                      <Text style={styles.locationDesc}>Ratan Tata Innovation Hub, Vijayawada, Andhra Pradesh</Text>
                     </View>
                   </View>
                 </View>

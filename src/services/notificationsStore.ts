@@ -419,6 +419,18 @@ export async function addNotification(notification: AppNotification): Promise<vo
     if (lastTime > 0 && elapsed < minSpacing) {
       return;
     }
+  }
+
+  // Marketing nudge must never fire within 3 days of a welcome notification
+  if (notification.type === "marketing_nudge") {
+    const lastWelcomeTime = await getLastTimeForCategory("welcome");
+    const elapsedSinceWelcome = Date.now() - lastWelcomeTime;
+    if (lastWelcomeTime > 0 && elapsedSinceWelcome < 3 * 24 * 60 * 60 * 1000) {
+      return;
+    }
+  }
+
+  if (notification.type && CATEGORY_MIN_SPACING_MS[notification.type]) {
     await recordCategoryFired(notification.type);
   }
 

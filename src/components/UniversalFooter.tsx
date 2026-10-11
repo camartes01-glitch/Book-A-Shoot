@@ -2,7 +2,7 @@
  * Universal Footer Component
  * Constant, professional footer used across all pages of Book A Shoot:
  * - Brand wordmark & tagline
- * - Official contact details: Phone (+91 96032 15551), Email (info@bookashoot.online), HeadQuarters (RTIH Vijayawada)
+ * - Official contact details: Phone (+91 96032 15551), Email (info@bookashoot.online), HeadQuarters (Ratan Tata Innovation Hub Vijayawada)
  * - Official social media channels: WhatsApp, Instagram (@bookashootonline), Facebook (@bookashootonline), LinkedIn
  * - Navigation links & copyright
  */
@@ -24,7 +24,7 @@ import { colors, spacing } from "@/src/constants/theme";
 
 const PHONE_NUMBER = "+91 96032 15551";
 const EMAIL_ADDRESS = "info@bookashoot.online";
-const LOCATION_HQ = "HeadQuarters: RTIH Vijayawada";
+const LOCATION_HQ = "HeadQuarters: Ratan Tata Innovation Hub Vijayawada";
 
 const SOCIAL_LINKS = {
   whatsapp: `https://wa.me/919603215551?text=${encodeURIComponent(
@@ -59,7 +59,7 @@ export function UniversalFooter({ showHqLocation = true }: UniversalFooterProps 
   const isWide = W >= 768;
 
   const openUrl = (url: string) => {
-    Linking.openURL(url).catch(() => {});
+    Linking.openURL(url).catch(() => { });
   };
 
   const handleCall = () => {
