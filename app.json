@@ -3,7 +3,7 @@
     "name": "BOOK A SHOOT",
     "slug": "book-a-shoot",
     "owner": "camartes01",
-    "version": "1.1.0",
+    "version": "1.1.2",
     "orientation": "portrait",
     "icon": "./assets/images/applogo.png",
     "scheme": "camartescustomer",
@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.camartes.customer",
-      "buildNumber": "2",
+      "buildNumber": "9",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Camartes uses your location to find your event address and match nearby photographers and videographers.",
         "ITSAppUsesNonExemptEncryption": false
@@ -23,7 +23,7 @@
     },
     "android": {
       "package": "com.camartes.customer",
-      "versionCode": 2,
+      "versionCode": 9,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
