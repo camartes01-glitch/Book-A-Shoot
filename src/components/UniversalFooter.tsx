@@ -70,7 +70,7 @@ export function UniversalFooter({ showHqLocation = true }: UniversalFooterProps 
     openUrl(`mailto:${EMAIL_ADDRESS}?subject=${encodeURIComponent("Customer Inquiry — Book A Shoot")}`);
   };
 
-  const goToHome = () => router.push("/landing");
+  const goToHome = () => router.push("/");
   const goToServices = () => router.push("/services");
   const goToAbout = () => router.push("/about");
   const goToBlogs = () => router.push("/blogs");
@@ -210,6 +210,32 @@ export function UniversalFooter({ showHqLocation = true }: UniversalFooterProps 
         </Link>
       </View>
 
+      {/* Popular Photography & Cinematography Hubs (Crawlable SEO Anchor Hub) */}
+      <View style={styles.footerPseoSection}>
+        <Text style={styles.footerPseoHeading}>Popular Shoot Locations & Services</Text>
+        <View style={styles.footerPseoRow}>
+          <Link href="/photographers/wedding/hyderabad" asChild>
+            <Pressable accessibilityRole="link"><Text style={styles.footerPseoLinkText}>Wedding Photographers in Hyderabad</Text></Pressable>
+          </Link>
+          <Text style={styles.footerDot}>•</Text>
+          <Link href="/photographers/pre-wedding/hyderabad" asChild>
+            <Pressable accessibilityRole="link"><Text style={styles.footerPseoLinkText}>Pre-Wedding Shoots Hyderabad</Text></Pressable>
+          </Link>
+          <Text style={styles.footerDot}>•</Text>
+          <Link href="/photographers/maternity/bengaluru" asChild>
+            <Pressable accessibilityRole="link"><Text style={styles.footerPseoLinkText}>Maternity Photographers Bengaluru</Text></Pressable>
+          </Link>
+          <Text style={styles.footerDot}>•</Text>
+          <Link href="/cinematography/drone/hyderabad" asChild>
+            <Pressable accessibilityRole="link"><Text style={styles.footerPseoLinkText}>Drone Cinematography Hyderabad</Text></Pressable>
+          </Link>
+          <Text style={styles.footerDot}>•</Text>
+          <Link href="/blog/indian-wedding-photography-trends-2026" asChild>
+            <Pressable accessibilityRole="link"><Text style={styles.footerPseoLinkText}>Wedding Photography Trends 2026</Text></Pressable>
+          </Link>
+        </View>
+      </View>
+
       <View style={styles.footerDivider} />
       <Text style={styles.copyright}>© 2026 Book A Shoot · Powered by Camartes</Text>
     </View>
@@ -297,6 +323,34 @@ const styles = StyleSheet.create({
   },
   footerDot: {
     fontSize: 12,
+    color: colors.muted,
+  },
+  footerPseoSection: {
+    width: "100%",
+    maxWidth: 800,
+    alignItems: "center",
+    marginBottom: 20,
+    paddingTop: 8,
+  },
+  footerPseoHeading: {
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    color: colors.muted,
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  footerPseoRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 10,
+  },
+  footerPseoLinkText: {
+    fontSize: 12,
+    fontWeight: "500",
     color: colors.muted,
   },
   footerDivider: {

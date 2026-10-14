@@ -57,7 +57,7 @@ export default function PhotographerCityHubPage() {
   const data: PSeoHubConfig = PSEO_HUBS[key] || PSEO_HUBS["wedding-hyderabad"];
 
   const goToLogin = () => router.push("/(auth)/login");
-  const goToHome = () => router.push("/landing");
+  const goToHome = () => router.push("/");
   const goToServices = () => router.push("/services");
 
   // Structured Data

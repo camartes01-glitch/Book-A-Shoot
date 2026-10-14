@@ -99,7 +99,7 @@ export default function CareersPage() {
   const [submitted, setSubmitted] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const goToHome = () => router.push("/landing");
+  const goToHome = () => router.push("/");
   const goToServices = () => router.push("/services");
   const goToAbout = () => router.push("/about");
   const goToContact = () => router.push("/contact");

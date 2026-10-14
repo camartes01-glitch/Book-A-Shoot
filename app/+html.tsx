@@ -9,16 +9,6 @@ export default function Root({ children }: PropsWithChildren) {
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-        <title>Book A Shoot — Hire KYC-Verified Photographers & Cinematographers</title>
-        <meta
-          name="description"
-          content="Book vetted, 100% KYC-verified photography and cinematography studios across Hyderabad, Bangalore, and Andhra Pradesh with guaranteed milestone escrow and 1-hour auto-backfill."
-        />
-        <meta property="og:title" content="Book A Shoot — Hire KYC-Verified Photographers & Cinematographers" />
-        <meta
-          property="og:description"
-          content="India's trusted event photography platform. Weddings, Sangeet, Pre-weddings, Birthdays, and Custom Celebrations."
-        />
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
         <link rel="icon" type="image/x-icon" href="/favicon.ico" />
         <link rel="shortcut icon" href="/favicon.ico" />

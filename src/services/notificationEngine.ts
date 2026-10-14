@@ -23,6 +23,7 @@ import { formatDateLong, formatTime12h } from "@/src/utils/format";
 import { makeId } from "@/src/utils/id";
 import { pushNotificationService } from "@/src/services/pushNotificationService";
 import { hasFirmTimedOut, calculateBusinessSla } from "@/src/engine/businessHours";
+import { isDemoAuthMode } from "@/src/config/authMode";
 
 const STATE_KEY = "camartes-customer:notif_engine_state:v1";
 const DRAFT_NUDGE_AFTER_HOURS = 20;
@@ -428,6 +429,13 @@ async function runReplacementTickInner(bookings: Booking[], profile: CustomerPro
     }
 
     const refreshed = (await bookingApi.refreshRemoteBookingStatus(booking.bookingId)) || booking;
+    const effectiveStatus = getEffectiveBookingStatus(refreshed);
+    if (TERMINAL_STATUSES.has(effectiveStatus) || !ENQUIRY_STATUSES.has(effectiveStatus)) {
+      setBState(state, refreshed, bstate);
+      setBState(state, booking, bstate);
+      persisted = true;
+      continue;
+    }
     await processAcceptRejectDiff(refreshed, profile, bstate);
 
     const aliveCount = (refreshed.assigned_photographers || []).filter((f) => {
@@ -436,7 +444,7 @@ async function runReplacementTickInner(bookings: Booking[], profile: CustomerPro
     }).length;
     const openSlots = Math.max(0, MAX_ACTIVE_FIRMS - aliveCount);
 
-    if (openSlots > 0) {
+    if (openSlots > 0 && isDemoAuthMode()) {
       const { booking: dispatched, addedFirmNames } = await bookingApi.dispatchReplacementFirms(refreshed, openSlots);
       if (addedFirmNames.length > 0) {
         bstate.replacementExhaustedAt = undefined;

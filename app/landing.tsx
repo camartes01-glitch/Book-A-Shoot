@@ -34,7 +34,7 @@ import { UniversalFooter } from "@/src/components/UniversalFooter";
 import { UniversalNavbar } from "@/src/components/UniversalNavbar";
 import { SEOHead } from "@/src/components/SEOHead";
 import { SEOImage } from "@/src/components/SEOImage";
-import { ORGANIZATION_SCHEMA, WEBSITE_SCHEMA } from "@/src/constants/seoSchemas";
+import { ORGANIZATION_SCHEMA, WEBSITE_SCHEMA, HOMEPAGE_FAQ_SCHEMA } from "@/src/constants/seoSchemas";
 import Svg, { Path, Polygon } from "react-native-svg";
 import {
   ArrowRight,
@@ -523,7 +523,7 @@ export default function LandingPage() {
           "drone photography",
           "event photographers bangalore",
         ]}
-        structuredData={[ORGANIZATION_SCHEMA, WEBSITE_SCHEMA]}
+        structuredData={[ORGANIZATION_SCHEMA, WEBSITE_SCHEMA, HOMEPAGE_FAQ_SCHEMA]}
       />
 
       {/* ── Initial Opening Splash Animation ───────────────────────────── */}

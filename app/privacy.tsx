@@ -47,7 +47,7 @@ export default function PrivacyPage() {
   const insets = useSafeAreaInsets();
   const isWide = W >= 768;
 
-  const goToHome = () => router.push("/landing");
+  const goToHome = () => router.push("/");
 
   React.useEffect(() => {
     if (typeof document !== "undefined") {

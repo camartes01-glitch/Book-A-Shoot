@@ -52,7 +52,7 @@ export default function CinematographyCityHubPage() {
   const data: PSeoHubConfig = PSEO_HUBS[key] || PSEO_HUBS["drone-hyderabad"];
 
   const goToLogin = () => router.push("/(auth)/login");
-  const goToHome = () => router.push("/landing");
+  const goToHome = () => router.push("/");
   const goToServices = () => router.push("/services");
 
   const breadcrumbData = createBreadcrumbSchema([

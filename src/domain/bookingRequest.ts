@@ -371,7 +371,7 @@ function parseAssignedPhotographers(raw: unknown): AssignedPhotographer[] | unde
       const r = item as Record<string, unknown>;
       const providerId = stringField(r, ["provider_id", "providerId", "id", "userId", "user_id"]) || "";
       if (!providerId) return null;
-      const name = stringField(r, ["name", "full_name", "fullName", "studioName", "studio_name"]) || "Photography Firm";
+      const name = stringField(r, ["business_name", "businessName", "studio_name", "studioName", "firm_name", "firmName", "name", "display_name", "full_name", "fullName"]) || "Photography Firm";
       const rating = typeof r.rating === "number" ? r.rating : (typeof r.avg_rating === "number" ? r.avg_rating : 4.8);
       const city = stringField(r, ["city", "location"]) || "Bangalore";
       const profileImage = stringField(r, ["profile_image", "profileImage", "image_url", "imageUrl", "avatar"]);

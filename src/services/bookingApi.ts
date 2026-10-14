@@ -23,7 +23,7 @@ import {
   toCamartesBookingRequest,
   mapCamartesBookingStatus,
 } from "@/src/domain/bookingRequest";
-import { getBookingEventTitle, isCompletedBooking } from "@/src/domain/bookingFilters";
+import { getBookingEventTitle, isCompletedBooking, TERMINAL_STATUSES } from "@/src/domain/bookingFilters";
 import { buildNotificationContent, categoryForType } from "@/src/domain/notificationContent";
 import { checkBudgetFeasibility, generatePackageOptions } from "@/src/engine/pricing";
 import { matchVendors } from "@/src/engine/matching";
@@ -273,8 +273,19 @@ export function mergeLocalWithRemote(local: Booking[], remotePayload: unknown, c
 
   for (const booking of local) {
     const match = remote.find((row) => bookingLooksLike(booking, row.id));
-    const processed = match ? applyRemoteSnapshot(booking, match) : booking;
-    if (match) used.add(match.id);
+    let processed = booking;
+    if (match) {
+      processed = applyRemoteSnapshot(booking, match);
+      used.add(match.id);
+    } else if (booking.remoteBookingId && !isLocalWizardBooking(booking) && !TERMINAL_STATUSES.has(booking.status)) {
+      // Remote booking was deleted or removed from server - mark terminal so background loops cease
+      processed = {
+        ...booking,
+        status: "CUSTOMER_CANCELLED",
+        remoteStatus: "deleted",
+        firms_status_message: "Booking request no longer exists.",
+      };
+    }
 
     const primaryKey = processed.bookingId || processed.remoteBookingId;
     if (primaryKey && !seenKeys.has(primaryKey)) {
@@ -405,6 +416,7 @@ export async function refreshRemoteBookingStatus(bookingId: string): Promise<Boo
   if (!targetId) return booking;
 
   // 1. Direct fetch from GET /api/bookings/{id}
+  let directNotFound = false;
   try {
     const res = await camartesFetch<any>(
       `/api/bookings/${encodeURIComponent(targetId)}`,
@@ -523,7 +535,9 @@ export async function refreshRemoteBookingStatus(bookingId: string): Promise<Boo
       return await saveBooking(updatedBooking);
     }
   } catch (err) {
-    // Continue to fallback
+    if (err instanceof CamartesApiError && (err.status === 404 || err.message?.toLowerCase().includes("not found"))) {
+      directNotFound = true;
+    }
   }
 
   // 2. Fallback: my-bookings if authenticated
@@ -541,9 +555,30 @@ export async function refreshRemoteBookingStatus(bookingId: string): Promise<Boo
         booking = remoteOnlyBooking(profile?.customerId || "cust", match);
       }
       return await saveBooking(applyRemoteSnapshot(booking, match));
+    } else if (directNotFound && booking) {
+      // Direct returned 404 and my-bookings does not contain it -> Deleted from server!
+      const terminalBooking: Booking = {
+        ...booking,
+        status: "CUSTOMER_CANCELLED",
+        remoteStatus: "deleted",
+        firms_status_message: "Booking request no longer exists.",
+        assigned_photographers: [],
+        assigned_count: 0,
+      };
+      return await saveBooking(terminalBooking);
     }
   } catch {
-    // ignore
+    if (directNotFound && booking) {
+      const terminalBooking: Booking = {
+        ...booking,
+        status: "CUSTOMER_CANCELLED",
+        remoteStatus: "deleted",
+        firms_status_message: "Booking request no longer exists.",
+        assigned_photographers: [],
+        assigned_count: 0,
+      };
+      return await saveBooking(terminalBooking);
+    }
   }
 
   return booking;
@@ -1211,6 +1246,11 @@ export async function dispatchReplacementFirms(
   count: number,
 ): Promise<{ booking: Booking; addedFirmNames: string[] }> {
   if (count <= 0) return { booking, addedFirmNames: [] };
+
+  // Production Guard: In live mode, replenishment is handled strictly on backend to prevent duplicate bookings.
+  if (!isDemoAuthMode()) {
+    return { booking, addedFirmNames: [] };
+  }
 
   const excludedSet = new Set<string>(booking.excludedVendorIds || []);
   (booking.assignedProviderIds || []).forEach((id) => excludedSet.add(id));

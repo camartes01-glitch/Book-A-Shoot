@@ -98,7 +98,7 @@ export default function AboutPage() {
   const isWide = W >= 768;
 
   const goToLogin = () => router.push("/(auth)/login");
-  const goToHome = () => router.push("/landing");
+  const goToHome = () => router.push("/");
   const goToServices = () => router.push("/services");
   const openPartner = () => Linking.openURL("https://camartes.com");
 

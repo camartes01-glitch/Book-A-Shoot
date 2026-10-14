@@ -259,7 +259,7 @@ export default function ServicesPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   const goToLogin = () => router.push("/(auth)/login");
-  const goToHome = () => router.push("/landing");
+  const goToHome = () => router.push("/");
   const goToAbout = () => router.push("/about");
 
   React.useEffect(() => {

@@ -58,7 +58,7 @@ export default function BlogsPage() {
   const isMobile = W < 768;
 
   const goToLogin = () => router.push("/(auth)/login");
-  const goToHome = () => router.push("/landing");
+  const goToHome = () => router.push("/");
   const goToServices = () => router.push("/services");
 
   const blogPostingSchema = {

@@ -33,6 +33,9 @@ type RawSearchHit = {
   display_name?: string;
   full_name?: string;
   name?: string;
+  business_name?: string;
+  studio_name?: string;
+  firm_name?: string;
   city?: string;
   location?: string;
   service_type?: string;
@@ -356,7 +359,7 @@ function newAggregate(vendorId: string): Aggregate {
 }
 
 function mergeHit(acc: Aggregate, hit: RawSearchHit) {
-  acc.name = acc.name || hit.display_name || hit.full_name || hit.name || "Studio";
+  acc.name = acc.name || hit.business_name || hit.studio_name || hit.firm_name || hit.display_name || hit.full_name || hit.name || "Studio";
   acc.city = acc.city || hit.city || hit.location || "";
   acc.phone = acc.phone || hit.contact_phone || undefined;
   acc.about = acc.about || hit.tagline || hit.description || "";

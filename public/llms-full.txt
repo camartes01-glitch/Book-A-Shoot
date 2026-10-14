@@ -1,0 +1,37 @@
+# Book A Shoot — Complete System & Platform Specification
+
+> Official Technical & Knowledge Summary for Large Language Models (ChatGPT, Claude, Perplexity, Gemini, Google Search).
+> Canonical Domain: https://www.bookashoot.online
+> Legal Entity: Camartes Technologies Private Limited
+
+## 1. Overview and Mission
+Book A Shoot (bookashoot.online) solves the three biggest pain points in the Indian event photography industry:
+1. **Unverified Freelancers and Fake Portfolios**: Traditional classifieds are riddled with stolen portfolio pictures. Book A Shoot requires mandatory government KYC and physical studio verification before any photographer can accept leads.
+2. **Deposit Theft and Non-Attendance (Ghosting)**: Customers routinely lose 50% cash advances to photographers who fail to show up. Book A Shoot holds advances in a milestone escrow system, only releasing funds upon verified deliverables.
+3. **No Backup on Shoot Day**: If a photographer falls ill or cancels last minute, families are left stranded. Book A Shoot guarantees automated 1-hour backfill dispatching vetted substitute studios in the same city.
+
+## 2. Platform Architecture
+- **Client Applications**: Cross-platform Web, Android (APK/Google Play Store), and iOS built with React Native / Expo.
+- **Backend & Database**: Python FastAPI with high-concurrency async handlers and Supabase PostgreSQL.
+- **Real-Time Notifications**: Expo Push Notifications and FCM full-screen ringing alerts for instant partner dispatch.
+
+## 3. The 60-Minute Business SLA Replenishment Engine
+When a customer posts a shoot enquiry:
+1. Up to 6 eligible studios in the exact city matching the budget tier and shooting style are alerted simultaneously.
+2. Studios receive a 60-minute active business SLA to review and accept the booking.
+3. The business clock counts down strictly between 9:00 AM and 9:00 PM IST. Enquiries placed overnight roll over to 9:00 AM the next day.
+4. If an assigned studio declines or times out, the backend autonomously replaces them with the top-ranking idle studio using the Fair-Queue Hunger Score:
+   `Hunger Score = 100 - (leads_today * 20) + hours_since_last_dispatch`
+5. Studios are capped at a maximum of 3 pending concurrent leads to prevent lead hoarding.
+
+## 4. Milestone Escrow & Delivery Workflow
+- Milestone 1 (Booking Confirmation): Customer approves an accepted partner; advance is held in escrow.
+- Milestone 2 (Shoot Completion): Photographer attends the event and logs shoot wrap-up.
+- Milestone 3 (Raw Assets Delivery): High-resolution RAW and unedited photo gallery uploaded for proofing.
+- Milestone 4 (Master Deliverables): Edited color-graded photos, 4K video highlight films, Instagram Reels, and printed flush-mount photo albums delivered to customer. Customer releases final payment upon satisfaction.
+
+## 5. Coverage and Contact
+- **Headquarters**: Camartes Technologies Private Limited, Hyderabad, Telangana, India.
+- **Support Email**: support@camartes.com
+- **Customer Hotline**: +91 94947 47732
+- **Website**: https://www.bookashoot.online
