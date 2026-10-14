@@ -224,7 +224,7 @@ const HOMEPAGE_BLOGS = [
     image:
       Platform.OS === "web"
         ? { uri: "/blog1.webp" }
-        : require("@/assets/images/blog1.png"),
+        : require("@/assets/images/blog1.webp"),
     tag: "Wedding Photography",
     readTime: "8–10 min read",
     title: "Indian Wedding Photography Trends 2026: From Perfect Poses to Real Stories",
