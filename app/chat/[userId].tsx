@@ -261,6 +261,8 @@ function ChatScreenInternal() {
   const [loading, setLoading] = useState(true);
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
+  const [listHeight, setListHeight] = useState(0);
+  const [contentHeight, setContentHeight] = useState(0);
 
   const flatListRef = useRef<FlatList<ChatMessage>>(null);
 
@@ -273,6 +275,8 @@ function ChatScreenInternal() {
       // Catch scroll errors on web
     }
   }, [messages.length]);
+
+  const isShortContent = messages.length > 0 && contentHeight > 0 && listHeight > 0 && contentHeight < listHeight;
 
   const loadMessages = useCallback(async (isInitial = false) => {
     if (!userId || userId === "undefined" || userId === "null") {
@@ -332,7 +336,22 @@ function ChatScreenInternal() {
     const textToSend = (customText || inputText).trim();
     if (!textToSend || !userId || sending) return;
 
+    const tempId = Date.now();
+    const optimisticMsg: ChatMessage = {
+      id: tempId,
+      senderId: "me",
+      recipientId: String(userId),
+      message: textToSend,
+      read: true,
+      createdAt: new Date().toISOString(),
+      isMine: true,
+    };
+
     setInputText("");
+    // 1. Optimistically display immediately in 0ms pinned to bottom
+    setMessages((prev) => [...prev, optimisticMsg]);
+    safeScrollToEnd(false);
+
     setSending(true);
 
     try {
@@ -341,11 +360,11 @@ function ChatScreenInternal() {
         picture: recipientPicture,
       });
       await loadMessages(false);
-      setTimeout(() => {
-        safeScrollToEnd(true);
-      }, 80);
+      safeScrollToEnd(false);
     } catch (err: any) {
       console.error("[Chat] Message send error:", err);
+      // Remove failed optimistic message and restore text
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setInputText(textToSend); // Restore user text so it never disappears!
       Alert.alert("Failed to Send", err?.message || "Could not deliver message. Please try again.");
     } finally {
@@ -517,13 +536,18 @@ function ChatScreenInternal() {
           <FlatList
             ref={flatListRef}
             data={messages}
-            keyExtractor={(item, index) => `${item.id}_${index}`}
+            keyExtractor={(item) => String(item.id)}
             renderItem={renderItem}
-            contentContainerStyle={styles.listContent}
-            onContentSizeChange={() => {
+            contentContainerStyle={[
+              styles.listContent,
+              isShortContent && styles.listContentShort,
+            ]}
+            onLayout={(e) => {
+              setListHeight(e.nativeEvent.layout.height);
               if (messages.length > 0) safeScrollToEnd(false);
             }}
-            onLayout={() => {
+            onContentSizeChange={(_w, h) => {
+              setContentHeight(h);
               if (messages.length > 0) safeScrollToEnd(false);
             }}
             ListEmptyComponent={
@@ -754,6 +778,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     flexGrow: 1,
+  },
+  listContentShort: {
+    justifyContent: "flex-end",
   },
   dateHeaderWrap: {
     alignItems: "center",

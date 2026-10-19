@@ -265,16 +265,49 @@ function isKnownWaveId(local: Booking[], remoteId: string): boolean {
   return local.some((b) => b.replacementWaveIds?.includes(remoteId));
 }
 
-export function mergeLocalWithRemote(local: Booking[], remotePayload: unknown, customerId: string): Booking[] {
+const DELETED_BOOKING_IDS_KEY = "camartes-customer:deleted-booking-ids:v1";
+
+export async function getDeletedBookingIds(): Promise<Set<string>> {
+  try {
+    const raw = await AsyncStorage.getItem(DELETED_BOOKING_IDS_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export async function markBookingAsDeleted(bookingId: string, remoteBookingId?: string | null): Promise<void> {
+  try {
+    const deleted = await getDeletedBookingIds();
+    if (bookingId) deleted.add(bookingId);
+    if (remoteBookingId) deleted.add(remoteBookingId);
+    await AsyncStorage.setItem(DELETED_BOOKING_IDS_KEY, JSON.stringify(Array.from(deleted)));
+  } catch {
+    // Non-blocking
+  }
+}
+
+export function mergeLocalWithRemote(
+  local: Booking[],
+  remotePayload: unknown,
+  customerId: string,
+  deletedIds?: Set<string>,
+): Booking[] {
   const remote = parseRemoteBookingList(remotePayload);
   const used = new Set<string>();
   const merged: Booking[] = [];
   const seenKeys = new Set<string>();
 
   for (const booking of local) {
+    if (deletedIds && (deletedIds.has(booking.bookingId) || (booking.remoteBookingId && deletedIds.has(booking.remoteBookingId)))) {
+      continue;
+    }
     const match = remote.find((row) => bookingLooksLike(booking, row.id));
     let processed = booking;
     if (match) {
+      if (deletedIds && deletedIds.has(match.id)) continue;
       processed = applyRemoteSnapshot(booking, match);
       used.add(match.id);
     } else if (booking.remoteBookingId && !isLocalWizardBooking(booking) && !TERMINAL_STATUSES.has(booking.status)) {
@@ -297,6 +330,7 @@ export function mergeLocalWithRemote(local: Booking[], remotePayload: unknown, c
   }
 
   for (const row of remote) {
+    if (deletedIds && deletedIds.has(row.id)) continue;
     if (used.has(row.id) || seenKeys.has(row.id) || isKnownWaveId(local, row.id)) continue;
     seenKeys.add(row.id);
     merged.push(remoteOnlyBooking(customerId, row));
@@ -326,21 +360,34 @@ function invalidateStalePackageAndMatches(
 /** Local drafts plus Camartes `GET /api/bookings/my-bookings` when signed in. */
 export async function listBookings(customerId: string): Promise<Booking[]> {
   const allStored = await readAllBookings();
-  const local = allStored.filter((b) => b.customerId === customerId);
+  const deletedIds = await getDeletedBookingIds();
+  const local = allStored.filter(
+    (b) =>
+      b.customerId === customerId &&
+      !deletedIds.has(b.bookingId) &&
+      (!b.remoteBookingId || !deletedIds.has(b.remoteBookingId)),
+  );
   try {
     const remote = await camartesFetch<unknown>("/api/bookings/my-bookings", {}, { requireAuth: true });
     const remoteList = parseRemoteBookingList(remote);
     const combinedLocal = [...local];
     for (const b of allStored) {
+      if (deletedIds.has(b.bookingId) || (b.remoteBookingId && deletedIds.has(b.remoteBookingId))) continue;
       if (!combinedLocal.some((cl) => cl.bookingId === b.bookingId)) {
         if (remoteList.some((r) => bookingLooksLike(b, r.id))) {
           combinedLocal.push({ ...b, customerId });
         }
       }
     }
-    const merged = mergeLocalWithRemote(combinedLocal, remote, customerId);
+    const merged = mergeLocalWithRemote(combinedLocal, remote, customerId, deletedIds);
     await writeAllBookings([
-      ...allStored.filter((b) => b.customerId !== customerId && !merged.some((m) => bookingLooksLike(b, m.bookingId))),
+      ...allStored.filter(
+        (b) =>
+          b.customerId !== customerId &&
+          !deletedIds.has(b.bookingId) &&
+          (!b.remoteBookingId || !deletedIds.has(b.remoteBookingId)) &&
+          !merged.some((m) => bookingLooksLike(b, m.bookingId)),
+      ),
       ...merged,
     ]);
     return merged;
@@ -1193,21 +1240,55 @@ export async function cancelBooking(bookingId: string): Promise<Booking> {
 
 export async function deleteDraft(bookingId: string): Promise<void> {
   const all = await readAllBookings();
-  await writeAllBookings(all.filter((b) => b.bookingId !== bookingId && b.remoteBookingId !== bookingId));
+  const target = all.find((b) => b.bookingId === bookingId || b.remoteBookingId === bookingId);
+  await markBookingAsDeleted(bookingId, target?.remoteBookingId);
+  await writeAllBookings(
+    all.filter(
+      (b) =>
+        b.bookingId !== bookingId &&
+        b.remoteBookingId !== bookingId &&
+        (target ? b.bookingId !== target.bookingId && b.remoteBookingId !== target.remoteBookingId : true),
+    ),
+  );
 }
 
 export async function deleteBooking(
   bookingId: string,
 ): Promise<{ deleted: boolean; cancelled: boolean; booking?: Booking }> {
   const booking = await getBooking(bookingId);
-  if (!booking) throw new Error("Booking not found");
+  if (!booking) {
+    await markBookingAsDeleted(bookingId);
+    return { deleted: true, cancelled: false };
+  }
   if (isCompletedBooking(booking)) {
     throw new Error("Already finished bookings cannot be deleted.");
   }
-  if (isLocalWizardBooking(booking) || (!booking.remoteBookingId && booking.status === "DRAFT")) {
+
+  const isDraft =
+    isLocalWizardBooking(booking) ||
+    (!booking.remoteBookingId && booking.status === "DRAFT") ||
+    booking.bookingId?.startsWith("draft");
+  const isCancelled =
+    TERMINAL_STATUSES.has(booking.status) ||
+    booking.status === "CUSTOMER_CANCELLED" ||
+    booking.status === "VENDOR_CANCELLED" ||
+    booking.status === "EXPIRED" ||
+    booking.status === "VENDOR_REJECTED";
+
+  // Both drafts and cancelled requests can be permanently deleted
+  if (isDraft || isCancelled) {
+    await markBookingAsDeleted(booking.bookingId, booking.remoteBookingId);
     await deleteDraft(booking.bookingId);
+    if (booking.remoteBookingId && !isCancelled) {
+      camartesFetch(
+        `/api/bookings/${encodeURIComponent(booking.remoteBookingId)}/status`,
+        { method: "PUT", body: JSON.stringify({ status: "cancelled" }) },
+        { requireAuth: true },
+      ).catch(() => undefined);
+    }
     return { deleted: true, cancelled: false };
   }
+
   const updated = await cancelBooking(booking.bookingId);
   return { deleted: false, cancelled: true, booking: updated };
 }

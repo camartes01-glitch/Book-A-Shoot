@@ -13,7 +13,7 @@ import type { AssignedPhotographer, Booking, EventDay, PackageTierId } from "@/s
 import { STATUS_LABEL, STATUS_TONE } from "@/src/domain/statusLabels";
 import { selectedAddOnLabels, selectedCoreServiceLabels } from "@/src/domain/dayServices";
 import { DEFAULT_EVENT_CATEGORIES, eventTypeLabels } from "@/src/constants/eventCategories";
-import { canSearchAgain, getBookingEventTitle, getEffectiveBookingStatus, isCompletedBooking } from "@/src/domain/bookingFilters";
+import { canSearchAgain, getBookingEventTitle, getEffectiveBookingStatus, isCompletedBooking, isCancelledBooking, isDraftBooking } from "@/src/domain/bookingFilters";
 import { resolvePackageOptions, selectedPackageQuote } from "@/src/engine/pricing";
 import { PACKAGE_TIER_META } from "@/src/config/approvedBudget";
 import { defaultExpectedDeliveryDate } from "@/src/engine/validation";
@@ -137,13 +137,21 @@ export default function BookingDetailScreen() {
     }
   }, [booking, focusFirmId]);
 
+  const handleBackToBookings = () => {
+    if (typeof router.canGoBack === "function" && router.canGoBack()) {
+      router.back();
+    } else {
+      router.navigate("/(tabs)/bookings");
+    }
+  };
+
   if (missing && !booking) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top", "left", "right", "bottom"]}>
-        <ProgressHeader title="Booking details" step="providers" onBack={() => router.replace("/(tabs)/bookings")} />
+        <ProgressHeader title="Booking details" step="providers" onBack={handleBackToBookings} />
         <View style={{ padding: spacing.lg, gap: spacing.md }}>
           <Muted>This booking was not found on this device.</Muted>
-          <Button label="Back to bookings" onPress={() => router.replace("/(tabs)/bookings")} />
+          <Button label="Back to bookings" onPress={handleBackToBookings} />
         </View>
       </SafeAreaView>
     );
@@ -160,6 +168,8 @@ export default function BookingDetailScreen() {
   const match = booking.matches?.find((m) => m.vendorId === (booking.confirmed_provider_id || booking.selectedVendorId));
   const contactUnlocked = CONTACT_UNLOCKED.has(booking.status);
   const displayId = booking.remoteBookingId || booking.bookingId;
+  const isDraft = isDraftBooking(booking) || isLocalWizardBooking(booking);
+  const isCancelled = isCancelledBooking(booking);
   const services = Array.from(new Set(booking.days.flatMap((day) => selectedCoreServiceLabels(day))));
 
   const albumLabel = booking.deliverables?.photo?.album
@@ -386,7 +396,7 @@ export default function BookingDetailScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top", "left", "right", "bottom"]}>
-      <ProgressHeader title="Booking details" step="providers" onBack={() => router.replace("/(tabs)/bookings")} />
+      <ProgressHeader title="Booking details" step="providers" onBack={handleBackToBookings} />
       <ScrollView
         contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
         refreshControl={
@@ -699,26 +709,28 @@ export default function BookingDetailScreen() {
               />
             ) : null}
 
-            <Button
-              label="Edit event details"
-              variant="outline"
-              onPress={async () => {
-                try {
-                  const loaded = await loadDraft(booking.bookingId);
-                  const active = loaded ?? booking;
-                  const target = getDraftResumeRoute(active);
-                  router.push(target as any);
-                } catch (e) {
-                  const msg = e instanceof Error ? e.message : "Could not load booking.";
-                  Alert.alert("Edit booking", msg);
-                }
-              }}
-              disabled={busy}
-            />
-
-            {(isLocalWizardBooking(booking) || (!booking.remoteBookingId && booking.status === "DRAFT")) ? (
+            {!isCancelled ? (
               <Button
-                label="Delete draft"
+                label="Edit event details"
+                variant="outline"
+                onPress={async () => {
+                  try {
+                    const loaded = await loadDraft(booking.bookingId);
+                    const active = loaded ?? booking;
+                    const target = getDraftResumeRoute(active);
+                    router.push(target as any);
+                  } catch (e) {
+                    const msg = e instanceof Error ? e.message : "Could not load booking.";
+                    Alert.alert("Edit booking", msg);
+                  }
+                }}
+                disabled={busy}
+              />
+            ) : null}
+
+            {(isDraft || isCancelled) ? (
+              <Button
+                label={isDraft ? "Delete draft" : "Delete request"}
                 variant="danger"
                 onPress={() => setConfirmMode("delete")}
                 disabled={busy}
@@ -730,19 +742,23 @@ export default function BookingDetailScreen() {
 
       <ConfirmDialog
         visible={confirmMode !== null}
-        title="Delete draft booking?"
-        message="This will remove the draft booking and all of its event days. This action cannot be undone."
-        confirmLabel="Delete draft"
+        title={isDraft ? "Delete draft booking?" : "Delete cancelled request?"}
+        message={
+          isDraft
+            ? "This will remove the draft booking and all of its event days. This action cannot be undone."
+            : "This will remove the cancelled shoot request from your bookings. This action cannot be undone."
+        }
+        confirmLabel={isDraft ? "Delete draft" : "Delete request"}
         cancelLabel="Cancel"
         confirmVariant="danger"
         loading={busy}
         onConfirm={async () => {
           if (confirmMode === "delete") {
+            setConfirmMode(null);
             setBusy(true);
             try {
               await deleteBooking(booking.bookingId);
-              setConfirmMode(null);
-              router.replace("/(tabs)/bookings");
+              handleBackToBookings();
             } catch (e) {
               const msg = e instanceof Error ? e.message : "Could not delete booking.";
               Alert.alert("Could not delete booking", msg);

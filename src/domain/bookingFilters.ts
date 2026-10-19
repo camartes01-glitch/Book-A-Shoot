@@ -185,6 +185,18 @@ export function isDraftBooking(booking: Booking): boolean {
   return false;
 }
 
+/**
+ * CANCELLED / DECLINED / EXPIRED REQUESTS:
+ * Terminal requests that were cancelled by customer, cancelled/declined by vendor, or expired.
+ */
+export function isCancelledBooking(booking: Booking): boolean {
+  if (!booking) return false;
+  return (
+    TERMINAL_STATUSES.has(booking.status) ||
+    TERMINAL_STATUSES.has(getEffectiveBookingStatus(booking))
+  );
+}
+
 export function filterBookings(bookings: Booking[], tab: BookingFilterTab): Booking[] {
   switch (tab) {
     case "enquiries":

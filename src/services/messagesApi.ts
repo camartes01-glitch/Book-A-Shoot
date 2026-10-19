@@ -403,10 +403,15 @@ export async function fetchMessagesWithUser(userId: string): Promise<ChatMessage
     }
   }
 
-  // Sort chronologically
-  const sorted = combined.sort((a, b) =>
-    (a.createdAt || "").localeCompare(b.createdAt || ""),
-  );
+  // Sort chronologically by real timestamp, with fallback to ID
+  const sorted = combined.sort((a, b) => {
+    const tA = new Date(a.createdAt || 0).getTime();
+    const tB = new Date(b.createdAt || 0).getTime();
+    if (!isNaN(tA) && !isNaN(tB) && tA !== tB) {
+      return tA - tB;
+    }
+    return (a.createdAt || "").localeCompare(b.createdAt || "") || (Number(a.id || 0) - Number(b.id || 0));
+  });
 
   // Cache clean deduplicated thread
   await setLocalThread(userId, sorted);

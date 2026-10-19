@@ -616,25 +616,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Already finished bookings cannot be deleted.");
       }
 
-      if (target && (isLocalWizardBooking(target) || (!target.remoteBookingId && target.status === "DRAFT"))) {
-        // Local draft: permanently delete from local storage & memory
-        await bookingApi.deleteDraft(target.bookingId);
-        if (activeDraftRef.current?.bookingId === target.bookingId) {
-          activeDraftRef.current = null;
-          setActiveDraft(null);
-        }
-        setBookings((prev) =>
-          prev.filter((b) => b.bookingId !== target.bookingId && b.remoteBookingId !== target.bookingId),
-        );
-      } else {
-        // Submitted server booking: request cancellation via Camartes backend
-        await bookingApi.cancelBooking(bookingId);
-        await refreshBookings();
-        if (activeDraftRef.current?.bookingId === bookingId) {
-          activeDraftRef.current = null;
-          setActiveDraft(null);
-        }
+      // 1. Instant optimistic removal from in-memory bookings (0ms!)
+      setBookings((prev) =>
+        prev.filter(
+          (b) =>
+            b.bookingId !== bookingId &&
+            b.remoteBookingId !== bookingId &&
+            (target ? b.bookingId !== target.bookingId && b.remoteBookingId !== target.remoteBookingId : true),
+        ),
+      );
+
+      if (
+        activeDraftRef.current?.bookingId === bookingId ||
+        (target && activeDraftRef.current?.bookingId === target.bookingId)
+      ) {
+        activeDraftRef.current = null;
+        setActiveDraft(null);
       }
+
+      // 2. Perform backend/storage delete (permanently deletes drafts and cancelled requests)
+      await bookingApi.deleteBooking(target?.bookingId || bookingId);
+
+      // 3. Non-blocking background sync
+      void refreshBookings();
     },
     [bookings, refreshBookings],
   );

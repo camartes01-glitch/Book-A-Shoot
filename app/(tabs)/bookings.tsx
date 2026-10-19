@@ -15,6 +15,7 @@ import {
   isUpcomingBooking,
   isCompletedBooking,
   isDraftBooking,
+  isCancelledBooking,
   filterBookings,
   getBookingEventTitle,
   getEffectiveBookingStatus,
@@ -125,17 +126,19 @@ export default function BookingsScreen() {
 
   const handleConfirmAction = async () => {
     if (!targetAction || busy) return;
-    if (isCompletedBooking(targetAction.booking)) {
+    const bookingToDelete = targetAction.booking;
+    if (isCompletedBooking(bookingToDelete)) {
       Alert.alert("Completed booking", "Completed bookings cannot be deleted.");
       setTargetAction(null);
       return;
     }
+    // Dismiss dialog immediately in 0ms so user stays seamlessly on the same page
+    setTargetAction(null);
     setBusy(true);
     try {
-      await deleteBooking(targetAction.booking.bookingId);
-      setTargetAction(null);
+      await deleteBooking(bookingToDelete.bookingId);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to delete draft booking.";
+      const msg = e instanceof Error ? e.message : "Failed to delete booking.";
       Alert.alert("Could not delete booking", msg);
     } finally {
       setBusy(false);
@@ -257,10 +260,11 @@ export default function BookingsScreen() {
       ) : (
         filteredBookings.map((b, index) => {
           const finalEventDate = b.days.map((d) => d.eventDate).filter(Boolean).sort().pop();
-          const isDraft = isLocalWizardBooking(b) || (!b.remoteBookingId && b.status === "DRAFT");
+          const isDraft = isDraftBooking(b) || isLocalWizardBooking(b);
+          const isCancelled = isCancelledBooking(b);
           const isCompleted = isCompletedBooking(b);
-          const canEdit = !isCompleted;
-          const canDelete = isDraft && !isCompleted;
+          const canEdit = !isCompleted && !isCancelled;
+          const canDelete = (isDraft || isCancelled) && !isCompleted;
           const showRetrySearch = !isDraft && canSearchAgain(b);
 
           return (
@@ -342,7 +346,7 @@ export default function BookingsScreen() {
                         setTargetAction({ booking: b, mode: "delete" });
                       }}
                       accessibilityRole="button"
-                      accessibilityLabel="Delete draft"
+                      accessibilityLabel={isDraft ? "Delete draft" : "Delete request"}
                       testID={`delete-booking-btn-${b.bookingId}`}
                     >
                       <Trash2 size={13} color={colors.danger} />
@@ -358,9 +362,21 @@ export default function BookingsScreen() {
 
       <ConfirmDialog
         visible={targetAction !== null}
-        title="Delete draft booking?"
-        message="This will remove the draft booking and all of its event days. This action cannot be undone."
-        confirmLabel="Delete draft"
+        title={
+          targetAction?.booking && !isDraftBooking(targetAction.booking) && !isLocalWizardBooking(targetAction.booking)
+            ? "Delete cancelled request?"
+            : "Delete draft booking?"
+        }
+        message={
+          targetAction?.booking && !isDraftBooking(targetAction.booking) && !isLocalWizardBooking(targetAction.booking)
+            ? "This will remove the cancelled shoot request from your bookings. This action cannot be undone."
+            : "This will remove the draft booking and all of its event days. This action cannot be undone."
+        }
+        confirmLabel={
+          targetAction?.booking && !isDraftBooking(targetAction.booking) && !isLocalWizardBooking(targetAction.booking)
+            ? "Delete request"
+            : "Delete draft"
+        }
         cancelLabel="Cancel"
         confirmVariant="danger"
         loading={busy}
