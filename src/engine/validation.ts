@@ -143,7 +143,7 @@ export function validateDay(day: EventDay): ValidationIssue[] {
 
 export function validateExpectedDelivery(days: EventDay[], expectedDeliveryDate: string | null): ValidationIssue[] {
   if (!expectedDeliveryDate) {
-    return [{ code: "DELIVERY_DATE_REQUIRED", message: "Select an expected delivery date." }];
+    return [{ code: "DELIVERY_DATE_REQUIRED", message: "Select an expected album delivery date." }];
   }
   const finalEventDate = latestDate(days.map((d) => d.eventDate ?? ""));
   // Rule 4
@@ -151,7 +151,7 @@ export function validateExpectedDelivery(days: EventDay[], expectedDeliveryDate:
     return [
       {
         code: "DELIVERY_BEFORE_EVENT",
-        message: "Expected delivery date cannot be before the final event date.",
+        message: "Album delivery date cannot be before the final event date.",
       },
     ];
   }
@@ -196,9 +196,13 @@ export function validateDays(days: EventDay[]): ValidationIssue[] {
 
 /** Full booking validation (days + expected delivery) — used once the
  * customer has moved past the deliverables step, e.g. before vendor
- * matching, where an expected delivery date is expected to already exist. */
+ * matching. Expected delivery date is only required if album is selected. */
 export function validateBooking(booking: Booking): ValidationIssue[] {
-  return [...validateDays(booking.days), ...validateExpectedDelivery(booking.days, booking.expectedDeliveryDate)];
+  const issues = [...validateDays(booking.days)];
+  if (booking.deliverables?.photo?.album) {
+    issues.push(...validateExpectedDelivery(booking.days, booking.expectedDeliveryDate));
+  }
+  return issues;
 }
 
 export function isDayComplete(day: EventDay): boolean {

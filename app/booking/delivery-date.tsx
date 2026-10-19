@@ -23,13 +23,24 @@ export default function DeliveryDateScreen() {
     }
   }, [activeDraft?.expectedDeliveryDate]);
 
+  // Guard: this screen is strictly for album delivery date; if no album, skip forward
+  useEffect(() => {
+    if (activeDraft && !activeDraft.deliverables?.photo?.album) {
+      if (isEditMode) {
+        router.replace("/booking/confirm");
+      } else {
+        router.replace("/booking/budget");
+      }
+    }
+  }, [activeDraft, isEditMode]);
+
   if (!activeDraft) return null;
   const finalEventDate = latestDate(activeDraft.days.map((d) => d.eventDate ?? ""));
 
   const onContinue = async () => {
     const issues = validateExpectedDelivery(activeDraft.days, date);
     if (issues.length) {
-      Alert.alert("Check the delivery date", issues[0].message);
+      Alert.alert("Check the album delivery date", issues[0].message);
       return;
     }
     await updateExpectedDelivery(date!);
@@ -39,7 +50,7 @@ export default function DeliveryDateScreen() {
   const onSaveAndReturn = async () => {
     const issues = validateExpectedDelivery(activeDraft.days, date);
     if (issues.length) {
-      Alert.alert("Check the delivery date", issues[0].message);
+      Alert.alert("Check the album delivery date", issues[0].message);
       return;
     }
     await updateExpectedDelivery(date!);
@@ -61,7 +72,7 @@ export default function DeliveryDateScreen() {
 
   return (
     <WizardScreen
-      title={isEditMode ? "Edit Delivery Date" : "When do you need them?"}
+      title={isEditMode ? "Edit Album Delivery Date" : "When do you need your album?"}
       step="deliverables"
       onBack={onBack}
       footer={
@@ -73,12 +84,12 @@ export default function DeliveryDateScreen() {
       }
     >
       <Card>
-          <SectionTitle>When do you need your photos & videos?</SectionTitle>
+          <SectionTitle>When do you need your printed album?</SectionTitle>
           <Muted>
             {finalEventDate ? `Your last event day is ${formatDateLong(finalEventDate)}.` : "Set your event dates first."}
           </Muted>
         <DateField
-          label="Expected delivery date"
+          label="Album delivery date"
           value={date}
           onChange={setDate}
           minimumDate={finalEventDate ? new Date(`${finalEventDate}T00:00:00`) : new Date()}

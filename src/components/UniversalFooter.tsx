@@ -214,23 +214,23 @@ export function UniversalFooter({ showHqLocation = true }: UniversalFooterProps 
       <View style={styles.footerPseoSection}>
         <Text style={styles.footerPseoHeading}>Popular Shoot Locations & Services</Text>
         <View style={styles.footerPseoRow}>
-          <Link href="/photographers/wedding/hyderabad" asChild>
+          <Link href={"/photographers/wedding/hyderabad" as any} asChild>
             <Pressable accessibilityRole="link"><Text style={styles.footerPseoLinkText}>Wedding Photographers in Hyderabad</Text></Pressable>
           </Link>
           <Text style={styles.footerDot}>•</Text>
-          <Link href="/photographers/pre-wedding/hyderabad" asChild>
+          <Link href={"/photographers/pre-wedding/hyderabad" as any} asChild>
             <Pressable accessibilityRole="link"><Text style={styles.footerPseoLinkText}>Pre-Wedding Shoots Hyderabad</Text></Pressable>
           </Link>
           <Text style={styles.footerDot}>•</Text>
-          <Link href="/photographers/maternity/bengaluru" asChild>
+          <Link href={"/photographers/maternity/bengaluru" as any} asChild>
             <Pressable accessibilityRole="link"><Text style={styles.footerPseoLinkText}>Maternity Photographers Bengaluru</Text></Pressable>
           </Link>
           <Text style={styles.footerDot}>•</Text>
-          <Link href="/cinematography/drone/hyderabad" asChild>
+          <Link href={"/cinematography/drone/hyderabad" as any} asChild>
             <Pressable accessibilityRole="link"><Text style={styles.footerPseoLinkText}>Drone Cinematography Hyderabad</Text></Pressable>
           </Link>
           <Text style={styles.footerDot}>•</Text>
-          <Link href="/blog/indian-wedding-photography-trends-2026" asChild>
+          <Link href={"/blog/indian-wedding-photography-trends-2026" as any} asChild>
             <Pressable accessibilityRole="link"><Text style={styles.footerPseoLinkText}>Wedding Photography Trends 2026</Text></Pressable>
           </Link>
         </View>

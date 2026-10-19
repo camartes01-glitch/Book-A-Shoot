@@ -104,15 +104,17 @@ export default function BookingSummaryScreen() {
         <Muted>Cinematic videos: {video.editedCinematicVideoCount}</Muted>
       </Card>
 
-      <Card>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <SectionTitle>Expected delivery</SectionTitle>
-          <Pressable onPress={() => router.push("/booking/delivery-date")} hitSlop={8} accessibilityLabel="Edit delivery date">
-            <Muted style={{ color: colors.primaryDark, fontWeight: fontWeights.heading }}>Edit</Muted>
-          </Pressable>
-        </View>
-        <Muted>{formatDateLong(activeDraft.expectedDeliveryDate)}</Muted>
-      </Card>
+      {photo.album ? (
+        <Card>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <SectionTitle>Album delivery date</SectionTitle>
+            <Pressable onPress={() => router.push("/booking/delivery-date")} hitSlop={8} accessibilityLabel="Edit album delivery date">
+              <Muted style={{ color: colors.primaryDark, fontWeight: fontWeights.heading }}>Edit</Muted>
+            </Pressable>
+          </View>
+          <Muted>{formatDateLong(activeDraft.expectedDeliveryDate)}</Muted>
+        </Card>
+      ) : null}
 
       {activeDraft.budget ? (
         <Card>

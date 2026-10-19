@@ -107,11 +107,14 @@ export default function BudgetScreen() {
     }
   };
 
+  const hasAlbum = Boolean(activeDraft?.deliverables?.photo?.album);
   const onBack = () => {
     if (isEditMode) {
       router.replace("/booking/confirm");
-    } else {
+    } else if (hasAlbum) {
       router.push("/booking/delivery-date");
+    } else {
+      router.push("/booking/deliverables");
     }
   };
 

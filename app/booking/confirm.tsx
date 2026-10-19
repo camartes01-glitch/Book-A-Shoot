@@ -345,16 +345,18 @@ export default function ConfirmBookingScreen() {
           </View>
         </View>
 
-        {/* Expected Delivery Date */}
-        <View style={styles.detailRow}>
-          <Clock size={15} color="#EA580C" style={styles.detailIcon} />
-          <View style={{ flex: 1, gap: 1 }}>
-            <Text style={styles.detailLabel}>Expected Delivery Date</Text>
-            <Text style={styles.detailValueText}>
-              {activeDraft.expectedDeliveryDate ? formatDateLong(activeDraft.expectedDeliveryDate) : "Delivery date pending"}
-            </Text>
+        {/* Album Delivery Date - only needed and shown if album is selected */}
+        {activeDraft.deliverables.photo.album ? (
+          <View style={styles.detailRow}>
+            <Clock size={15} color="#EA580C" style={styles.detailIcon} />
+            <View style={{ flex: 1, gap: 1 }}>
+              <Text style={styles.detailLabel}>Album Delivery Date</Text>
+              <Text style={styles.detailValueText}>
+                {activeDraft.expectedDeliveryDate ? formatDateLong(activeDraft.expectedDeliveryDate) : "Album date pending"}
+              </Text>
+            </View>
           </View>
-        </View>
+        ) : null}
       </Card>
 
       {/* Budget Card */}

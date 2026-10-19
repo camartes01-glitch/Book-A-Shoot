@@ -14,11 +14,12 @@ import type { Deliverables } from "@/src/types/booking";
 import { colors, spacing } from "@/src/constants/theme";
 import { DELIVERABLES_PRICING, getBookingPricingModel } from "@/src/config/approvedBudget";
 import { formatInrRange } from "@/src/utils/format";
+import { defaultExpectedDeliveryDate } from "@/src/engine/validation";
 
 export default function DeliverablesScreen() {
   const params = useLocalSearchParams<{ mode?: string }>();
   const isEditMode = params.mode === "edit";
-  const { activeDraft, updateDeliverables } = useAppStore();
+  const { activeDraft, updateDeliverables, updateExpectedDelivery } = useAppStore();
   const [d, setD] = useState<Deliverables | null>(activeDraft?.deliverables ?? null);
 
   const model = getBookingPricingModel(activeDraft?.days ?? []);
@@ -75,9 +76,25 @@ export default function DeliverablesScreen() {
   const patchPhoto = (p: Partial<Deliverables["photo"]>) => setD((prev) => (prev ? { ...prev, photo: { ...prev.photo, ...p } } : prev));
   const patchVideo = (p: Partial<Deliverables["video"]>) => setD((prev) => (prev ? { ...prev, video: { ...prev.video, ...p } } : prev));
 
+  const hasAlbum = Boolean(d?.photo?.album);
+
   const onContinue = async () => {
     if (d) await updateDeliverables(d);
-    router.push(`/booking/delivery-date${isEditMode ? "?mode=edit" : ""}`);
+    if (hasAlbum) {
+      router.push(`/booking/delivery-date${isEditMode ? "?mode=edit" : ""}`);
+    } else {
+      if (activeDraft?.days?.length) {
+        const defaultDate = defaultExpectedDeliveryDate(activeDraft.days);
+        if (defaultDate) {
+          void updateExpectedDelivery(defaultDate);
+        }
+      }
+      if (isEditMode) {
+        router.replace("/booking/confirm");
+      } else {
+        router.push("/booking/budget");
+      }
+    }
   };
 
   const firstDayId = activeDraft?.days?.[0]?.dayId;
@@ -96,7 +113,13 @@ export default function DeliverablesScreen() {
       title={isEditMode ? "Edit Deliverables" : "What you'll receive"}
       step="deliverables"
       onBack={onBack}
-      footer={<Button label="Continue to Delivery Date" onPress={onContinue} flex={1} />}
+      footer={
+        <Button
+          label={hasAlbum ? "Continue to Album Delivery Date" : "Continue to Budget"}
+          onPress={onContinue}
+          flex={1}
+        />
+      }
     >
       <Card>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>

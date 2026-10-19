@@ -1240,15 +1240,18 @@ export async function cancelBooking(bookingId: string): Promise<Booking> {
 
 export async function deleteDraft(bookingId: string): Promise<void> {
   const all = await readAllBookings();
-  const target = all.find((b) => b.bookingId === bookingId || b.remoteBookingId === bookingId);
+  const target = all.find((b) => b.bookingId === bookingId || (b.remoteBookingId && b.remoteBookingId === bookingId));
   await markBookingAsDeleted(bookingId, target?.remoteBookingId);
   await writeAllBookings(
-    all.filter(
-      (b) =>
-        b.bookingId !== bookingId &&
-        b.remoteBookingId !== bookingId &&
-        (target ? b.bookingId !== target.bookingId && b.remoteBookingId !== target.remoteBookingId : true),
-    ),
+    all.filter((b) => {
+      if (b.bookingId === bookingId) return false;
+      if (b.remoteBookingId && b.remoteBookingId === bookingId) return false;
+      if (target) {
+        if (target.bookingId && b.bookingId === target.bookingId) return false;
+        if (target.remoteBookingId && b.remoteBookingId && b.remoteBookingId === target.remoteBookingId) return false;
+      }
+      return true;
+    }),
   );
 }
 
