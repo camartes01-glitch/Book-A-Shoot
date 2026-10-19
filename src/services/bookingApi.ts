@@ -450,7 +450,10 @@ export async function refreshRemoteBookingStatus(bookingId: string): Promise<Boo
         remoteStatus === "accepted" ||
         (bData.accepted_provider_ids && bData.accepted_provider_ids.length > 0);
       const isConfirmed = Boolean(
-        bData.confirmed_provider_id || remoteStatus === "confirmed",
+        bData.confirmed_provider_id ||
+        remoteStatus === "confirmed" ||
+        booking.confirmed_provider_id ||
+        booking.status === "CONFIRMED",
       );
 
       let mappedStatus = booking.status;
@@ -506,26 +509,43 @@ export async function refreshRemoteBookingStatus(bookingId: string): Promise<Boo
         }
       }
 
+      const confirmedPid =
+        bData.confirmed_provider_id ||
+        (isConfirmed ? (bData.provider_id || booking.confirmed_provider_id) : booking.confirmed_provider_id);
+
+      if (confirmedPid && assignedPhotographers.length > 0) {
+        assignedPhotographers = assignedPhotographers.map((f) => {
+          const isThis = f.provider_id === confirmedPid || f.id === confirmedPid;
+          return {
+            ...f,
+            is_confirmed: isThis || Boolean(f.is_confirmed),
+            can_confirm: false,
+            has_accepted: isThis ? true : f.has_accepted,
+            contact_unlocked: isThis ? true : f.contact_unlocked,
+          };
+        });
+      }
+
       const updatedBooking: Booking = {
         ...booking,
         selectedPackage: resolvedPkg,
         expectedDeliveryDate: resolvedDelivery,
         budget: resolvedBudget,
         deliverables,
-        remoteStatus: bData.status || booking.remoteStatus,
+        remoteStatus: isConfirmed ? "confirmed" : (bData.status || booking.remoteStatus),
         status: mappedStatus,
-        confirmed_provider_id:
-          bData.confirmed_provider_id ||
-          (isConfirmed ? bData.provider_id : booking.confirmed_provider_id),
+        confirmed_provider_id: confirmedPid,
         assigned_photographers:
           assignedPhotographers.length > 0
             ? assignedPhotographers
             : booking.assigned_photographers,
         firms_status_message:
-          res.firms_status_message ||
-          bData.firms_status_message ||
-          snap?.firmsStatusMessage ||
-          booking.firms_status_message,
+          isConfirmed
+            ? "Photography partner confirmed"
+            : (res.firms_status_message ||
+               bData.firms_status_message ||
+               snap?.firmsStatusMessage ||
+               booking.firms_status_message),
         assigned_count:
           assignedPhotographers.length || snap?.assignedCount || booking.assigned_count,
         contactMasked: !hasAccepted && !isConfirmed,
@@ -1078,6 +1098,53 @@ export async function confirmPhotographer(bookingId: string, providerId: string)
     throw new Error("This booking has not been submitted to Camartes yet.");
   }
 
+  const updatedPhotographers = (booking.assigned_photographers || []).map((firm) => {
+    const isThisFirm = firm.provider_id === providerId || firm.id === providerId;
+    return {
+      ...firm,
+      is_confirmed: isThisFirm,
+      can_confirm: false,
+      has_accepted: isThisFirm ? true : firm.has_accepted,
+      contact_unlocked: isThisFirm ? true : firm.contact_unlocked,
+    };
+  });
+
+  const selectedFirm = (booking.assigned_photographers || []).find(
+    (f) => f.provider_id === providerId || f.id === providerId,
+  );
+
+  // 1. Immediately persist locally (0ms) so UI and memory reflect confirmed instantly
+  const updated = await saveBooking({
+    ...booking,
+    status: "CONFIRMED",
+    remoteStatus: "confirmed",
+    confirmed_provider_id: providerId,
+    selectedVendorId: providerId,
+    assigned_photographers: updatedPhotographers,
+    contactMasked: false,
+    firms_status_message: "Photography partner confirmed",
+    acceptedVendorContact: selectedFirm
+      ? {
+          phone: selectedFirm.contact_phone,
+          email: selectedFirm.contact_email,
+          studioName: selectedFirm.name,
+        }
+      : booking.acceptedVendorContact,
+  });
+
+  // 2. Dispatch local notification immediately
+  await addNotification({
+    id: makeId("ntf"),
+    title: "Photography partner confirmed",
+    body: selectedFirm?.name
+      ? `You confirmed ${selectedFirm.name} as your official photography partner!`
+      : `Your photography partner has been confirmed for booking ${targetId}.`,
+    createdAt: new Date().toISOString(),
+    read: false,
+    bookingId: targetId,
+  });
+
+  // 3. Sync with remote backend asynchronously
   if (!isDemoAuthMode()) {
     try {
       await camartesFetch<{ status?: string; message?: string }>(
@@ -1089,49 +1156,6 @@ export async function confirmPhotographer(bookingId: string, providerId: string)
       console.warn("Could not confirm with remote backend, updating locally:", err);
     }
   }
-
-  const updatedPhotographers = booking.assigned_photographers?.map((firm) => {
-    const isThisFirm = firm.provider_id === providerId || firm.id === providerId;
-    return {
-      ...firm,
-      is_confirmed: isThisFirm,
-      can_confirm: false,
-      has_accepted: isThisFirm ? true : firm.has_accepted,
-      contact_unlocked: isThisFirm ? true : firm.contact_unlocked,
-    };
-  });
-
-  const selectedFirm = booking.assigned_photographers?.find(
-    (f) => f.provider_id === providerId || f.id === providerId,
-  );
-
-  const updated = await saveBooking({
-    ...booking,
-    status: "CONFIRMED",
-    remoteStatus: "confirmed",
-    confirmed_provider_id: providerId,
-    selectedVendorId: providerId,
-    assigned_photographers: updatedPhotographers,
-    contactMasked: false,
-    acceptedVendorContact: selectedFirm
-      ? {
-          phone: selectedFirm.contact_phone,
-          email: selectedFirm.contact_email,
-          studioName: selectedFirm.name,
-        }
-      : booking.acceptedVendorContact,
-  });
-
-  await addNotification({
-    id: makeId("ntf"),
-    title: "Photography partner confirmed",
-    body: selectedFirm?.name
-      ? `You confirmed ${selectedFirm.name} as your official photography partner!`
-      : `Your photography partner has been confirmed for booking ${targetId}.`,
-    createdAt: new Date().toISOString(),
-    read: false,
-    bookingId: targetId,
-  });
 
   return updated;
 }

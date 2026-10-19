@@ -544,9 +544,50 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const confirmPhotographer = useCallback(
     async (bookingId: string, providerId: string) => {
+      // 1. Instant optimistic update across all bookings in store (0ms)
+      setBookings((list) =>
+        list.map((b) => {
+          if (b.bookingId !== bookingId && b.remoteBookingId !== bookingId) return b;
+          const updatedPhotographers = (b.assigned_photographers || []).map((firm) => {
+            const isThisFirm = firm.provider_id === providerId || firm.id === providerId;
+            return {
+              ...firm,
+              is_confirmed: isThisFirm,
+              can_confirm: false,
+              has_accepted: isThisFirm ? true : firm.has_accepted,
+              contact_unlocked: isThisFirm ? true : firm.contact_unlocked,
+            };
+          });
+          const selectedFirm = (b.assigned_photographers || []).find(
+            (f) => f.provider_id === providerId || f.id === providerId,
+          );
+          return {
+            ...b,
+            status: "CONFIRMED",
+            remoteStatus: "confirmed",
+            confirmed_provider_id: providerId,
+            selectedVendorId: providerId,
+            assigned_photographers: updatedPhotographers,
+            contactMasked: false,
+            acceptedVendorContact: selectedFirm
+              ? {
+                  phone: selectedFirm.contact_phone,
+                  email: selectedFirm.contact_email,
+                  studioName: selectedFirm.name,
+                }
+              : b.acceptedVendorContact,
+            firms_status_message: "Photography partner confirmed",
+            updatedAt: new Date().toISOString(),
+          };
+        }),
+      );
+
+      // 2. Persist locally and sync remote
       const updated = await bookingApi.confirmPhotographer(bookingId, providerId);
       upsertLocalBooking(updated);
-      await refreshBookings();
+
+      // 3. Non-blocking background refresh so UI never blocks
+      void refreshBookings();
       return updated;
     },
     [upsertLocalBooking, refreshBookings],

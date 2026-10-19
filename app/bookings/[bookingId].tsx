@@ -255,21 +255,73 @@ export default function BookingDetailScreen() {
   };
 
   const handleConfirmFirm = async (firm: AssignedPhotographer) => {
-    setBusy(true);
-    setConfirmingFirmId(firm.provider_id);
+    const providerId = firm.provider_id || firm.id;
+    const currentBooking = booking;
+
+    // 1. Immediately dismiss modal so user doesn't wait
+    setFirmToConfirm(null);
+    setSelectedFirmModal(null);
     setError(null);
+
+    // 2. Immediately reflect confirmed state in the current screen (0ms)
+    if (currentBooking) {
+      const sourceFirms =
+        currentBooking.assigned_photographers && currentBooking.assigned_photographers.length > 0
+          ? currentBooking.assigned_photographers
+          : assignedFirms;
+
+      const updatedPhotographers = sourceFirms.map((f) => {
+        const isThis = f.provider_id === providerId || f.id === providerId;
+        return {
+          ...f,
+          is_confirmed: isThis,
+          can_confirm: false,
+          has_accepted: isThis ? true : f.has_accepted,
+          contact_unlocked: isThis ? true : f.contact_unlocked,
+        };
+      });
+
+      const selectedFirm =
+        sourceFirms.find((f) => f.provider_id === providerId || f.id === providerId) || firm;
+
+      const optimisticBooking: Booking = {
+        ...currentBooking,
+        status: "CONFIRMED",
+        remoteStatus: "confirmed",
+        confirmed_provider_id: providerId,
+        selectedVendorId: providerId,
+        assigned_photographers: updatedPhotographers,
+        contactMasked: false,
+        acceptedVendorContact: {
+          phone: selectedFirm.contact_phone || firm.contact_phone,
+          email: selectedFirm.contact_email || firm.contact_email,
+          studioName: selectedFirm.name || firm.name,
+        },
+        firms_status_message: "Photography partner confirmed",
+        updatedAt: new Date().toISOString(),
+      };
+
+      setBooking(optimisticBooking);
+    }
+
+    // 3. Immediately show confirmed alert to user
+    Alert.alert(
+      "Photography Partner Confirmed!",
+      `${firm.name} is now locked as your official photography partner.`,
+    );
+
+    // 4. Run background persist & remote confirmation
     try {
-      const updated = await confirmPhotographer(booking.bookingId, firm.provider_id);
-      setBooking(updated);
-      setFirmToConfirm(null);
-      Alert.alert("Photography Partner Confirmed!", `${firm.name} is now locked as your official photography partner.`);
+      const targetId = currentBooking?.bookingId || bookingId;
+      const updated = await confirmPhotographer(targetId, providerId);
+      if (updated) {
+        setBooking(updated);
+      }
     } catch (err: any) {
-      const msg = err.message || "Failed to confirm photography partner.";
+      console.warn("Background confirmation warning:", err);
+      const msg = err?.message || "Failed to confirm photography partner.";
       setError(msg);
-      Alert.alert("Confirmation Failed", msg);
-    } finally {
-      setBusy(false);
-      setConfirmingFirmId(null);
+      Alert.alert("Confirmation Issue", msg);
     }
   };
 

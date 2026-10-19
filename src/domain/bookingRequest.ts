@@ -582,10 +582,27 @@ export function selectActiveWizardDraft<T extends Pick<Booking, "status" | "remo
 
 export function applyRemoteSnapshot(local: Booking, remote: RemoteBookingSnapshot): Booking {
   const mapped = mapCamartesBookingStatus(remote.status);
-  const nextStatus = mapped ?? local.status;
+  let nextStatus = mapped ?? local.status;
+  const isLocallyConfirmed = local.status === "CONFIRMED" || Boolean(local.confirmed_provider_id);
+  if (isLocallyConfirmed && nextStatus !== "COMPLETED" && nextStatus !== "CUSTOMER_CANCELLED" && nextStatus !== "VENDOR_CANCELLED") {
+    nextStatus = "CONFIRMED";
+  }
   const isAccepted = nextStatus === "VENDOR_ACCEPTED" || nextStatus === "CONFIRMED" || nextStatus === "CUSTOMER_CONFIRMED";
   const confirmedProviderId = remote.confirmedProviderId || local.confirmed_provider_id;
-  const assignedPhotographers = remote.assignedPhotographers ?? local.assigned_photographers;
+  let assignedPhotographers = remote.assignedPhotographers ?? local.assigned_photographers;
+
+  if (confirmedProviderId && assignedPhotographers && assignedPhotographers.length > 0) {
+    assignedPhotographers = assignedPhotographers.map((f) => {
+      const isThisConfirmed = f.provider_id === confirmedProviderId || f.id === confirmedProviderId;
+      return {
+        ...f,
+        is_confirmed: isThisConfirmed || Boolean(f.is_confirmed),
+        can_confirm: false,
+        has_accepted: isThisConfirmed ? true : f.has_accepted,
+        contact_unlocked: isThisConfirmed ? true : f.contact_unlocked,
+      };
+    });
+  }
 
   const localDays = [...(local.days || [])];
   if (remote.eventType && localDays[0] && (!localDays[0].eventTypeIds || localDays[0].eventTypeIds.length === 0)) {
@@ -621,7 +638,9 @@ export function applyRemoteSnapshot(local: Booking, remote: RemoteBookingSnapsho
     eventName: remote.eventType || local.eventName,
     selectedVendorId: remote.providerId || local.selectedVendorId,
     contactMasked: !isAccepted,
-    firms_status_message: remote.firmsStatusMessage ?? local.firms_status_message,
+    firms_status_message: (nextStatus === "CONFIRMED" && (!remote.firmsStatusMessage || remote.firmsStatusMessage.toLowerCase().includes("matching") || remote.firmsStatusMessage.toLowerCase().includes("suitable")))
+      ? "Photography partner confirmed"
+      : (remote.firmsStatusMessage ?? local.firms_status_message),
     assigned_count: remote.assignedCount ?? local.assigned_count,
     confirmed_provider_id: confirmedProviderId,
     assigned_photographers: assignedPhotographers,
