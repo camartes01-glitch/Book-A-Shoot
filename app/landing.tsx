@@ -603,13 +603,13 @@ export default function LandingPage() {
             return (
               <View
                 key={s.value}
-                style={[styles.statItem, i < STATS.length - 1 && styles.statDivider]}
+                style={[styles.statItem, !isWide && styles.statItemPhone, i < STATS.length - 1 && styles.statDivider]}
               >
                 <View style={[styles.statIconWrap, !isWide && styles.statIconWrapPhone]}>
                   <Icon size={isWide ? 18 : 15} color={colors.primary} />
                 </View>
                 <Text style={[styles.statValue, !isWide && styles.statValuePhone]}>{s.value}</Text>
-                <Text style={[styles.statLabel, !isWide && styles.statLabelPhone]}>{s.label}</Text>
+                {isWide ? <Text style={styles.statLabel}>{s.label}</Text> : null}
               </View>
             );
           })}
@@ -1421,6 +1421,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     gap: 2,
   },
+  statItemPhone: {
+    justifyContent: "center",
+  },
   statDivider: {
     borderRightWidth: 1,
     borderRightColor: colors.border,
@@ -1451,7 +1454,7 @@ const styles = StyleSheet.create({
   statValuePhone: {
     fontSize: 12,
     lineHeight: 16,
-    marginBottom: 1,
+    marginBottom: 0,
   },
   statLabel: {
     fontSize: 12,
