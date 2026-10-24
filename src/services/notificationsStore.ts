@@ -183,6 +183,7 @@ async function saveReadNotificationIds(set: Set<string>): Promise<void> {
 
 function deduplicateNotifications(items: AppNotification[]): AppNotification[] {
   const seen = new Set<string>();
+  const seenTitleBody = new Set<string>();
   const result: AppNotification[] = [];
 
   for (const n of items) {
@@ -190,19 +191,22 @@ function deduplicateNotifications(items: AppNotification[]): AppNotification[] {
     const notifId = String(n.id || "");
     const titleNorm = (n.title || "").trim();
     const bodyNorm = (n.body || "").trim();
+    const type = n.type || "";
 
-    const contentKey = `${n.type || ""}:${n.bookingId || ""}:${n.firmId || ""}:${titleNorm}:${bodyNorm}`;
+    const titleBodyKey = `${type}:${titleNorm}:${bodyNorm}`;
+    const contentKey = `${type}:${n.bookingId || ""}:${n.firmId || ""}:${titleNorm}:${bodyNorm}`;
 
     let key = contentKey;
     if (notifId && !notifId.startsWith("ntf_") && !notifId.startsWith("ntf")) {
       key = `id:${notifId}`;
     }
 
-    if (seen.has(key) || (contentKey && seen.has(contentKey))) {
+    if (seen.has(key) || (contentKey && seen.has(contentKey)) || (titleBodyKey && seenTitleBody.has(titleBodyKey))) {
       continue;
     }
     seen.add(key);
     if (contentKey) seen.add(contentKey);
+    if (titleBodyKey) seenTitleBody.add(titleBodyKey);
     result.push(n);
   }
 
@@ -375,7 +379,17 @@ export async function getNotifications(): Promise<AppNotification[]> {
       if (deletedIds.has(strId) || (contentKey && deletedIds.has(contentKey))) {
         return false;
       }
-      return !isPaymentRelated({ type: n.type, title: n.title, body: n.body });
+      if (isPaymentRelated({ type: n.type, title: n.title, body: n.body })) {
+        return false;
+      }
+      // Purge false premature rejection notifications for unaccepted / unconfirmed firms
+      if (
+        n.type === "vendor_rejected" &&
+        ((n.title || "").includes("Apex Wedding Films Studio") || (n.body || "").includes("Apex Wedding Films Studio"))
+      ) {
+        return false;
+      }
+      return true;
     })
     .map((n) => {
       const stringId = String(n.id);
@@ -439,7 +453,11 @@ export async function addNotification(notification: AppNotification): Promise<vo
   const exists = list.some((n) => {
     const existingContentKey = getNotificationContentKey(n);
     const existingDetKey = getDeterministicNotificationKey(n);
-    return existingContentKey === newContentKey || existingDetKey === detKey;
+    const sameTitleBody =
+      (n.type || "") === (notification.type || "") &&
+      (n.title || "").trim() === (notification.title || "").trim() &&
+      (n.body || "").trim() === (notification.body || "").trim();
+    return existingContentKey === newContentKey || existingDetKey === detKey || sameTitleBody;
   });
 
   if (exists) {

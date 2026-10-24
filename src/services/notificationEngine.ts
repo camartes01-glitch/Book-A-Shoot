@@ -52,6 +52,7 @@ type BookingEngineState = {
   /** Set once an automatic replacement search comes back empty, so we don't
    * hammer the vendor catalog every tick while the pool is exhausted. */
   replacementExhaustedAt?: string;
+  batchRejectionFired?: boolean;
 };
 
 type EngineState = {
@@ -68,6 +69,7 @@ function emptyBookingState(): BookingEngineState {
     firmFirstSeenAt: {},
     remindedKeys: [],
     scheduledReminderKeys: [],
+    batchRejectionFired: false,
   };
 }
 
@@ -244,6 +246,8 @@ async function processAcceptRejectDiff(booking: Booking, profile: CustomerProfil
     return false;
   }
 
+  const isMultiCandidateDispatch = (booking.assigned_count ?? firms.length) > 1 || firms.length > 1;
+
   for (const f of firms) {
     const id = firmId(f);
     if (!id) continue;
@@ -261,28 +265,55 @@ async function processAcceptRejectDiff(booking: Booking, profile: CustomerProfil
     const explicitlyDead = isFirmRejected(f);
     const assignedTime = f.assigned_at || bstate.firmFirstSeenAt[id] || booking.createdAt;
     const timedOut = !f.has_accepted && hasFirmTimedOut(assignedTime);
-    if ((explicitlyDead || timedOut) && !bstate.rejectedFirmIds.includes(id) && !bstate.acceptedFirmIds.includes(id)) {
-      await fire(
-        "vendor_rejected",
-        { firmName: f.name, eventName, eventDate, eventPlace, reason: explicitlyDead ? "rejected" : "timed_out" },
-        { bookingId: booking.bookingId, firmId: id, firmName: f.name },
-      );
+    if ((explicitlyDead || timedOut) && !bstate.rejectedFirmIds.includes(id)) {
       bstate.rejectedFirmIds.push(id);
       changed = true;
+
+      // In the Rapido multi-dispatch model:
+      // While awaiting responses, candidate firms are anonymous (Verified Studio #1..6).
+      // We ONLY notify the customer of an individual rejection if that specific firm
+      // had ALREADY ACCEPTED earlier (and now cancelled/rejected).
+      // For single-firm direct bookings, notify customer of decline/timeout.
+      const previouslyAccepted = bstate.acceptedFirmIds.includes(id);
+      const shouldNotify = previouslyAccepted || !isMultiCandidateDispatch;
+      if (shouldNotify) {
+        await fire(
+          "vendor_rejected",
+          { firmName: previouslyAccepted || !isMultiCandidateDispatch ? f.name : undefined, eventName, eventDate, eventPlace, reason: explicitlyDead ? "rejected" : "timed_out" },
+          { bookingId: booking.bookingId, firmId: id, firmName: f.name },
+        );
+      }
     }
   }
 
-  // Firms that vanished from the assigned list entirely without an explicit
-  // rejected flag (backend removes them once the lead moves on) still count
-  // as a rejection the customer should hear about.
+  // Firms that vanished from the assigned list entirely (e.g. replaced or rotated out)
   for (const id of bstate.knownFirmIds) {
-    if (!id || currentIds.has(id) || bstate.acceptedFirmIds.includes(id) || bstate.rejectedFirmIds.includes(id)) continue;
+    if (!id || currentIds.has(id) || bstate.rejectedFirmIds.includes(id)) continue;
+    bstate.rejectedFirmIds.push(id);
+    changed = true;
+
+    // Only notify if this vanished firm was one the customer had already seen accept,
+    // or if the single assigned firm vanished leaving 0 firms.
+    const previouslyAccepted = bstate.acceptedFirmIds.includes(id);
+    const shouldNotify = previouslyAccepted || (bstate.knownFirmIds.length === 1 && currentIds.size === 0);
+    if (shouldNotify) {
+      await fire(
+        "vendor_rejected",
+        { firmName: bstate.firmNames[id], eventName, eventDate, eventPlace },
+        { bookingId: booking.bookingId, firmId: id, firmName: bstate.firmNames[id] },
+      );
+    }
+  }
+
+  // If ALL candidate firms have been exhausted (0 active firms remain and no one accepted):
+  const hasAnyActiveOrAccepted = firms.some((f) => !isFirmRejected(f) || f.has_accepted);
+  if (!hasAnyActiveOrAccepted && firms.length > 0 && bstate.acceptedFirmIds.length === 0 && !bstate.batchRejectionFired) {
     await fire(
       "vendor_rejected",
-      { firmName: bstate.firmNames[id], eventName, eventDate, eventPlace },
-      { bookingId: booking.bookingId, firmId: id, firmName: bstate.firmNames[id] },
+      { eventName, eventDate, eventPlace },
+      { bookingId: booking.bookingId },
     );
-    bstate.rejectedFirmIds.push(id);
+    bstate.batchRejectionFired = true;
     changed = true;
   }
 
