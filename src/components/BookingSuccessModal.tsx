@@ -8,18 +8,20 @@ import {
   Text,
   View,
 } from "react-native";
-import { ArrowRight, Calendar, Camera, Check, Clock, MapPin, ShieldCheck } from "lucide-react-native";
-import { colors, radiusSm, spacing } from "@/src/constants/theme";
+import { AlertCircle, ArrowRight, Calendar, Camera, Check, MapPin, ShieldCheck } from "lucide-react-native";
+import { colors, spacing } from "@/src/constants/theme";
 import { successFeedback } from "@/src/utils/haptics";
 
 export interface BookingSuccessModalProps {
   visible: boolean;
-  bookingId: string;
+  bookingId?: string | null;
+  submissionError?: string | null;
   city?: string;
   statusMessage?: string | null;
   eventName?: string;
   dateLabel?: string;
-  onComplete: () => void;
+  onComplete: (bookingId: string) => void;
+  onDismissError?: () => void;
 }
 
 const SEARCH_SENTENCES = [
@@ -28,16 +30,19 @@ const SEARCH_SENTENCES = [
   "Matching top cinematographers and candid masters in your city...",
   "Checking studio availability and calendar slots in real-time...",
   "Dispatching your shoot requirements to the top 6 studios in the city...",
+  "Securing priority SLA response window with verified partners...",
 ];
 
 export function BookingSuccessModal({
   visible,
   bookingId,
+  submissionError,
   city,
   statusMessage,
   eventName,
   dateLabel,
   onComplete,
+  onDismissError,
 }: BookingSuccessModalProps) {
   const [phase, setPhase] = useState<"searching" | "dispatched">("searching");
   const [sentenceIndex, setSentenceIndex] = useState(0);
@@ -45,9 +50,9 @@ export function BookingSuccessModal({
   // Animation values
   const bgOpacity = useRef(new Animated.Value(0)).current;
   const radarScale1 = useRef(new Animated.Value(0.6)).current;
-  const radarOpacity1 = useRef(new Animated.Value(0.8)).current;
+  const radarOpacity1 = useRef(new Animated.Value(0.85)).current;
   const radarScale2 = useRef(new Animated.Value(0.6)).current;
-  const radarOpacity2 = useRef(new Animated.Value(0.8)).current;
+  const radarOpacity2 = useRef(new Animated.Value(0.85)).current;
 
   const progressAnim = useRef(new Animated.Value(0)).current;
   const sentenceOpacity = useRef(new Animated.Value(1)).current;
@@ -62,17 +67,74 @@ export function BookingSuccessModal({
   const autoFinishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completedRef = useRef(false);
 
+  const minTimeElapsedRef = useRef(false);
+  const latestBookingIdRef = useRef<string | null>(bookingId || null);
+
   const handleFinish = () => {
     if (completedRef.current) return;
     completedRef.current = true;
     if (sentenceIntervalRef.current) clearInterval(sentenceIntervalRef.current);
     if (autoFinishTimerRef.current) clearTimeout(autoFinishTimerRef.current);
-    onComplete();
+    const targetId = latestBookingIdRef.current || bookingId || "";
+    onComplete(targetId);
   };
+
+  const transitionToDispatched = () => {
+    if (completedRef.current) return;
+    setPhase("dispatched");
+    if (sentenceIntervalRef.current) clearInterval(sentenceIntervalRef.current);
+    if (radarLoopRef.current) radarLoopRef.current.stop();
+    void successFeedback();
+
+    // Spring pop checkmark
+    Animated.sequence([
+      Animated.spring(checkCircleScale, {
+        toValue: 1,
+        friction: 4.5,
+        tension: 75,
+        useNativeDriver: true,
+      }),
+      Animated.spring(checkMarkScale, {
+        toValue: 1,
+        friction: 4,
+        tension: 85,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    Animated.timing(fulfilledContentOpacity, {
+      toValue: 1,
+      duration: 280,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+
+    // Auto-redirect to live booking status after viewing fulfilled state
+    autoFinishTimerRef.current = setTimeout(() => {
+      handleFinish();
+    }, 3400);
+  };
+
+  // Keep track of latest booking ID from background submit
+  useEffect(() => {
+    latestBookingIdRef.current = bookingId || null;
+    if (bookingId && minTimeElapsedRef.current && phase === "searching" && !submissionError) {
+      // Background finished and min display time elapsed: smoothly complete to 100%
+      Animated.timing(progressAnim, {
+        toValue: 1,
+        duration: 350,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start(() => {
+        transitionToDispatched();
+      });
+    }
+  }, [bookingId, submissionError, phase]);
 
   useEffect(() => {
     if (!visible) {
       completedRef.current = false;
+      minTimeElapsedRef.current = false;
       setPhase("searching");
       setSentenceIndex(0);
       bgOpacity.setValue(0);
@@ -88,14 +150,20 @@ export function BookingSuccessModal({
       return;
     }
 
+    if (submissionError) {
+      if (sentenceIntervalRef.current) clearInterval(sentenceIntervalRef.current);
+      if (radarLoopRef.current) radarLoopRef.current.stop();
+      return;
+    }
+
     // 1. Entrance backdrop
     Animated.timing(bgOpacity, {
       toValue: 1,
-      duration: 220,
+      duration: 200,
       useNativeDriver: true,
     }).start();
 
-    // 2. Start concentric radar pulse animation loop
+    // 2. Start concentric radar pulse animation loop immediately (0ms)
     const createRadarLoop = () => {
       radarScale1.setValue(0.6);
       radarOpacity1.setValue(0.85);
@@ -140,51 +208,28 @@ export function BookingSuccessModal({
     };
     createRadarLoop();
 
-    // 3. Smooth progress bar 0% -> 100% (3600ms)
+    // 3. Smooth progress bar: 0% -> 90% over 2800ms
     Animated.timing(progressAnim, {
-      toValue: 1,
-      duration: 3600,
+      toValue: 0.9,
+      duration: 2800,
       easing: Easing.bezier(0.25, 0.1, 0.25, 1),
       useNativeDriver: false,
-    }).start(({ finished }) => {
-      if (finished) {
-        // Transition to fulfilled "dispatched" phase
-        setPhase("dispatched");
-        if (sentenceIntervalRef.current) clearInterval(sentenceIntervalRef.current);
-        if (radarLoopRef.current) radarLoopRef.current.stop();
-        void successFeedback();
-
-        // Spring pop checkmark
-        Animated.sequence([
-          Animated.spring(checkCircleScale, {
-            toValue: 1,
-            friction: 4.5,
-            tension: 75,
-            useNativeDriver: true,
-          }),
-          Animated.spring(checkMarkScale, {
-            toValue: 1,
-            friction: 4,
-            tension: 85,
-            useNativeDriver: true,
-          }),
-        ]).start();
-
-        Animated.timing(fulfilledContentOpacity, {
+    }).start(() => {
+      minTimeElapsedRef.current = true;
+      if (latestBookingIdRef.current) {
+        // Request finished before or right at 2.8s: smoothly finish to 100%
+        Animated.timing(progressAnim, {
           toValue: 1,
-          duration: 280,
+          duration: 350,
           easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }).start();
-
-        // Auto-redirect to live booking status after viewing fulfilled state
-        autoFinishTimerRef.current = setTimeout(() => {
-          handleFinish();
-        }, 3400);
+          useNativeDriver: false,
+        }).start(() => {
+          transitionToDispatched();
+        });
       }
     });
 
-    // 4. Rotating marketive sentences cycle
+    // 4. Rotating marketive sentences cycle immediately
     let currentIndex = 0;
     sentenceIntervalRef.current = setInterval(() => {
       // Fade out
@@ -224,7 +269,7 @@ export function BookingSuccessModal({
       if (autoFinishTimerRef.current) clearTimeout(autoFinishTimerRef.current);
       if (radarLoopRef.current) radarLoopRef.current.stop();
     };
-  }, [visible]);
+  }, [visible, submissionError]);
 
   if (!visible) return null;
 
@@ -235,8 +280,25 @@ export function BookingSuccessModal({
     <Modal visible={visible} transparent animationType="none" onRequestClose={handleFinish}>
       <Animated.View style={[styles.overlay, { opacity: bgOpacity }]}>
         <View style={styles.card}>
-          {phase === "searching" ? (
-            /* SEARCHING & DISPATCHING PHASE (Rapido-style) */
+          {submissionError ? (
+            /* ERROR STATE */
+            <View style={styles.phaseContainer}>
+              <View style={styles.errorIconCircle}>
+                <AlertCircle size={38} color="#EA580C" strokeWidth={2.5} />
+              </View>
+              <Text style={styles.fulfilledTitle}>Unable to Dispatch Request</Text>
+              <Text style={styles.fulfilledSubtitle}>{submissionError}</Text>
+              <Pressable
+                onPress={onDismissError}
+                style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed, { marginTop: spacing.md }]}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss error and try again"
+              >
+                <Text style={styles.actionButtonText}>Try Again</Text>
+              </Pressable>
+            </View>
+          ) : phase === "searching" ? (
+            /* SEARCHING & DISPATCHING PHASE (Rapido-style, 0ms instant start) */
             <View style={styles.phaseContainer}>
               {/* Radar Circle Animation */}
               <View style={styles.radarWrapper}>
@@ -403,6 +465,17 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
   },
+  errorIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "#FFF7ED",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 2,
+    borderColor: "#FED7AA",
+    marginBottom: spacing.md,
+  },
   radarWrapper: {
     width: 140,
     height: 140,
@@ -449,48 +522,45 @@ const styles = StyleSheet.create({
   livePulseDot: {
     width: 7,
     height: 7,
-    borderRadius: 4,
+    borderRadius: 3.5,
     backgroundColor: "#EA580C",
   },
   dispatchPillText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#C2410C",
-    letterSpacing: 0.2,
+    color: "#EA580C",
+    letterSpacing: 0.3,
   },
   sentenceWrapper: {
     minHeight: 52,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: spacing.xs,
+    paddingHorizontal: spacing.sm,
     marginBottom: spacing.lg,
   },
   sentenceText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
     color: "#0F172A",
     textAlign: "center",
-    lineHeight: 23,
-    letterSpacing: -0.2,
+    lineHeight: 22,
   },
   progressBarSection: {
     width: "100%",
-    gap: 8,
+    gap: 6,
     marginTop: spacing.xs,
   },
   progressBarTrack: {
     width: "100%",
-    height: 8,
+    height: 6,
     backgroundColor: "#F1F5F9",
-    borderRadius: 6,
+    borderRadius: 99,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
   },
   progressBarFill: {
     height: "100%",
     backgroundColor: "#EA580C",
-    borderRadius: 6,
+    borderRadius: 99,
   },
   progressLabelRow: {
     flexDirection: "row",
@@ -500,61 +570,53 @@ const styles = StyleSheet.create({
   progressLabelLeft: {
     fontSize: 11,
     color: "#64748B",
-    fontWeight: "600",
+    fontWeight: "500",
   },
   progressLabelRight: {
     fontSize: 11,
-    color: "#C2410C",
+    color: "#EA580C",
     fontWeight: "700",
   },
   checkArea: {
-    width: 110,
-    height: 110,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   checkCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#EA580C",
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: "#16A34A",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#EA580C",
+    shadowColor: "#16A34A",
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
     elevation: 8,
-    borderWidth: 2,
-    borderColor: "#C2410C",
   },
   fulfilledTitle: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: "800",
     color: "#0F172A",
     textAlign: "center",
-    marginBottom: spacing.xs,
-    letterSpacing: -0.3,
+    marginBottom: 6,
   },
   fulfilledSubtitle: {
     fontSize: 13.5,
-    fontWeight: "500",
-    color: "#334155",
+    color: "#475569",
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 19,
     paddingHorizontal: spacing.xs,
     marginBottom: spacing.md,
   },
   summaryBox: {
     width: "100%",
     backgroundColor: "#F8FAFC",
-    borderRadius: radiusSm,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
     borderWidth: 1,
     borderColor: "#E2E8F0",
-    gap: 8,
+    borderRadius: 14,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    gap: 6,
   },
   summaryEventName: {
     fontSize: 14,
@@ -564,8 +626,8 @@ const styles = StyleSheet.create({
   summaryMetaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
     flexWrap: "wrap",
+    gap: 12,
   },
   summaryRow: {
     flexDirection: "row",
@@ -574,46 +636,45 @@ const styles = StyleSheet.create({
   },
   summaryMetaText: {
     fontSize: 12,
-    color: "#475569",
+    color: "#64748B",
     fontWeight: "600",
   },
   studioSlotsRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    marginTop: 2,
     paddingTop: 6,
     borderTopWidth: 1,
     borderTopColor: "#E2E8F0",
   },
   studioSlotsText: {
-    fontSize: 12,
-    color: "#C2410C",
+    fontSize: 11.5,
     fontWeight: "700",
+    color: "#EA580C",
   },
   actionButton: {
     width: "100%",
     backgroundColor: "#EA580C",
-    paddingVertical: 14,
-    paddingHorizontal: spacing.lg,
     borderRadius: 14,
+    paddingVertical: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     shadowColor: "#EA580C",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 5,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   actionButtonPressed: {
-    opacity: 0.9,
+    backgroundColor: "#C2410C",
     transform: [{ scale: 0.99 }],
   },
   actionButtonText: {
-    color: colors.white,
     fontSize: 15,
     fontWeight: "700",
-    letterSpacing: 0.2,
+    color: colors.white,
   },
 });

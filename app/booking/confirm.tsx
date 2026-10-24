@@ -67,7 +67,8 @@ export default function ConfirmBookingScreen() {
   const isDesktop = width >= 640;
 
   const { activeDraft, loadVendorMatches, submitVendorRequest, clearActiveDraft, profile } = useAppStore();
-  const [loading, setLoading] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [fetchingMatches, setFetchingMatches] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successData, setSuccessData] = useState<{
@@ -107,43 +108,53 @@ export default function ConfirmBookingScreen() {
   const teaserEnabled = activeDraft.deliverables.video?.teaserCinematicEnabled;
   const teaserMins = activeDraft.deliverables.video?.teaserDurationMinutes ?? 1;
 
-  const onSubmit = async () => {
+  const onSubmit = () => {
     if (!profile) {
       router.push({ pathname: "/(auth)/login", params: { returnTo: "/booking/confirm" } });
       return;
     }
-    setLoading(true);
+    // 1. Immediately launch rotating sentences modal with 0ms delay — no button spinner!
+    setIsSearching(true);
+    setSubmissionError(null);
     setError(null);
-    try {
-      const submitted = await submitVendorRequest();
-      const queryCity = activeDraft.providerLocationPreference?.city || firstDay?.location?.city || "Hyderabad";
-      setSuccessData({
-        bookingId: submitted.bookingId,
-        city: queryCity,
-        statusMessage:
-          submitted.firms_status_message ||
-          "Dispatched to verified photography partners. You will be notified as partners accept.",
-        eventName: overallEventLabel || "Photography Booking",
-        dateLabel: firstDay?.eventDate ? formatDateLong(firstDay.eventDate) : undefined,
-      });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Could not send the booking request.";
-      setError(message);
-      if (e instanceof CamartesApiError && e.status === 401 && !profile) {
-        Alert.alert("Sign in required", message, [{ text: "Sign in", onPress: () => router.push({ pathname: "/(auth)/login", params: { returnTo: "/booking/confirm", reauth: "1" } }) }]);
-      } else if (
-        message.toLowerCase().includes("no photography firms with active balance") ||
-        message.toLowerCase().includes("no suitable firms with active balance")
-      ) {
-        const cleanMsg = "No photography firms with active balance and availability found in your area right now. Please check back shortly.";
-        setError(cleanMsg);
-        Alert.alert("No Available Firms", cleanMsg);
-      } else {
-        Alert.alert("Request not sent", message);
+
+    const queryCity = activeDraft.providerLocationPreference?.city || firstDay?.location?.city || "Hyderabad";
+
+    // 2. Run background search & dispatch concurrently
+    (async () => {
+      try {
+        const submitted = await submitVendorRequest();
+        setSuccessData({
+          bookingId: submitted.bookingId,
+          city: queryCity,
+          statusMessage:
+            submitted.firms_status_message ||
+            "Dispatched to verified photography partners. You will be notified as partners accept.",
+          eventName: overallEventLabel || "Photography Booking",
+          dateLabel: firstDay?.eventDate ? formatDateLong(firstDay.eventDate) : undefined,
+        });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Could not send the booking request.";
+        setError(message);
+        if (e instanceof CamartesApiError && e.status === 401 && !profile) {
+          setIsSearching(false);
+          Alert.alert("Sign in required", message, [
+            {
+              text: "Sign in",
+              onPress: () => router.push({ pathname: "/(auth)/login", params: { returnTo: "/booking/confirm", reauth: "1" } }),
+            },
+          ]);
+        } else if (
+          message.toLowerCase().includes("no photography firms with active balance") ||
+          message.toLowerCase().includes("no suitable firms with active balance")
+        ) {
+          const cleanMsg = "No photography firms with active balance and availability found in your area right now. Please check back shortly.";
+          setSubmissionError(cleanMsg);
+        } else {
+          setSubmissionError(message);
+        }
       }
-    } finally {
-      setLoading(false);
-    }
+    })();
   };
 
   return (
@@ -151,7 +162,7 @@ export default function ConfirmBookingScreen() {
       title="Review your booking"
       step="review"
       onBack={() => router.push("/booking/location-preference")}
-      footer={<Button label="Send booking request" onPress={onSubmit} loading={loading} flex={1} />}
+      footer={<Button label="Send booking request" onPress={onSubmit} flex={1} />}
     >
       <SectionTitle>You're almost booked</SectionTitle>
       {profile ? (
@@ -427,22 +438,30 @@ export default function ConfirmBookingScreen() {
         </View>
       </Card>
 
-      {successData ? (
-        <BookingSuccessModal
-          visible={!!successData}
-          bookingId={successData.bookingId}
-          city={successData.city}
-          statusMessage={successData.statusMessage}
-          eventName={successData.eventName}
-          dateLabel={successData.dateLabel}
-          onComplete={() => {
-            const targetId = successData.bookingId;
-            clearActiveDraft();
-            setSuccessData(null);
-            router.replace(`/bookings/${targetId}`);
-          }}
-        />
-      ) : null}
+      <BookingSuccessModal
+        visible={isSearching || !!successData}
+        bookingId={successData?.bookingId}
+        submissionError={submissionError}
+        city={successData?.city || activeDraft.providerLocationPreference?.city || firstDay?.location?.city || "Hyderabad"}
+        statusMessage={successData?.statusMessage}
+        eventName={overallEventLabel || "Photography Booking"}
+        dateLabel={firstDay?.eventDate ? formatDateLong(firstDay.eventDate) : undefined}
+        onDismissError={() => {
+          setIsSearching(false);
+          setSubmissionError(null);
+        }}
+        onComplete={(targetId) => {
+          const finalId = targetId || successData?.bookingId;
+          clearActiveDraft();
+          setIsSearching(false);
+          setSuccessData(null);
+          if (finalId) {
+            router.replace(`/bookings/${finalId}`);
+          } else {
+            router.replace("/(tabs)/bookings");
+          }
+        }}
+      />
     </WizardScreen>
   );
 }
