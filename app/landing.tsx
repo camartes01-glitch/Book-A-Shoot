@@ -287,7 +287,12 @@ function RiverFlowLines() {
 let hasShownSplash = false;
 
 export default function LandingPage() {
-  const { width: W } = useWindowDimensions();
+  const windowDimensions = useWindowDimensions();
+  const W = Math.max(
+    windowDimensions.width || 0,
+    Platform.OS === "web" && typeof window !== "undefined" && window.innerWidth ? window.innerWidth : 0,
+    Platform.OS === "web" ? 390 : 360
+  );
   const insets = useSafeAreaInsets();
 
   // Scroll-driven navbar
@@ -381,7 +386,7 @@ export default function LandingPage() {
   const autoPlayRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const isWide = W >= 720;
   const heroSlides = isWide ? DESKTOP_HERO_SLIDES : PHONE_HERO_SLIDES;
-  const heroH = isWide ? Math.min(660, Math.round(W * 1.12)) : Math.min(Math.round(W * 1.40), 580);
+  const heroH = isWide ? Math.min(660, Math.round(W * 1.12)) : Math.min(Math.max(Math.round(W * 1.40), 520), 600);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const advanceSlide = useCallback(() => {
@@ -450,7 +455,7 @@ export default function LandingPage() {
   };
 
   const renderHeroSlide = (slide: (typeof heroSlides)[number], idx: number) => (
-    <View key={slide.id} style={[styles.heroSlide, { width: W, height: heroH }]}>
+    <View key={slide.id} style={[styles.heroSlide, { width: W, height: heroH, minHeight: isWide ? 600 : 520, flexShrink: 0 }]}>
       <SEOImage
         src={slide.image}
         alt={(slide as any).alt || "Book A Shoot verified event photography"}
@@ -565,7 +570,7 @@ export default function LandingPage() {
         )}
       >
         {/* ── HERO CAROUSEL ─────────────────────────────────────────── */}
-        <View style={{ height: heroH }}>
+        <View style={{ width: "100%", height: heroH, minHeight: isWide ? 600 : 520 }}>
           <ScrollView
             ref={carouselRef}
             horizontal
@@ -573,8 +578,8 @@ export default function LandingPage() {
             showsHorizontalScrollIndicator={false}
             scrollEventThrottle={16}
             onMomentumScrollEnd={onCarouselScrollEnd}
-            style={{ width: W, height: heroH }}
-            contentContainerStyle={{ width: W * heroSlides.length }}
+            style={{ width: "100%", height: heroH, minHeight: isWide ? 600 : 520 }}
+            contentContainerStyle={{ width: W * heroSlides.length, minHeight: isWide ? 600 : 520 }}
           >
             {heroSlides.map((slide, idx) => renderHeroSlide(slide, idx))}
           </ScrollView>
@@ -827,14 +832,19 @@ export default function LandingPage() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.whyScrollPhone}
                 decelerationRate="fast"
-                snapToInterval={Math.min(W * 0.82, 300) + 14}
+                snapToInterval={Math.max(Math.min(W * 0.82, 300), 260) + 14}
               >
                 {WHY_US.map((w) => {
                   const IconComp = w.icon;
+                  const cardW = Math.max(Math.min(W * 0.82, 300), 260);
                   return (
                     <View
                       key={w.title}
-                      style={[styles.whyCard, styles.whyCardPhone, { width: Math.min(W * 0.82, 300) }]}
+                      style={[
+                        styles.whyCard,
+                        styles.whyCardPhone,
+                        { width: cardW, minWidth: cardW, flexShrink: 0 },
+                      ]}
                     >
                       <RiverFlowLines />
                       <View style={styles.whyIconWrap}>
@@ -867,20 +877,39 @@ export default function LandingPage() {
               </Text>
             </View>
 
-            <View style={styles.citiesGrid}>
-              {CITIES.map((city) => (
-                <Pressable
-                  key={city}
-                  id={`city-chip-${city.toLowerCase().replace(/ /g, "-")}`}
-                  onPress={goToBooking}
-                  style={({ pressed }) => [styles.cityChipOnOrange, pressed && styles.pressed]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Book photographers in ${city}`}
-                >
-                  <MapPin size={18} color={colors.primaryDark} />
-                  <Text style={styles.cityNameOnOrange}>{city}</Text>
-                </Pressable>
-              ))}
+            <View style={styles.citiesTriangleLayout}>
+              {/* Row 1: 2 pills side by side */}
+              <View style={styles.citiesTopRow}>
+                {CITIES.slice(0, 2).map((city) => (
+                  <Pressable
+                    key={city}
+                    id={`city-chip-${city.toLowerCase().replace(/ /g, "-")}`}
+                    onPress={goToBooking}
+                    style={({ pressed }) => [styles.cityChipOnOrange, styles.cityChipRow, pressed && styles.pressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Book photographers in ${city}`}
+                  >
+                    <MapPin size={18} color={colors.primaryDark} />
+                    <Text style={styles.cityNameOnOrange}>{city}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {/* Row 2: 3rd pill in the center like a triangle */}
+              {CITIES.length > 2 && (
+                <View style={styles.citiesBottomRow}>
+                  <Pressable
+                    id={`city-chip-${CITIES[2].toLowerCase().replace(/ /g, "-")}`}
+                    onPress={goToBooking}
+                    style={({ pressed }) => [styles.cityChipOnOrange, styles.cityChipCenter, pressed && styles.pressed]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Book photographers in ${CITIES[2]}`}
+                  >
+                    <MapPin size={18} color={colors.primaryDark} />
+                    <Text style={styles.cityNameOnOrange}>{CITIES[2]}</Text>
+                  </Pressable>
+                </View>
+              )}
             </View>
           </View>
         </View>
@@ -964,6 +993,59 @@ export default function LandingPage() {
             </Pressable>
           </View>
         </View>
+
+        {/* ── GET THE APP SECTION (Website Only) ───────────────────────── */}
+        {Platform.OS === "web" && (
+          <View style={[styles.downloadAppSection, isWide ? styles.downloadAppSectionWide : styles.downloadAppSectionPhone]}>
+            <View style={[styles.downloadAppCard, isWide ? styles.downloadAppCardWide : styles.downloadAppCardPhone]}>
+              {/* download.png placed as is in the background without any color scrim */}
+              <Image
+                source={
+                  Platform.OS === "web"
+                    ? { uri: "/download.png" }
+                    : require("@/assets/images/download.png")
+                }
+                style={styles.downloadBgImage}
+                resizeMode="cover"
+              />
+
+              {/* Left Column: Heading, Description & Google Play CTA */}
+              <View style={[styles.downloadContentLeft, isWide ? styles.downloadContentLeftWide : styles.downloadContentLeftPhone]}>
+                <Text style={[styles.downloadTitle, isWide ? styles.downloadTitleWide : styles.downloadTitlePhone]}>
+                  Get the Book A Shoot App now!
+                </Text>
+                <Text style={[styles.downloadSub, isWide ? styles.downloadSubWide : styles.downloadSubPhone]}>
+                  For seamless booking, real-time photographer tracking, instant milestone chat, and live shoot updates right at your fingertips.
+                </Text>
+                <Pressable
+                  onPress={() => Linking.openURL("https://play.google.com/store/apps/details?id=online.bookashoot.customer")}
+                  style={({ pressed }) => [styles.googlePlayBtn, pressed && styles.pressed]}
+                  accessibilityRole="link"
+                  accessibilityLabel="Get it on Google Play"
+                >
+                  <Text style={styles.googlePlayBtnText}>Get it on Google Play</Text>
+                  <ArrowRight size={16} color="#FFFFFF" />
+                </Pressable>
+              </View>
+
+              {/* Right Column: QR Code overlay positioned over the phone frame in download.png */}
+              <View style={[styles.downloadQrWrapper, isWide ? styles.downloadQrWrapperWide : styles.downloadQrWrapperPhone]}>
+                <View style={styles.qrCodeFrame}>
+                  <Image
+                    source={
+                      Platform.OS === "web"
+                        ? { uri: "/qrcode.png" }
+                        : require("@/assets/images/qrcode.png")
+                    }
+                    style={styles.qrCodeImage}
+                    resizeMode="contain"
+                  />
+                  <Text style={styles.qrCodeLabel}>Scan to Download</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* ── LAST SECTION: CTA BANNER (cta.png as Whole Background Image, NO COLOR COVER LAYER, Left-Aligned) ── */}
         <View style={[styles.ctaBannerWrapper, !isWide && styles.ctaBannerWrapperPhone]}>
@@ -1267,6 +1349,8 @@ const styles = StyleSheet.create({
 
   heroSlide: {
     overflow: "hidden",
+    flexShrink: 0,
+    minHeight: 520,
   },
   heroImg: {
     position: "absolute",
@@ -1822,6 +1906,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   whyScrollPhone: {
+    flexDirection: "row",
+    flexWrap: "nowrap",
     paddingHorizontal: spacing.md,
     gap: spacing.md,
     alignItems: "stretch",
@@ -1829,6 +1915,7 @@ const styles = StyleSheet.create({
   whyCardPhone: {
     minHeight: 220,
     justifyContent: "flex-start",
+    flexShrink: 0,
   },
   carouselDotsRow: {
     flexDirection: "row",
@@ -1903,12 +1990,22 @@ const styles = StyleSheet.create({
     maxWidth: 640,
     alignSelf: "center",
   },
-  citiesGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.md,
-    justifyContent: "center",
+  citiesTriangleLayout: {
+    alignItems: "center",
     marginTop: 32,
+    gap: 12,
+  },
+  citiesTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+  citiesBottomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
   cityChipOnOrange: {
     flexDirection: "row",
@@ -1923,6 +2020,14 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
+  },
+  cityChipRow: {
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+  },
+  cityChipCenter: {
+    paddingHorizontal: 26,
+    paddingVertical: 14,
   },
   cityNameOnOrange: {
     fontSize: 16,
@@ -2184,6 +2289,162 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     maxWidth: 320,
+  },
+
+  // ── Download App Section (Website Only) ──────────────────────────────
+  downloadAppSection: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: 72,
+    backgroundColor: colors.bg,
+  },
+  downloadAppSectionWide: {
+    paddingHorizontal: 56,
+  },
+  downloadAppSectionPhone: {
+    paddingHorizontal: spacing.md,
+  },
+  downloadAppCard: {
+    position: "relative",
+    width: "100%",
+    maxWidth: 1120,
+    alignSelf: "center",
+    borderRadius: 24,
+    overflow: "hidden",
+    backgroundColor: "#FDF8F0",
+    borderWidth: 1,
+    borderColor: "#F0E4D4",
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+    minHeight: 380,
+  },
+  downloadAppCardWide: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    minHeight: 400,
+  },
+  downloadAppCardPhone: {
+    flexDirection: "column",
+    paddingBottom: 28,
+  },
+  downloadBgImage: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    height: "100%",
+  },
+  downloadContentLeft: {
+    zIndex: 2,
+  },
+  downloadContentLeftWide: {
+    width: "52%",
+    paddingLeft: 48,
+    paddingRight: 24,
+    paddingVertical: 40,
+    justifyContent: "center",
+  },
+  downloadContentLeftPhone: {
+    width: "100%",
+    padding: 24,
+    paddingTop: 32,
+    alignItems: "flex-start",
+  },
+  downloadTitle: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#0F172A",
+    lineHeight: 36,
+    letterSpacing: -0.5,
+  },
+  downloadTitleWide: {
+    fontSize: 36,
+    lineHeight: 44,
+  },
+  downloadTitlePhone: {
+    fontSize: 24,
+    lineHeight: 32,
+  },
+  downloadSub: {
+    fontSize: 15,
+    color: "#334155",
+    lineHeight: 24,
+    marginTop: 12,
+    marginBottom: 24,
+    maxWidth: 440,
+  },
+  downloadSubWide: {
+    fontSize: 16,
+    lineHeight: 25,
+  },
+  downloadSubPhone: {
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  googlePlayBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#0F172A",
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+    alignSelf: "flex-start",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  googlePlayBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  downloadQrWrapper: {
+    zIndex: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  downloadQrWrapperWide: {
+    width: "36%",
+    paddingRight: 48,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  downloadQrWrapperPhone: {
+    width: "100%",
+    alignItems: "center",
+    marginTop: 12,
+  },
+  qrCodeFrame: {
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    padding: 16,
+    borderRadius: 20,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.8)",
+  },
+  qrCodeImage: {
+    width: 140,
+    height: 140,
+  },
+  qrCodeLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0F172A",
+    marginTop: 8,
+    letterSpacing: 0.2,
   },
 
   // ── Footer ────────────────────────────────────────────────────────────

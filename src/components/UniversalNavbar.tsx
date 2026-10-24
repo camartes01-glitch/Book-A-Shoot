@@ -445,21 +445,25 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
       {/* ── Mobile Accordion Drawer ────────────────────────────────────────── */}
       {!isWide && isMobileMenuOpen && (
         <View style={styles.mobileDrawer}>
-          <Link href="/services" asChild>
-            <Pressable
-              onPress={goToServices}
-              style={[styles.mobileMenuItem, activeRoute === "services" && styles.mobileMenuItemActive]}
+          <Pressable
+            onPress={goToServices}
+            style={({ pressed }) => [
+              styles.mobileMenuItem,
+              activeRoute === "services" && styles.mobileMenuItemActive,
+              pressed && styles.pressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Services"
+          >
+            <Text
+              style={[
+                styles.mobileMenuText,
+                activeRoute === "services" && styles.mobileMenuTextActive,
+              ]}
             >
-              <Text
-                style={[
-                  styles.mobileMenuText,
-                  activeRoute === "services" && styles.mobileMenuTextActive,
-                ]}
-              >
-                Services
-              </Text>
-            </Pressable>
-          </Link>
+              Services
+            </Text>
+          </Pressable>
 
           {/* Company Group Header */}
           <View style={styles.mobileCompanyGroup}>
@@ -467,81 +471,93 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
               <Text style={styles.mobileCompanyTitle}>COMPANY</Text>
             </View>
 
-            <Link href="/about" asChild>
-              <Pressable
-                onPress={goToAbout}
-                style={[
-                  styles.mobileSubMenuItem,
-                  activeRoute === "about" && styles.mobileMenuItemActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.mobileSubMenuText,
-                    activeRoute === "about" && styles.mobileMenuTextActive,
-                  ]}
-                >
-                  About Us
-                </Text>
-              </Pressable>
-            </Link>
-
-            <Link href="/careers" asChild>
-              <Pressable
-                onPress={goToCareers}
-                style={[
-                  styles.mobileSubMenuItem,
-                  activeRoute === "careers" && styles.mobileMenuItemActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.mobileSubMenuText,
-                    activeRoute === "careers" && styles.mobileMenuTextActive,
-                  ]}
-                >
-                  Careers
-                </Text>
-              </Pressable>
-            </Link>
-
-            <Link href="/blogs" asChild>
-              <Pressable
-                onPress={goToBlogs}
-                style={[
-                  styles.mobileSubMenuItem,
-                  activeRoute === "blogs" && styles.mobileMenuItemActive,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.mobileSubMenuText,
-                    activeRoute === "blogs" && styles.mobileMenuTextActive,
-                  ]}
-                >
-                  Blogs & Stories
-                </Text>
-              </Pressable>
-            </Link>
-          </View>
-
-          <Link href="/contact" asChild>
             <Pressable
-              onPress={goToContact}
-              style={[styles.mobileMenuItem, activeRoute === "contact" && styles.mobileMenuItemActive]}
+              onPress={goToAbout}
+              style={({ pressed }) => [
+                styles.mobileSubMenuItem,
+                activeRoute === "about" && styles.mobileMenuItemActive,
+                pressed && styles.pressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="About Us"
             >
               <Text
                 style={[
-                  styles.mobileMenuText,
-                  activeRoute === "contact" && styles.mobileMenuTextActive,
+                  styles.mobileSubMenuText,
+                  activeRoute === "about" && styles.mobileMenuTextActive,
                 ]}
               >
-                Contact Us
+                About Us
               </Text>
             </Pressable>
-          </Link>
 
-          <Pressable onPress={goToPartner} style={styles.mobileMenuItem}>
+            <Pressable
+              onPress={goToCareers}
+              style={({ pressed }) => [
+                styles.mobileSubMenuItem,
+                activeRoute === "careers" && styles.mobileMenuItemActive,
+                pressed && styles.pressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Careers"
+            >
+              <Text
+                style={[
+                  styles.mobileSubMenuText,
+                  activeRoute === "careers" && styles.mobileMenuTextActive,
+                ]}
+              >
+                Careers
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={goToBlogs}
+              style={({ pressed }) => [
+                styles.mobileSubMenuItem,
+                activeRoute === "blogs" && styles.mobileMenuItemActive,
+                pressed && styles.pressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Blogs and Stories"
+            >
+              <Text
+                style={[
+                  styles.mobileSubMenuText,
+                  activeRoute === "blogs" && styles.mobileMenuTextActive,
+                ]}
+              >
+                Blogs & Stories
+              </Text>
+            </Pressable>
+          </View>
+
+          <Pressable
+            onPress={goToContact}
+            style={({ pressed }) => [
+              styles.mobileMenuItem,
+              activeRoute === "contact" && styles.mobileMenuItemActive,
+              pressed && styles.pressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Contact Us"
+          >
+            <Text
+              style={[
+                styles.mobileMenuText,
+                activeRoute === "contact" && styles.mobileMenuTextActive,
+              ]}
+            >
+              Contact Us
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={goToPartner}
+            style={({ pressed }) => [styles.mobileMenuItem, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Partner with Us"
+          >
             <Text style={styles.mobileMenuText}>Partner with Us</Text>
             <ExternalLink size={14} color="#94A3B8" />
           </Pressable>
@@ -550,6 +566,8 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
             <Pressable
               onPress={goToLogin}
               style={({ pressed }) => [styles.mobileLoginBtn, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel={isLoggedIn ? "Dashboard" : "Log In"}
             >
               <Text style={styles.mobileLoginText}>{isLoggedIn ? "Dashboard" : "Log In"}</Text>
             </Pressable>
