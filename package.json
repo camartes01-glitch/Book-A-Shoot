@@ -49,10 +49,10 @@
   "scripts": {
     "build": "node --max-old-space-size=4096 ./node_modules/expo/bin/cli export",
     "start": "expo start",
-    "dev": "node --max-old-space-size=4096 ./node_modules/expo/bin/cli start --web --port 43158 --host lan",
+    "dev": "node scripts/start-web.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "node --max-old-space-size=4096 ./node_modules/expo/bin/cli start --web --port 43158 --host lan",
+    "web": "node scripts/start-web.js",
     "preview": "node scripts/serve-web.js",
     "test": "jest",
     "typecheck": "tsc --noEmit",
