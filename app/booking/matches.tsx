@@ -30,8 +30,8 @@ export default function VendorMatchesScreen() {
   }, [loadVendorMatches]);
 
   useEffect(() => {
-    if (!activeDraft?.matches) void runMatching();
-  }, [activeDraft?.matches, runMatching]);
+    router.replace("/booking/confirm");
+  }, []);
 
   const matches = activeDraft?.matches ?? [];
   const quoted = activeDraft ? selectedPackageQuote(activeDraft) : undefined;

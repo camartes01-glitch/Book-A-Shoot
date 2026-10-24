@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Check, Compass, MapPin, Navigation } from "lucide-react-native";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { Button, Card, Field, Muted, SectionTitle } from "@/src/components/ui";
@@ -45,6 +45,9 @@ export default function ProviderLocationPreferenceScreen() {
     }
   }, [activeDraft?.providerLocationPreference]);
 
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const isEditMode = params.mode === "edit";
+
   const onContinue = async () => {
     setLoading(true);
     try {
@@ -59,9 +62,21 @@ export default function ProviderLocationPreferenceScreen() {
               }
             : { mode, city: customCity.trim() || defaultCity, formattedAddress: customCity.trim() };
       await setProviderLocationPreference(pref);
-      router.push("/booking/matches");
+      if (isEditMode) {
+        router.replace("/booking/confirm");
+      } else {
+        router.push("/booking/confirm");
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const onBack = () => {
+    if (isEditMode) {
+      router.replace("/booking/confirm");
+    } else {
+      router.push("/booking/packages");
     }
   };
 
@@ -69,10 +84,10 @@ export default function ProviderLocationPreferenceScreen() {
     <WizardScreen
       title="Provider location"
       step="location"
-      onBack={() => router.push("/booking/packages")}
+      onBack={onBack}
       footer={
         <Button
-          label="Find providers"
+          label={isEditMode ? "Save & Return to Review" : "Continue to Review"}
           onPress={onContinue}
           loading={loading}
           flex={1}

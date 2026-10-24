@@ -72,6 +72,7 @@ export default function ConfirmBookingScreen() {
   const [error, setError] = useState<string | null>(null);
   const [successData, setSuccessData] = useState<{
     bookingId: string;
+    city?: string;
     statusMessage?: string | null;
     eventName?: string;
     dateLabel?: string;
@@ -84,28 +85,9 @@ export default function ConfirmBookingScreen() {
     }
   }, [activeDraft?.bookingId, activeDraft?.matches?.length]);
 
-  const matches = activeDraft?.matches ?? [];
-  const primaryVendorId = activeDraft?.selectedVendorId || matches[0]?.vendorId;
-
   if (!activeDraft) return null;
 
-  if (!primaryVendorId && matches.length === 0) {
-    if (fetchingMatches) {
-      return (
-        <WizardScreen title="Review your booking" step="review">
-          <Muted>Matching verified photography partners for your updated details…</Muted>
-        </WizardScreen>
-      );
-    }
-    return (
-      <WizardScreen title="Review your booking" step="review">
-        <Muted>Match providers before sending a booking request.</Muted>
-        <Button label="Find providers" onPress={() => router.replace("/booking/matches")} />
-      </WizardScreen>
-    );
-  }
-  const match = matches.find((m) => m.vendorId === primaryVendorId) || matches[0];
-  const displayMatches = matches.length > 0 ? matches : (match ? [match] : []);
+  const matches = activeDraft?.matches ?? [];
   const pkg = selectedPackageQuote(activeDraft);
   const days = [...(activeDraft.days || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const firstDay = days[0];
@@ -134,8 +116,10 @@ export default function ConfirmBookingScreen() {
     setError(null);
     try {
       const submitted = await submitVendorRequest();
+      const queryCity = activeDraft.providerLocationPreference?.city || firstDay?.location?.city || "Hyderabad";
       setSuccessData({
         bookingId: submitted.bookingId,
+        city: queryCity,
         statusMessage:
           submitted.firms_status_message ||
           "Dispatched to verified photography partners. You will be notified as partners accept.",
@@ -166,7 +150,7 @@ export default function ConfirmBookingScreen() {
     <WizardScreen
       title="Review your booking"
       step="review"
-      onBack={() => router.push("/booking/matches")}
+      onBack={() => router.push("/booking/location-preference")}
       footer={<Button label="Send booking request" onPress={onSubmit} loading={loading} flex={1} />}
     >
       <SectionTitle>You're almost booked</SectionTitle>
@@ -380,19 +364,18 @@ export default function ConfirmBookingScreen() {
         <Muted>Approved range for your selected multi-event services. Not a provider quote.</Muted>
       </Card>
 
-      {/* Selected Photography Firms Preview Card */}
+      {/* Top 6 Studio Dispatch Assurance Card */}
       <Card>
         <SectionHead
-          title="Matched Photography Firms"
-          onEdit={() => router.push("/booking/matches")}
+          title="Top 6 Studio Dispatch"
+          onEdit={() => router.push("/booking/location-preference?mode=edit")}
         />
 
         <View style={styles.dispatchHeader}>
-          <Text style={styles.dispatchTitle}>
-            {displayMatches.length === 1
-              ? "Dispatched to 1 Verified Studio"
-              : `Dispatched to all ${displayMatches.length} Verified Studios`}
-          </Text>
+          <View style={styles.dispatchTitleRow}>
+            <ShieldCheck size={16} color="#EA580C" />
+            <Text style={styles.dispatchTitle}>Automated Dispatch to Top 6 Studios</Text>
+          </View>
           <View style={styles.locationPill}>
             <MapPin size={11} color="#64748B" />
             <Text style={styles.locationPillText}>
@@ -401,81 +384,46 @@ export default function ConfirmBookingScreen() {
           </View>
         </View>
 
-        {/* Short Preview of Each Selected Photography Firm */}
-        <View style={styles.firmsList}>
-          {displayMatches.map((m) => {
-            const loc = [m.area, m.city].filter(Boolean).join(", ") || m.city || "Hyderabad";
-            return (
-              <Pressable
-                key={m.vendorId}
-                onPress={() => router.push(`/booking/vendor/${m.vendorId}`)}
-                style={({ pressed }) => [
-                  styles.firmPreviewCard,
-                  pressed && styles.firmPreviewPressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel={`View profile and details of ${m.studioName}`}
-              >
-                {/* Thumbnail / Avatar */}
-                {m.imageUrl ? (
-                  <Image
-                    source={{ uri: m.imageUrl }}
-                    style={styles.firmThumbnail}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={styles.firmAvatarFallback}>
-                    <Text style={styles.firmAvatarText}>{initials(m.studioName)}</Text>
-                  </View>
-                )}
+        <Text style={styles.dispatchDescription}>
+          Your shoot specifications will be dispatched automatically to the top 6 verified photography firms in this city. Studio identities, portfolios, and direct contacts are unlocked as soon as a firm accepts your request.
+        </Text>
 
-                {/* Firm Info */}
-                <View style={styles.firmInfoCol}>
-                  <View style={styles.firmNameRow}>
-                    <Text style={styles.firmNameText} numberOfLines={1}>
-                      {m.studioName}
-                    </Text>
-                    <View style={styles.kycBadge}>
-                      <ShieldCheck size={11} color="#EA580C" strokeWidth={2.5} />
-                      <Text style={styles.kycBadgeText}>KYC Verified</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.firmSubRow}>
-                    <View style={styles.ratingBadge}>
-                      <Star size={11} color="#EA580C" fill="#EA580C" />
-                      <Text style={styles.ratingValue}>
-                        {m.rating ? m.rating.toFixed(1) : "4.8"}
-                      </Text>
-                      {m.completedBookings ? (
-                        <Text style={styles.shootsCount}>({m.completedBookings} shoots)</Text>
-                      ) : null}
-                    </View>
-                    <Text style={styles.subDot}>•</Text>
-                    <Text style={styles.locationText} numberOfLines={1}>
-                      {loc}
-                    </Text>
-                  </View>
-
-                  <View style={styles.viewAboutLinkRow}>
-                    <Text style={styles.viewAboutLinkText}>View Profile & About Details</Text>
-                    <ChevronRight size={13} color="#EA580C" strokeWidth={2.5} />
-                  </View>
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {/* Mutual Contact Privacy Callout */}
-        <View style={styles.privacyBox}>
-          <View style={styles.privacyBoxHeader}>
-            <Lock size={13} color="#C2410C" />
-            <Text style={styles.privacyBoxTitle}>Mutual Contact Privacy</Text>
+        <View style={styles.dispatchAssuranceList}>
+          <View style={styles.assuranceItem}>
+            <View style={styles.assuranceIconCircle}>
+              <Camera size={14} color="#EA580C" />
+            </View>
+            <View style={styles.assuranceTextCol}>
+              <Text style={styles.assuranceHeading}>Verified Equipment & Crew</Text>
+              <Text style={styles.assuranceSub}>
+                Only studios with multi-camera setups, prime lenses, and insured crew are assigned.
+              </Text>
+            </View>
           </View>
-          <Text style={styles.privacyBoxText}>
-            Your contact details (phone & email) will NOT appear to studios until one accepts your request. Direct phone and WhatsApp contacts unlock immediately upon acceptance.
-          </Text>
+
+          <View style={styles.assuranceItem}>
+            <View style={styles.assuranceIconCircle}>
+              <Lock size={14} color="#EA580C" />
+            </View>
+            <View style={styles.assuranceTextCol}>
+              <Text style={styles.assuranceHeading}>Privacy-First Studio Matching</Text>
+              <Text style={styles.assuranceSub}>
+                Studio names, portfolios, direct phone, and chat unlock instantly as soon as a firm accepts your request.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.assuranceItem}>
+            <View style={styles.assuranceIconCircle}>
+              <Clock size={14} color="#EA580C" />
+            </View>
+            <View style={styles.assuranceTextCol}>
+              <Text style={styles.assuranceHeading}>Instant Notifications</Text>
+              <Text style={styles.assuranceSub}>
+                Real-time alerts notify you the moment a verified photographer reviews and accepts.
+              </Text>
+            </View>
+          </View>
         </View>
       </Card>
 
@@ -483,6 +431,7 @@ export default function ConfirmBookingScreen() {
         <BookingSuccessModal
           visible={!!successData}
           bookingId={successData.bookingId}
+          city={successData.city}
           statusMessage={successData.statusMessage}
           eventName={successData.eventName}
           dateLabel={successData.dateLabel}
@@ -612,12 +561,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     flexWrap: "wrap",
-    gap: 6,
+    gap: 8,
     marginTop: 2,
-    marginBottom: 8,
+    marginBottom: 6,
+  },
+  dispatchTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flex: 1,
   },
   dispatchTitle: {
-    fontSize: 14.5,
+    fontSize: 14,
     fontWeight: "700",
     color: colors.ink,
   },
@@ -635,141 +590,49 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#64748B",
   },
-  firmsList: {
-    gap: 8,
+  dispatchDescription: {
+    fontSize: 13,
+    color: "#475569",
+    lineHeight: 18.5,
     marginVertical: 4,
   },
-  firmPreviewCard: {
+  dispatchAssuranceList: {
+    gap: 8,
+    marginTop: 8,
+  },
+  assuranceItem: {
     flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FAFAFA",
+    alignItems: "flex-start",
+    gap: 10,
+    backgroundColor: "#FFF7ED",
+    padding: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#FED7AA",
+  },
+  assuranceIconCircle: {
+    width: 28,
+    height: 28,
     borderRadius: 14,
-    padding: 10,
-    gap: 12,
-  },
-  firmPreviewPressed: {
-    backgroundColor: "#FFF7ED",
-    borderColor: "#FED7AA",
-    transform: [{ scale: 0.985 }],
-  },
-  firmThumbnail: {
-    width: 62,
-    height: 62,
-    borderRadius: 10,
-    backgroundColor: "#E2E8F0",
-  },
-  firmAvatarFallback: {
-    width: 62,
-    height: 62,
-    borderRadius: 10,
-    backgroundColor: "#FFF7ED",
-    borderWidth: 1,
-    borderColor: "#FFEDD5",
-    alignItems: "center",
+    backgroundColor: "#FFFFFF",
     justifyContent: "center",
-  },
-  firmAvatarText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#EA580C",
-  },
-  firmInfoCol: {
-    flex: 1,
-    gap: 3,
-  },
-  firmNameRow: {
-    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 6,
-  },
-  firmNameText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#0F172A",
-    flex: 1,
-  },
-  kycBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-    backgroundColor: "#FFF7ED",
     borderWidth: 1,
     borderColor: "#FED7AA",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 99,
+    marginTop: 1,
   },
-  kycBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#EA580C",
-  },
-  firmSubRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  ratingBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 3,
-  },
-  ratingValue: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: "#0F172A",
-  },
-  shootsCount: {
-    fontSize: 11,
-    color: "#64748B",
-    fontWeight: "500",
-  },
-  subDot: {
-    fontSize: 11,
-    color: "#CBD5E1",
-  },
-  locationText: {
-    fontSize: 11.5,
-    color: "#64748B",
-    fontWeight: "500",
+  assuranceTextCol: {
     flex: 1,
-  },
-  viewAboutLinkRow: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 2,
-    marginTop: 2,
   },
-  viewAboutLinkText: {
-    fontSize: 11.5,
+  assuranceHeading: {
+    fontSize: 12.5,
     fontWeight: "700",
-    color: "#EA580C",
+    color: "#0F172A",
   },
-  privacyBox: {
-    marginTop: 10,
-    padding: 10,
-    backgroundColor: "#FFF7ED",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#FED7AA",
-    gap: 3,
-  },
-  privacyBoxHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  privacyBoxTitle: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#C2410C",
-  },
-  privacyBoxText: {
+  assuranceSub: {
     fontSize: 11.5,
-    color: "#9A3412",
+    color: "#475569",
     lineHeight: 16,
   },
 });

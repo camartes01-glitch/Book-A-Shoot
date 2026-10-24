@@ -13,6 +13,7 @@ import {
 import { router } from "expo-router";
 import {
   Calendar,
+  Camera,
   Check,
   CheckCircle2,
   ChevronRight,
@@ -217,48 +218,62 @@ export function FirmDetailModal({
           <View style={styles.header}>
             <View style={styles.headerTop}>
               <View style={styles.firmIdentity}>
-                {firm.profile_image ? (
-                  <Image
-                    source={{ uri: firm.profile_image }}
-                    style={styles.avatar}
-                    resizeMode="cover"
-                  />
+                {hasAccepted || isConfirmed ? (
+                  firm.profile_image ? (
+                    <Image
+                      source={{ uri: firm.profile_image }}
+                      style={styles.avatar}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.avatarFallback}>
+                      <Text style={styles.avatarText}>{getInitials(firm.name)}</Text>
+                    </View>
+                  )
                 ) : (
-                  <View style={styles.avatarFallback}>
-                    <Text style={styles.avatarText}>{getInitials(firm.name)}</Text>
+                  <View style={styles.anonymousAvatar}>
+                    <Camera size={22} color="#EA580C" strokeWidth={2.2} />
                   </View>
                 )}
                 <View style={{ flex: 1, gap: 3 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     <Text style={styles.firmName} numberOfLines={1}>
-                      {firm.name}
+                      {hasAccepted || isConfirmed ? firm.name : `Verified Photography Partner`}
                     </Text>
                     <ShieldCheck size={15} color="#EA580C" />
-                    <Pressable
-                      onPress={handleViewProfile}
-                      style={({ pressed }) => [
-                        styles.viewProfileBtn,
-                        pressed && styles.viewProfileBtnPressed,
-                      ]}
-                      hitSlop={6}
-                      accessibilityRole="button"
-                      accessibilityLabel={`View full profile of ${firm.name}`}
-                    >
-                      <Text style={styles.viewProfileBtnText}>View Profile</Text>
-                      <ChevronRight size={11} color="#EA580C" strokeWidth={2.5} />
-                    </Pressable>
+                    {hasAccepted || isConfirmed ? (
+                      <Pressable
+                        onPress={handleViewProfile}
+                        style={({ pressed }) => [
+                          styles.viewProfileBtn,
+                          pressed && styles.viewProfileBtnPressed,
+                        ]}
+                        hitSlop={6}
+                        accessibilityRole="button"
+                        accessibilityLabel={`View full profile of ${firm.name}`}
+                      >
+                        <Text style={styles.viewProfileBtnText}>View Profile</Text>
+                        <ChevronRight size={11} color="#EA580C" strokeWidth={2.5} />
+                      </Pressable>
+                    ) : null}
                   </View>
                   <View style={styles.metaRow}>
-                    <View style={styles.ratingBadge}>
-                      <Star size={12} color="#D97706" fill="#D97706" />
-                      <Text style={styles.ratingText}>
-                        {typeof firm.rating === "number" ? firm.rating.toFixed(1) : "4.9"}
-                      </Text>
-                    </View>
+                    {hasAccepted || isConfirmed ? (
+                      <View style={styles.ratingBadge}>
+                        <Star size={12} color="#D97706" fill="#D97706" />
+                        <Text style={styles.ratingText}>
+                          {typeof firm.rating === "number" ? firm.rating.toFixed(1) : "4.9"}
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.kycVerifiedBadge}>
+                        <Text style={styles.kycVerifiedBadgeText}>KYC Verified Partner</Text>
+                      </View>
+                    )}
                     <Text style={styles.dot}>•</Text>
                     <View style={styles.locationRow}>
                       <MapPin size={12} color="#64748B" />
-                      <Text style={styles.cityText}>{firm.city || "Verified Studio"}</Text>
+                      <Text style={styles.cityText}>{firm.city || "Local Partner"}</Text>
                     </View>
                   </View>
                 </View>
@@ -486,55 +501,74 @@ export function FirmDetailModal({
               </View>
             </View>
 
-            {/* Portfolio Showcase Section - ALWAYS visible to customer */}
+            {/* Portfolio Showcase Section */}
             <View style={styles.cardSection}>
               <View style={styles.sectionHeaderRow}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                   <Images size={16} color="#EA580C" />
                   <Text style={styles.sectionTitle}>Portfolio Showcase</Text>
                 </View>
-                <View style={styles.publicBadge}>
-                  <Text style={styles.publicBadgeText}>Public Showcase</Text>
-                </View>
+                {hasAccepted || isConfirmed ? (
+                  <View style={styles.publicBadge}>
+                    <Text style={styles.publicBadgeText}>Unlocked</Text>
+                  </View>
+                ) : (
+                  <View style={styles.lockedPill}>
+                    <Lock size={11} color="#C2410C" />
+                    <Text style={styles.lockedPillText}>Locked</Text>
+                  </View>
+                )}
               </View>
 
-              <Text style={styles.portfolioNotice}>
-                Uploaded work samples are visible so you can review this firm's artistic quality.
-              </Text>
+              {hasAccepted || isConfirmed ? (
+                <>
+                  <Text style={styles.portfolioNotice}>
+                    Uploaded work samples are visible so you can review this firm's artistic quality.
+                  </Text>
 
-              {portfolioImages.length > 0 ? (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.portfolioScroll}
-                >
-                  {portfolioImages.map((imgUri: string, idx: number) => {
-                    const itemObj = typeof portfolioItems[idx] === "object" ? portfolioItems[idx] : null;
-                    const itemTitle = itemObj?.title || itemObj?.category || `Photo ${idx + 1}`;
-                    return (
-                      <Pressable
-                        key={`${imgUri}-${idx}`}
-                        style={({ pressed }) => [styles.portfolioCard, pressed && { opacity: 0.85 }]}
-                        onPress={() => handleOpenPhoto(idx)}
-                        accessibilityRole="button"
-                        accessibilityLabel={`View portfolio photo ${idx + 1}: ${itemTitle}`}
-                      >
-                        <Image source={{ uri: imgUri }} style={styles.portfolioThumb} resizeMode="cover" />
-                        <View style={styles.portfolioOverlay}>
-                          <Text style={styles.portfolioThumbTitle} numberOfLines={1}>
-                            {itemTitle}
-                          </Text>
-                          <Text style={styles.portfolioZoomHint}>Tap to view</Text>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
+                  {portfolioImages.length > 0 ? (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.portfolioScroll}
+                    >
+                      {portfolioImages.map((imgUri: string, idx: number) => {
+                        const itemObj = typeof portfolioItems[idx] === "object" ? portfolioItems[idx] : null;
+                        const itemTitle = itemObj?.title || itemObj?.category || `Photo ${idx + 1}`;
+                        return (
+                          <Pressable
+                            key={`${imgUri}-${idx}`}
+                            style={({ pressed }) => [styles.portfolioCard, pressed && { opacity: 0.85 }]}
+                            onPress={() => handleOpenPhoto(idx)}
+                            accessibilityRole="button"
+                            accessibilityLabel={`View portfolio photo ${idx + 1}: ${itemTitle}`}
+                          >
+                            <Image source={{ uri: imgUri }} style={styles.portfolioThumb} resizeMode="cover" />
+                            <View style={styles.portfolioOverlay}>
+                              <Text style={styles.portfolioThumbTitle} numberOfLines={1}>
+                                {itemTitle}
+                              </Text>
+                              <Text style={styles.portfolioZoomHint}>Tap to view</Text>
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </ScrollView>
+                  ) : (
+                    <View style={styles.emptyPortfolioBox}>
+                      <Images size={20} color="#94A3B8" />
+                      <Text style={styles.emptyPortfolioText}>
+                        No portfolio sample photos uploaded yet by this firm.
+                      </Text>
+                    </View>
+                  )}
+                </>
               ) : (
-                <View style={styles.emptyPortfolioBox}>
-                  <Images size={20} color="#94A3B8" />
-                  <Text style={styles.emptyPortfolioText}>
-                    No portfolio sample photos uploaded yet by this firm.
+                <View style={styles.lockedPortfolioBox}>
+                  <Lock size={16} color="#EA580C" />
+                  <Text style={styles.lockedPortfolioTitle}>Portfolio Unlocks on Acceptance</Text>
+                  <Text style={styles.lockedPortfolioSub}>
+                    Studio portfolio, past wedding & event galleries, and sample films unlock automatically as soon as this partner accepts your booking request.
                   </Text>
                 </View>
               )}
@@ -765,6 +799,68 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "800",
     color: "#EA580C",
+  },
+  anonymousAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  kycVerifiedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 99,
+  },
+  kycVerifiedBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#EA580C",
+  },
+  lockedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FFF7ED",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+  },
+  lockedPillText: {
+    fontSize: 10.5,
+    fontWeight: "700",
+    color: "#C2410C",
+  },
+  lockedPortfolioBox: {
+    backgroundColor: "#FFF7ED",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    padding: 14,
+    alignItems: "center",
+    gap: 6,
+  },
+  lockedPortfolioTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  lockedPortfolioSub: {
+    fontSize: 12,
+    color: "#475569",
+    textAlign: "center",
+    lineHeight: 17,
   },
   firmName: {
     fontSize: 16,

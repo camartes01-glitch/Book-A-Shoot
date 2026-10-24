@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { Calendar, Camera, CheckCircle2, Clapperboard, Clock, Film, Image as ImageLucide, Lock, Mail, MapPin, Phone, Sparkles, Video, XCircle } from "lucide-react-native";
+import { Calendar, Camera, CheckCircle2, Clapperboard, Clock, Film, Image as ImageLucide, Lock, Mail, MapPin, Phone, ShieldCheck, Sparkles, Video, XCircle } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ProgressHeader } from "@/src/components/ProgressHeader";
 import { Badge, Button, Card, Muted, ScreenTitle, SectionTitle } from "@/src/components/ui";
@@ -249,6 +249,17 @@ export default function BookingDetailScreen() {
         };
       }) ?? []);
 
+  const bookingCity =
+    booking.providerLocationPreference?.city ||
+    booking.days?.[0]?.location?.city ||
+    "the city";
+  const isConfirmed =
+    booking.status === "CONFIRMED" || booking.status === "CUSTOMER_CONFIRMED";
+  const hasAnyAccepted =
+    assignedFirms.some((f) => f.has_accepted || f.is_confirmed) ||
+    booking.status === "VENDOR_ACCEPTED" ||
+    isConfirmed;
+
   const run = async (fn: () => Promise<Booking>) => {
     setBusy(true);
     setError(null);
@@ -439,7 +450,46 @@ export default function BookingDetailScreen() {
           </Card>
         ) : null}
 
-        {/* Candidate Photography Firms List with Swiggy-like Clean Design */}
+        {/* Rapido-Style Top 6 Dispatch Status Banner when awaiting acceptance */}
+        {!hasAnyAccepted && !isCancelled && !TERMINAL_ALTERNATE.has(booking.status) ? (
+          <Card style={styles.waitingBannerCard}>
+            <View style={styles.waitingBannerHeader}>
+              <View style={styles.radarPingWrap}>
+                <View style={styles.radarPingRing} />
+                <View style={styles.radarPingDot} />
+              </View>
+              <View style={{ flex: 1, gap: 3 }}>
+                <Text style={styles.waitingBannerTitle}>
+                  Request Dispatched to Top 6 Studios
+                </Text>
+                <Text style={styles.waitingBannerSubtitle}>
+                  We've sent your request to the top 6 firms in {bookingCity}. Please be patient while a best photographer accepts you.
+                </Text>
+              </View>
+            </View>
+            <View style={styles.waitingBannerFooter}>
+              <ShieldCheck size={13} color="#EA580C" />
+              <Text style={styles.waitingBannerFooterText}>
+                Live partner availability checking active · Studio name and contacts unlock on acceptance
+              </Text>
+            </View>
+          </Card>
+        ) : null}
+
+        {/* Accepted Partner Callout when a studio has accepted */}
+        {hasAnyAccepted && !isConfirmed ? (
+          <Card style={styles.acceptedBannerCard}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <CheckCircle2 size={18} color="#EA580C" />
+              <Text style={styles.acceptedBannerTitle}>Photography Partner Accepted!</Text>
+            </View>
+            <Text style={styles.acceptedBannerSubtitle}>
+              A top studio has accepted your shoot request. Review their portfolio and confirm to lock in your booking.
+            </Text>
+          </Card>
+        ) : null}
+
+        {/* Candidate Photography Firms List with Rapido Privacy Design */}
         {assignedFirms.length > 0 ? (
           <View style={{ gap: 10 }}>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
@@ -453,10 +503,11 @@ export default function BookingDetailScreen() {
               </Text>
             </View>
             <View style={{ gap: 8 }}>
-              {assignedFirms.map((firm) => (
+              {assignedFirms.map((firm, index) => (
                 <CandidateFirmCard
                   key={firm.provider_id || firm.id}
                   firm={firm}
+                  index={index}
                   bookingCreatedAt={booking?.createdAt}
                   onPress={(f) => setSelectedFirmModal(f)}
                   onConfirm={(f) => setFirmToConfirm(f)}
@@ -470,7 +521,7 @@ export default function BookingDetailScreen() {
                     if (!f.has_accepted) {
                       Alert.alert(
                         "Request Pending",
-                        `${f.name} hasn't accepted your request yet. Chat will unlock as soon as they accept your booking request.`,
+                        `This studio hasn't accepted your request yet. Chat will unlock as soon as they accept your booking request.`,
                         [{ text: "Got it" }]
                       );
                       return;
@@ -933,6 +984,86 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.muted,
     marginTop: 1,
+  },
+  waitingBannerCard: {
+    backgroundColor: "#FFF7ED",
+    borderColor: "#FED7AA",
+    borderWidth: 1.5,
+    borderRadius: 14,
+    padding: spacing.md,
+    gap: 10,
+  },
+  waitingBannerHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  radarPingWrap: {
+    width: 24,
+    height: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  radarPingRing: {
+    position: "absolute",
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "rgba(234, 88, 12, 0.15)",
+    borderWidth: 1.5,
+    borderColor: "#EA580C",
+  },
+  radarPingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#EA580C",
+  },
+  waitingBannerTitle: {
+    fontSize: 14.5,
+    fontWeight: "800",
+    color: "#0F172A",
+    letterSpacing: -0.2,
+  },
+  waitingBannerSubtitle: {
+    fontSize: 13,
+    color: "#334155",
+    lineHeight: 18.5,
+    fontWeight: "500",
+  },
+  waitingBannerFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#FED7AA",
+  },
+  waitingBannerFooterText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#C2410C",
+    flex: 1,
+  },
+  acceptedBannerCard: {
+    backgroundColor: "#FFF7ED",
+    borderColor: "#EA580C",
+    borderWidth: 1.5,
+    borderRadius: 14,
+    padding: spacing.md,
+    gap: 6,
+  },
+  acceptedBannerTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  acceptedBannerSubtitle: {
+    fontSize: 13,
+    color: "#334155",
+    lineHeight: 18,
+    fontWeight: "500",
   },
 });
 

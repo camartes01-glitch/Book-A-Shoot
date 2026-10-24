@@ -7,13 +7,14 @@ import {
   Text,
   View,
 } from "react-native";
-import { Check, CheckCircle2, X, XCircle, ChevronRight, Clock, Lock, MapPin, MessageCircle, MessageSquare, Phone, Star } from "lucide-react-native";
+import { Camera, Check, CheckCircle2, ChevronRight, Clock, Lock, MapPin, MessageCircle, MessageSquare, Phone, ShieldCheck, Star, X, XCircle } from "lucide-react-native";
 import type { AssignedPhotographer } from "@/src/types/booking";
 import { maskPhoneNumber } from "@/src/domain/bookingRequest";
 import { calculateBusinessSla } from "@/src/engine/businessHours";
 
 interface CandidateFirmCardProps {
   firm: AssignedPhotographer;
+  index?: number;
   bookingCreatedAt?: string | null;
   onConfirm?: (firm: AssignedPhotographer) => void;
   confirmLoading?: boolean;
@@ -34,6 +35,7 @@ function getInitials(name: string): string {
 
 export function CandidateFirmCard({
   firm,
+  index = 0,
   bookingCreatedAt,
   onConfirm,
   confirmLoading = false,
@@ -86,6 +88,11 @@ export function CandidateFirmCard({
 
   const displayMaskedPhone = rawPhone ? maskPhoneNumber(rawPhone) : "+91 ••••• ••210";
 
+  const isAcceptedOrConfirmed = hasAccepted || isConfirmed;
+  const studioTitle = isAcceptedOrConfirmed
+    ? firm.name
+    : `Verified Studio #${index + 1}`;
+
   return (
     <View
       style={[
@@ -99,40 +106,53 @@ export function CandidateFirmCard({
         style={({ pressed }) => [styles.headerRow, onPress && pressed && { opacity: 0.8 }]}
         onPress={() => onPress?.(firm)}
         accessibilityRole="button"
-        accessibilityLabel={`View timeline and details for ${firm.name}`}
+        accessibilityLabel={`View timeline and details for ${studioTitle}`}
       >
-        {firm.profile_image ? (
-          <Image
-            source={{ uri: firm.profile_image }}
-            style={styles.avatar}
-            resizeMode="cover"
-            accessibilityIgnoresInvertColors
-          />
+        {isAcceptedOrConfirmed ? (
+          firm.profile_image ? (
+            <Image
+              source={{ uri: firm.profile_image }}
+              style={styles.avatar}
+              resizeMode="cover"
+              accessibilityIgnoresInvertColors
+            />
+          ) : (
+            <View style={styles.avatarFallback}>
+              <Text style={styles.avatarText}>{getInitials(firm.name)}</Text>
+            </View>
+          )
         ) : (
-          <View style={styles.avatarFallback}>
-            <Text style={styles.avatarText}>{getInitials(firm.name)}</Text>
+          <View style={styles.anonymousAvatar}>
+            <Camera size={19} color="#EA580C" strokeWidth={2.2} />
           </View>
         )}
 
         <View style={styles.infoCol}>
           <Text style={styles.firmName} numberOfLines={1}>
-            {firm.name}
+            {studioTitle}
           </Text>
 
           <View style={styles.metaRow}>
-            <View style={styles.ratingBadge}>
-              <Star size={12} color="#D97706" fill="#D97706" />
-              <Text style={styles.ratingText}>
-                {typeof firm.rating === "number" ? firm.rating.toFixed(1) : "4.9"}
-              </Text>
-            </View>
+            {isAcceptedOrConfirmed ? (
+              <View style={styles.ratingBadge}>
+                <Star size={12} color="#D97706" fill="#D97706" />
+                <Text style={styles.ratingText}>
+                  {typeof firm.rating === "number" ? firm.rating.toFixed(1) : "4.9"}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.kycVerifiedBadge}>
+                <ShieldCheck size={11} color="#EA580C" strokeWidth={2.5} />
+                <Text style={styles.kycVerifiedBadgeText}>KYC Verified Partner</Text>
+              </View>
+            )}
 
             <Text style={styles.dot}>•</Text>
 
             <View style={styles.locationRow}>
               <MapPin size={11} color="#64748B" />
               <Text style={styles.cityText} numberOfLines={1}>
-                {firm.city || ""}
+                {firm.city || "Local Partner"}
               </Text>
             </View>
           </View>
@@ -156,15 +176,15 @@ export function CandidateFirmCard({
           </View>
         ) : (
           <View style={styles.awaitingBadge}>
-            <Clock size={11} color="#B45309" />
+            <Clock size={11} color="#C2410C" />
             <Text style={styles.awaitingBadgeText}>
-              {sla ? sla.badgeText : "Awaiting"}
+              Awaiting Response
             </Text>
           </View>
         )}
       </Pressable>
 
-            {/* Response Status Statement */}
+      {/* Response Status Statement */}
       {isConfirmed ? (
         <View style={styles.confirmedBanner}>
           <Text style={styles.confirmedBannerText}>
@@ -192,11 +212,11 @@ export function CandidateFirmCard({
       ) : (
         <View style={styles.awaitingBanner}>
           <View style={styles.maskedRow}>
-            <Lock size={12} color="#B45309" />
+            <Lock size={12} color="#C2410C" />
             <Text style={styles.maskedPhoneText}>{displayMaskedPhone}</Text>
           </View>
           <Text style={styles.maskedHintText}>
-            {sla ? sla.hintText : "Direct contact unlocks once firm accepts"}
+            Studio identity, portfolio and direct contact unlock as soon as this studio accepts.
           </Text>
         </View>
       )}
@@ -300,6 +320,32 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 13,
     fontWeight: "800",
+    color: "#EA580C",
+  },
+  anonymousAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  kycVerifiedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 99,
+  },
+  kycVerifiedBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
     color: "#EA580C",
   },
   infoCol: {
