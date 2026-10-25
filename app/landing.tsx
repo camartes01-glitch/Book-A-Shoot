@@ -388,6 +388,8 @@ export default function LandingPage() {
   const heroSlides = isWide ? DESKTOP_HERO_SLIDES : PHONE_HERO_SLIDES;
   const heroH = isWide ? Math.min(660, Math.round(W * 1.12)) : Math.min(Math.max(Math.round(W * 1.40), 520), 600);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [playBadgeHovered, setPlayBadgeHovered] = useState(false);
+  const [appStoreBadgeHovered, setAppStoreBadgeHovered] = useState(false);
 
   const advanceSlide = useCallback(() => {
     setActiveSlide((prev) => {
@@ -564,6 +566,7 @@ export default function LandingPage() {
         style={styles.scroll}
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
+        nestedScrollEnabled={true}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
           { useNativeDriver: false },
@@ -575,6 +578,7 @@ export default function LandingPage() {
             ref={carouselRef}
             horizontal
             pagingEnabled
+            nestedScrollEnabled={true}
             showsHorizontalScrollIndicator={false}
             scrollEventThrottle={16}
             onMomentumScrollEnd={onCarouselScrollEnd}
@@ -658,6 +662,7 @@ export default function LandingPage() {
 
           <ScrollView
             horizontal
+            nestedScrollEnabled={true}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={[
               styles.servicesScroll,
@@ -829,6 +834,7 @@ export default function LandingPage() {
             <View style={styles.whyPhoneContainer}>
               <ScrollView
                 horizontal
+                nestedScrollEnabled={true}
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.whyScrollPhone}
                 decelerationRate="fast"
@@ -998,18 +1004,20 @@ export default function LandingPage() {
         {Platform.OS === "web" && (
           <View style={[styles.downloadAppSection, isWide ? styles.downloadAppSectionWide : styles.downloadAppSectionPhone]}>
             <View style={[styles.downloadAppCard, isWide ? styles.downloadAppCardWide : styles.downloadAppCardPhone]}>
-              {/* download.png placed as is in the background without any color scrim */}
+              {/* Background: download.png for desktop / phonedownload.png for mobile */}
               <Image
                 source={
                   Platform.OS === "web"
-                    ? { uri: "/download.png" }
-                    : require("@/assets/images/download.png")
+                    ? { uri: isWide ? "/download.png" : "/phonedownload.png" }
+                    : isWide
+                      ? require("@/assets/images/download.png")
+                      : require("@/assets/images/phonedownload.png")
                 }
-                style={styles.downloadBgImage}
+                style={[styles.downloadBgImage, !isWide && styles.downloadBgImagePhone]}
                 resizeMode="cover"
               />
 
-              {/* Left Column: Heading, Description & Google Play CTA */}
+              {/* Heading, Description & Google Play CTA (Centered in Mobile, Left-aligned on Desktop) */}
               <View style={[styles.downloadContentLeft, isWide ? styles.downloadContentLeftWide : styles.downloadContentLeftPhone]}>
                 <Text style={[styles.downloadTitle, isWide ? styles.downloadTitleWide : styles.downloadTitlePhone]}>
                   Get the Book A Shoot App now!
@@ -1017,30 +1025,68 @@ export default function LandingPage() {
                 <Text style={[styles.downloadSub, isWide ? styles.downloadSubWide : styles.downloadSubPhone]}>
                   For seamless booking, real-time photographer tracking, instant milestone chat, and live shoot updates right at your fingertips.
                 </Text>
-                <Pressable
-                  onPress={() => Linking.openURL("https://play.google.com/store/apps/details?id=online.bookashoot.customer")}
-                  style={({ pressed }) => [styles.googlePlayBtn, pressed && styles.pressed]}
-                  accessibilityRole="link"
-                  accessibilityLabel="Get it on Google Play"
-                >
-                  <Text style={styles.googlePlayBtnText}>Get it on Google Play</Text>
-                  <ArrowRight size={16} color="#FFFFFF" />
-                </Pressable>
+                {/* App Store & Google Play Store Badges */}
+                <View style={[styles.storeBadgesRow, !isWide && styles.storeBadgesRowPhone]}>
+                  <Pressable
+                    onPress={() => Linking.openURL("https://play.google.com/store/apps/details?id=com.camartes.customer")}
+                    onHoverIn={() => setPlayBadgeHovered(true)}
+                    onHoverOut={() => setPlayBadgeHovered(false)}
+                    style={({ pressed }) => [
+                      styles.storeBadgeBtn,
+                      playBadgeHovered && styles.storeBadgeBtnHovered,
+                      pressed && styles.pressed,
+                    ]}
+                    accessibilityRole="link"
+                    accessibilityLabel="Get it on Google Play"
+                  >
+                    <Image
+                      source={
+                        Platform.OS === "web"
+                          ? { uri: "/google-play-badge.png" }
+                          : require("@/assets/images/google-play-badge.png")
+                      }
+                      style={styles.googlePlayBadgeImg}
+                      resizeMode="contain"
+                    />
+                  </Pressable>
+
+                  <Pressable
+                    onHoverIn={() => setAppStoreBadgeHovered(true)}
+                    onHoverOut={() => setAppStoreBadgeHovered(false)}
+                    style={({ pressed }) => [
+                      styles.storeBadgeBtn,
+                      appStoreBadgeHovered && styles.storeBadgeBtnHovered,
+                      pressed && styles.pressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Download on the App Store (Coming Soon)"
+                  >
+                    <Image
+                      source={
+                        Platform.OS === "web"
+                          ? { uri: "/app-store-badge.png" }
+                          : require("@/assets/images/app-store-badge.png")
+                      }
+                      style={styles.appStoreBadgeImg}
+                      resizeMode="contain"
+                    />
+                  </Pressable>
+                </View>
               </View>
 
-              {/* Right Column: QR Code overlay positioned over the phone frame in download.png */}
+              {/* QR Code overlay inside phone mockup (both Desktop and Mobile) */}
               <View style={[styles.downloadQrWrapper, isWide ? styles.downloadQrWrapperWide : styles.downloadQrWrapperPhone]}>
-                <View style={styles.qrCodeFrame}>
+                <View style={[styles.qrCodeFrame, !isWide && styles.qrCodeFramePhone]}>
                   <Image
                     source={
                       Platform.OS === "web"
                         ? { uri: "/qrcode.png" }
                         : require("@/assets/images/qrcode.png")
                     }
-                    style={styles.qrCodeImage}
+                    style={[styles.qrCodeImage, !isWide && styles.qrCodeImagePhone]}
                     resizeMode="contain"
                   />
-                  <Text style={styles.qrCodeLabel}>Scan to Download</Text>
+                  <Text style={[styles.qrCodeLabel, !isWide && styles.qrCodeLabelPhone]}>Scan to Download</Text>
                 </View>
               </View>
             </View>
@@ -2328,6 +2374,9 @@ const styles = StyleSheet.create({
   },
   downloadAppCardPhone: {
     flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    minHeight: 560,
     paddingBottom: 28,
   },
   downloadBgImage: {
@@ -2338,6 +2387,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: "100%",
     height: "100%",
+  },
+  downloadBgImagePhone: {
+    ...(Platform.OS === "web" ? ({ objectPosition: "bottom center" } as any) : {}),
   },
   downloadContentLeft: {
     zIndex: 2,
@@ -2351,9 +2403,10 @@ const styles = StyleSheet.create({
   },
   downloadContentLeftPhone: {
     width: "100%",
-    padding: 24,
-    paddingTop: 32,
-    alignItems: "flex-start",
+    paddingHorizontal: 20,
+    paddingTop: 36,
+    paddingBottom: 20,
+    alignItems: "center",
   },
   downloadTitle: {
     fontSize: 28,
@@ -2369,6 +2422,7 @@ const styles = StyleSheet.create({
   downloadTitlePhone: {
     fontSize: 24,
     lineHeight: 32,
+    textAlign: "center",
   },
   downloadSub: {
     fontSize: 15,
@@ -2385,66 +2439,108 @@ const styles = StyleSheet.create({
   downloadSubPhone: {
     fontSize: 14,
     lineHeight: 22,
+    textAlign: "center",
+    maxWidth: 340,
+    alignSelf: "center",
+    marginTop: 10,
+    marginBottom: 20,
   },
-  googlePlayBtn: {
+  storeBadgesRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#0F172A",
-    paddingHorizontal: 22,
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
-    alignSelf: "flex-start",
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 3,
+    gap: 12,
+    flexWrap: "wrap",
+    marginTop: 4,
   },
-  googlePlayBtnText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
+  storeBadgesRowPhone: {
+    justifyContent: "center",
+    alignSelf: "center",
+    gap: 10,
+  },
+  storeBadgeBtn: {
+    borderRadius: 8,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
+    ...(Platform.OS === "web"
+      ? ({
+          cursor: "pointer",
+          transition: "transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, opacity 0.2s ease",
+        } as any)
+      : {}),
+  },
+  storeBadgeBtnHovered: {
+    transform: [{ translateY: -2.5 }, { scale: 1.03 }],
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.22,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  googlePlayBadgeImg: {
+    width: 147,
+    height: 38,
+  },
+  appStoreBadgeImg: {
+    width: 138,
+    height: 38,
   },
   downloadQrWrapper: {
-    zIndex: 2,
+    zIndex: 3,
     alignItems: "center",
     justifyContent: "center",
   },
   downloadQrWrapperWide: {
-    width: "36%",
-    paddingRight: 48,
-    justifyContent: "center",
-    alignItems: "center",
+    position: "absolute",
+    left: "71.5%",
+    top: "50%",
+    transform: [{ translateX: -58 }, { translateY: -68 }],
   },
   downloadQrWrapperPhone: {
-    width: "100%",
-    alignItems: "center",
-    marginTop: 12,
+    position: "absolute",
+    left: "50%",
+    bottom: 20,
+    transform: [{ translateX: -48 }],
   },
   qrCodeFrame: {
-    backgroundColor: "rgba(255, 255, 255, 0.95)",
-    padding: 16,
-    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.96)",
+    padding: 10,
+    borderRadius: 14,
     alignItems: "center",
     shadowColor: "#000",
-    shadowOpacity: 0.14,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.8)",
+    borderColor: "rgba(255, 255, 255, 0.9)",
+  },
+  qrCodeFramePhone: {
+    padding: 8,
+    borderRadius: 12,
   },
   qrCodeImage: {
-    width: 140,
-    height: 140,
+    width: 96,
+    height: 96,
+  },
+  qrCodeImagePhone: {
+    width: 80,
+    height: 80,
   },
   qrCodeLabel: {
-    fontSize: 12,
+    fontSize: 10.5,
     fontWeight: "700",
     color: "#0F172A",
-    marginTop: 8,
+    marginTop: 6,
     letterSpacing: 0.2,
+  },
+  qrCodeLabelPhone: {
+    fontSize: 9.5,
+    marginTop: 4,
   },
 
   // ── Footer ────────────────────────────────────────────────────────────

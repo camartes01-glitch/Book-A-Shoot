@@ -1,7 +1,7 @@
 {
   "name": "camartes-customer",
   "main": "expo-router/entry",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "private": true,
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",

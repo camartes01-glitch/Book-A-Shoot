@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { LogBox, Platform } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
@@ -6,6 +7,35 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProvider, useAppStore } from "@/src/state/AppProvider";
 import { colors } from "@/src/constants/theme";
 import { prefetchAllAppImages } from "@/src/utils/imagePrefetcher";
+
+// Suppress harmless React Native Web touch responder rejection notice
+LogBox.ignoreLogs([
+  "ScrollView doesn't take rejection well - scrolls anyway",
+  "ScrollView doesn't take rejection well",
+]);
+
+if (Platform.OS === "web" && typeof window !== "undefined") {
+  const origError = console.error;
+  const origWarn = console.warn;
+  console.error = (...args: any[]) => {
+    if (
+      typeof args[0] === "string" &&
+      args[0].includes("ScrollView doesn't take rejection well")
+    ) {
+      return;
+    }
+    origError.apply(console, args);
+  };
+  console.warn = (...args: any[]) => {
+    if (
+      typeof args[0] === "string" &&
+      args[0].includes("ScrollView doesn't take rejection well")
+    ) {
+      return;
+    }
+    origWarn.apply(console, args);
+  };
+}
 
 SplashScreen.preventAutoHideAsync();
 SplashScreen.setOptions({ duration: 400, fade: true });

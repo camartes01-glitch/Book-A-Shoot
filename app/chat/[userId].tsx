@@ -8,12 +8,12 @@ import {
   Linking,
   Platform,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { router, useLocalSearchParams } from "expo-router";
 import { ArrowLeft, CheckCheck, Lock, Phone, Send, Sparkles } from "lucide-react-native";
 import {
@@ -107,7 +107,7 @@ class ChatErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <SafeAreaView style={styles.errorBoundaryContainer}>
+        <SafeAreaView style={styles.errorBoundaryContainer} edges={["top", "bottom", "left", "right"]}>
           <View style={styles.errorIconWrap}>
             <Sparkles size={28} color={colors.primary} />
           </View>
@@ -129,6 +129,7 @@ class ChatErrorBoundary extends React.Component<
 }
 
 function ChatScreenInternal() {
+  const insets = useSafeAreaInsets();
   const { bookings } = useAppStore();
 
   const params = useLocalSearchParams<{
@@ -465,7 +466,7 @@ function ChatScreenInternal() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
       {/* Top Header - Strict Brand Orange Styling */}
       <View style={styles.header}>
         <Pressable
@@ -590,7 +591,7 @@ function ChatScreenInternal() {
         )}
 
         {/* Bottom Input Bar - Orange Send Button & Disabled State */}
-        <View style={styles.inputContainer}>
+        <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
           <View style={[styles.inputPill, !isAccepted && styles.inputPillDisabled]}>
             <TextInput
               style={styles.textInput}
