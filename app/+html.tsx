@@ -24,6 +24,20 @@ export default function Root({ children }: PropsWithChildren) {
 
         {/* Reset web ScrollView to prevent duplicate scrollbars */}
         <ScrollViewStyleReset />
+
+        {/* Google tag (gtag.js) */}
+        <script async src="https://www.googletagmanager.com/gtag/js?id=G-GXE7WDJD9N" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+
+              gtag('config', 'G-GXE7WDJD9N');
+            `,
+          }}
+        />
       </head>
       <body>{children}</body>
     </html>
