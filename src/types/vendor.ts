@@ -3,7 +3,7 @@
  *
  * The customer app never owns vendor data. Vendors, services, pricing rules
  * and availability all live on the Camartes Vendor Platform
- * (https://camartes-backend.onrender.com) and are only ever read here via
+ * (https://api.camartes.com) and are only ever read here via
  * `src/services/vendorApi.ts`. See section 2 ("Important Business Rule") and
  * section 25 ("Vendor Matching Engine") of the product spec.
  */
