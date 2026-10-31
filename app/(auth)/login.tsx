@@ -442,13 +442,13 @@ export default function LoginScreen() {
             onChangeText={setEmail}
           />
           <Field
-            label="Mobile number"
+            label="Mobile number (For Venue Coordination)"
             placeholder="98765 43210"
             keyboardType="phone-pad"
             maxLength={10}
             value={phone.replace(/\D/g, "").slice(0, 10)}
             onChangeText={(text) => setPhone(text.replace(/\D/g, "").slice(0, 10))}
-            hint="+91 · 10 digits"
+            hint="Required for your photographer to coordinate on-location arrival and venue access"
           />
           <Field
             label="Password"
