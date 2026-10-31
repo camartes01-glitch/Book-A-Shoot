@@ -36,6 +36,13 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
   author = "Camartes Technologies Private Limited",
   structuredData,
 }) => {
+  // Only render Head / SEO metadata on Web.
+  // On iOS and Android native apps, expo-router/head triggers Apple Handoff / web head alerts
+  // and native mobile apps do not use HTML document head / meta tags.
+  if (Platform.OS !== "web") {
+    return null;
+  }
+
   // Client & SSR canonical determination
   const cleanPath = canonicalPath.startsWith("/")
     ? canonicalPath

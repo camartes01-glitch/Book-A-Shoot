@@ -6,7 +6,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { router, usePathname } from "expo-router";
+import { router, usePathname, useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Camera, Headphones, Home, User } from "lucide-react-native";
 import { colors, fontWeights, spacing } from "@/src/constants/theme";
@@ -20,6 +20,7 @@ export function AppBottomNav() {
   }
 
   const pathname = usePathname();
+  const segments = useSegments();
   const insets = useSafeAreaInsets();
   const { profile } = useAppStore();
 
@@ -28,11 +29,18 @@ export function AppBottomNav() {
     return null;
   }
 
-  // Hide on screens with their own fixed bottom UI (booking wizard, chat, tabs)
+  // Never render when inside the (tabs) group — the tabs navigator has its own CustomBottomNavigation.
+  // useSegments() reliably detects route groups even when usePathname() strips the group prefix.
+  if (segments[0] === "(tabs)") {
+    return null;
+  }
+
+  // Hide on screens with their own fixed bottom UI (booking wizard, chat, auth)
   if (
     pathname.startsWith("/(tabs)") ||
     pathname.startsWith("/booking") ||
-    pathname.startsWith("/chat")
+    pathname.startsWith("/chat") ||
+    pathname.startsWith("/(auth)")
   ) {
     return null;
   }
