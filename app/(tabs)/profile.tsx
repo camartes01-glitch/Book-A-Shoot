@@ -158,7 +158,7 @@ export default function ProfileScreen() {
 
   const performLogout = async () => {
     await logout();
-    router.replace("/(auth)/login");
+    router.replace("/landing");
   };
 
   const onLogout = () => {
@@ -233,7 +233,7 @@ export default function ProfileScreen() {
     setDeletingAccount(true);
     try {
       await deleteAccount();
-      router.replace("/(auth)/login");
+      router.replace("/landing");
     } catch (err: any) {
       setDeleteError(err?.message || "Could not delete your account. Please try again or contact support.");
     } finally {

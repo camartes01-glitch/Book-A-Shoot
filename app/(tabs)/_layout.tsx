@@ -122,7 +122,7 @@ export default function TabsLayout() {
   const unread = notifications.filter((n) => !n.read).length;
 
   useEffect(() => {
-    if (ready && !profile) router.replace("/(auth)/login");
+    if (ready && !profile) router.replace("/landing");
   }, [ready, profile]);
 
   if (!ready || !profile) return null;

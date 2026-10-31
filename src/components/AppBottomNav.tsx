@@ -23,7 +23,12 @@ export function AppBottomNav() {
   const insets = useSafeAreaInsets();
   const { profile } = useAppStore();
 
-  // Hide on screens with their own fixed bottom UI (authenticated tabs, booking wizard, chat)
+  // Never render for signed-in users — authenticated experience uses (tabs) navigation exclusively
+  if (profile) {
+    return null;
+  }
+
+  // Hide on screens with their own fixed bottom UI (booking wizard, chat, tabs)
   if (
     pathname.startsWith("/(tabs)") ||
     pathname.startsWith("/booking") ||
