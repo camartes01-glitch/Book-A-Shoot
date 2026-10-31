@@ -125,33 +125,73 @@ export async function getCurrentLocationDetails(): Promise<CurrentLocationResult
   }
 
   try {
-    const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    let position = await Location.getLastKnownPositionAsync({ maxAge: 600000 }).catch(() => null);
+    if (!position) {
+      position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    }
     const { latitude, longitude } = position.coords;
 
+    // 1. Attempt native reverse geocode
     try {
       const [place] = await Location.reverseGeocodeAsync({ latitude, longitude });
-      if (place) {
+      if (place && (place.city || place.subregion || place.name || place.region)) {
         const city = place.city || place.subregion || place.district || "";
         const state = place.region || "";
         const formatted = [place.name, place.street, city, state, place.postalCode].filter(Boolean).join(", ");
-        return {
-          location: {
-            placeId: null,
-            formattedAddress: formatted,
-            latitude,
-            longitude,
-            city,
-            district: place.subregion || place.district || city,
-            state,
-            pincode: place.postalCode || "",
-            manuallyEdited: false,
-          },
-        };
+        if (formatted.length > 5) {
+          return {
+            location: {
+              placeId: null,
+              formattedAddress: formatted,
+              latitude,
+              longitude,
+              city,
+              district: place.subregion || place.district || city,
+              state,
+              pincode: place.postalCode || "",
+              manuallyEdited: false,
+            },
+          };
+        }
       }
     } catch {
-      // native reverse geocoder unavailable — fall back to nearest known city
+      // native reverse geocoder unavailable on device — proceed to web fallback
     }
 
+    // 2. High-precision Reverse Geocode fallback via OpenStreetMap
+    try {
+      const osmRes = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+        { headers: { "User-Agent": "BookAShoot/1.1.5 (info@bookashoot.online)" } }
+      );
+      if (osmRes.ok) {
+        const osmData = await osmRes.json();
+        if (osmData?.address) {
+          const addr = osmData.address;
+          const city = addr.city || addr.town || addr.village || addr.suburb || addr.county || "";
+          const state = addr.state || "";
+          const pincode = addr.postcode || "";
+          const display = osmData.display_name || [addr.road, city, state, pincode].filter(Boolean).join(", ");
+          return {
+            location: {
+              placeId: null,
+              formattedAddress: display,
+              latitude,
+              longitude,
+              city,
+              district: addr.state_district || addr.county || city,
+              state,
+              pincode,
+              manuallyEdited: false,
+            },
+          };
+        }
+      }
+    } catch {
+      // Fall through to nearest offline city
+    }
+
+    // 3. Offline nearest city dataset fallback
     const nearest = nearestCity(latitude, longitude);
     return {
       location: {

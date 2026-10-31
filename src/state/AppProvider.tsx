@@ -9,6 +9,7 @@ import { runEngineTick, runReplacementTick } from "@/src/services/notificationEn
 import { resolveNotificationRoute } from "@/src/domain/notificationRouting";
 import { buildNotificationContent, categoryForType } from "@/src/domain/notificationContent";
 import { isLocalWizardBooking, selectActiveWizardDraft } from "@/src/domain/bookingRequest";
+import { mergeEventDayPatch } from "@/src/domain/defaults";
 import { isCompletedBooking } from "@/src/domain/bookingFilters";
 import type { BudgetFeasibilityResult } from "@/src/engine/pricing";
 import { router } from "expo-router";
@@ -454,11 +455,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     async (dayId: string | string[], patch: Partial<EventDay>) => {
       const resolved = normalizeRouteParam(dayId);
       const { dayId: _ignoredId, order: _ignoredOrder, ...safePatch } = patch;
+
+      // Immediately sync active draft in memory so UI reflects updates with zero delay
+      if (activeDraftRef.current) {
+        const cur = activeDraftRef.current;
+        const targetDay =
+          (resolved ? cur.days.find((d) => d.dayId === resolved) : null) ??
+          (cur.days.length === 1 ? cur.days[0] : null);
+        if (targetDay) {
+          const merged = mergeEventDayPatch(targetDay, safePatch);
+          const days = cur.days.map((d) => (d.dayId === targetDay.dayId ? merged : d));
+          const updatedDraft = { ...cur, days };
+          activeDraftRef.current = updatedDraft;
+          setActiveDraft(updatedDraft);
+          await bookingApi.saveBooking(updatedDraft);
+        }
+      }
+
       const owner = resolved ? await bookingApi.getBookingContainingDay(resolved) : null;
       const bookingId = owner?.bookingId ?? activeDraftRef.current?.bookingId;
       if (!bookingId) return;
-      const updated = await bookingApi.updateDay(bookingId, resolved, safePatch);
-      upsertLocalBooking(updated);
+      try {
+        const updated = await bookingApi.updateDay(bookingId, resolved, safePatch);
+        upsertLocalBooking(updated);
+      } catch (err) {
+        console.warn("[updateDay] sync fallback:", err);
+      }
     },
     [upsertLocalBooking],
   );

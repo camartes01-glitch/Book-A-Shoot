@@ -738,8 +738,8 @@ export async function updateDay(bookingId: string, dayId: string | string[], pat
         current = owner.days.find((d) => d.dayId === resolvedDayId) ?? null;
       }
     }
-    if (!current && booking?.days.length === 1 && !resolvedDayId) {
-      current = booking.days[0];
+    if (!current && booking?.days && booking.days.length > 0) {
+      current = (resolvedDayId ? booking.days.find((d) => d.dayId === resolvedDayId) : null) ?? (booking.days.length === 1 ? booking.days[0] : null);
     }
     if (!booking || !current) {
       throw new Error("Could not save this event day.");
