@@ -358,12 +358,6 @@ export default function LoginScreen() {
     }
   };
 
-  const onApple = () => {
-    showNotice(
-      "Apple sign-in",
-      "Camartes does not currently expose an Apple sign-in API. Use email or phone and password.",
-    );
-  };
 
   if (!ready || profile) {
     return (
@@ -482,7 +476,7 @@ export default function LoginScreen() {
       <Divider />
 
       <Button
-        label={mode === "signin" ? "Create a Camartes account" : "Already have an account? Sign in"}
+        label={mode === "signin" ? "New User?  Create an account" : "Already have an account?  Sign in"}
         variant="outline"
         disabled={loading}
         onPress={() => {
@@ -496,7 +490,6 @@ export default function LoginScreen() {
         loading={googleBusy}
         onPress={onGoogleSignIn}
       />
-      <Button label="Continue with Apple" variant="ghost" onPress={onApple} />
 
       <GoogleSetupModal
         visible={setupModalVisible}

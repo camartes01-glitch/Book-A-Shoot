@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProvider, useAppStore } from "@/src/state/AppProvider";
 import { colors } from "@/src/constants/theme";
 import { prefetchAllAppImages } from "@/src/utils/imagePrefetcher";
+import { AppBottomNav } from "@/src/components/AppBottomNav";
 
 // Suppress harmless React Native Web touch responder rejection notice
 LogBox.ignoreLogs([
@@ -87,6 +88,7 @@ export default function RootLayout() {
           <Stack.Screen name="events" />
           <Stack.Screen name="+not-found" />
         </Stack>
+        <AppBottomNav />
       </AppProvider>
     </SafeAreaProvider>
   );

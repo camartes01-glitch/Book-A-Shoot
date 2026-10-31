@@ -422,28 +422,30 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
                 <Text style={styles.primaryBookTextPhone}>Book Now</Text>
               </Pressable>
 
-              <Pressable
-                onPress={() => setIsMobileMenuOpen((prev) => !prev)}
-                style={({ pressed }) => [
-                  styles.mobileToggleBtn,
-                  pressed && styles.pressed,
-                ]}
-                accessibilityRole="button"
-                accessibilityLabel="Toggle Navigation Menu"
-              >
-                {isMobileMenuOpen ? (
-                  <X size={22} color={colors.primary} />
-                ) : (
-                  <Menu size={22} color={colors.primary} />
-                )}
-              </Pressable>
+              {Platform.OS === "web" && (
+                <Pressable
+                  onPress={() => setIsMobileMenuOpen((prev) => !prev)}
+                  style={({ pressed }) => [
+                    styles.mobileToggleBtn,
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Toggle Navigation Menu"
+                >
+                  {isMobileMenuOpen ? (
+                    <X size={22} color={colors.primary} />
+                  ) : (
+                    <Menu size={22} color={colors.primary} />
+                  )}
+                </Pressable>
+              )}
             </View>
           )}
         </View>
       </View>
 
-      {/* ── Mobile Accordion Drawer ────────────────────────────────────────── */}
-      {!isWide && isMobileMenuOpen && (
+      {/* ── Mobile Accordion Drawer (Web only) ───────────────────────────── */}
+      {!isWide && Platform.OS === "web" && isMobileMenuOpen && (
         <View style={styles.mobileDrawer}>
           <Pressable
             onPress={goToServices}

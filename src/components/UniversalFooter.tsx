@@ -11,6 +11,7 @@ import React from "react";
 import {
   Image,
   Linking,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -55,6 +56,11 @@ interface UniversalFooterProps {
 }
 
 export function UniversalFooter({ showHqLocation = true }: UniversalFooterProps = {}) {
+  // Hide footer on Android & iOS mobile app versions — CTA section is the end of the page
+  if (Platform.OS !== "web") {
+    return null;
+  }
+
   const { width: W } = useWindowDimensions();
   const isWide = W >= 768;
 
