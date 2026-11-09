@@ -26,6 +26,7 @@ import { GoogleSignInCancelledError } from "@/src/services/googleSignIn";
 import { colors, spacing, touchTarget } from "@/src/constants/theme";
 import { isSupabaseConfigured, supabase } from "@/src/services/supabaseClient";
 import { checkWebSupabaseSession, extractUserInfoFromSupabaseUser, signInWithGoogleViaSupabase } from "@/src/services/supabaseAuth";
+import { trackCompleteRegistration } from "@/src/utils/metaPixel";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -311,6 +312,7 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await signup({ name, email, phone, password: signupPassword });
+      trackCompleteRegistration(email);
       router.replace(resolveAppRoute(returnTarget) as any);
     } catch (e) {
       setError(e instanceof CamartesApiError || e instanceof Error ? e.message : "Could not create the account.");
