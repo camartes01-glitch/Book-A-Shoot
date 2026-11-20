@@ -12,40 +12,26 @@ import { Camera, Headphones, Home, User } from "lucide-react-native";
 import { colors, fontWeights, spacing } from "@/src/constants/theme";
 import { useAppStore } from "@/src/state/AppProvider";
 import { selectionFeedback } from "@/src/utils/haptics";
+import { isMarketingRoute } from "@/src/utils/navRoutes";
 
 export function AppBottomNav() {
-  // Never render on web — web uses executive universal top navbar
-  if (Platform.OS === "web") {
-    return null;
-  }
+  // Web uses the universal top navbar instead.
+  if (Platform.OS === "web") return null;
+  return <NativeBottomNav />;
+}
 
+function NativeBottomNav() {
   const pathname = usePathname();
   const segments = useSegments();
   const insets = useSafeAreaInsets();
   const { profile } = useAppStore();
 
-  // Never render for signed-in users — authenticated experience uses (tabs) navigation exclusively
-  if (profile) {
+  if (!isMarketingRoute(pathname, segments[0])) {
     return null;
   }
 
-  // Never render when inside the (tabs) group — the tabs navigator has its own CustomBottomNavigation.
-  // useSegments() reliably detects route groups even when usePathname() strips the group prefix.
-  if (segments[0] === "(tabs)") {
-    return null;
-  }
-
-  // Hide on screens with their own fixed bottom UI (booking wizard, chat, auth)
-  if (
-    pathname.startsWith("/(tabs)") ||
-    pathname.startsWith("/booking") ||
-    pathname.startsWith("/chat") ||
-    pathname.startsWith("/(auth)")
-  ) {
-    return null;
-  }
-
-  const isHome = pathname === "/" || pathname === "/landing" || pathname === "/index";
+  const isLandingPage = pathname === "/" || pathname === "/landing" || pathname === "/index";
+  const isHome = isLandingPage;
   const isServices = pathname === "/services" || pathname.startsWith("/photographers") || pathname.startsWith("/cinematography");
   const isLogin = pathname.includes("login") || pathname.startsWith("/(auth)");
   const isContact = pathname === "/contact";

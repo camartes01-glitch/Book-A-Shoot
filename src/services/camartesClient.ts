@@ -214,12 +214,21 @@ export async function camartesFetch<T>(
 
   const controller = new AbortController();
   const timeoutMs = opts.timeoutMs ?? 20000;
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
 
   let res: Response;
   try {
     res = await fetch(`${CAMARTES_API}${path}`, { ...init, headers, signal: controller.signal });
   } catch {
+    // 408 = we gave up waiting (the server MAY have processed the request);
+    // 0 = the connection itself failed (the request never reached the server).
+    if (timedOut) {
+      throw new CamartesApiError("Camartes is taking too long to respond. Please try again.", 408);
+    }
     throw new CamartesApiError("Couldn't reach Camartes. Check your connection and try again.", 0);
   } finally {
     clearTimeout(timeoutId);

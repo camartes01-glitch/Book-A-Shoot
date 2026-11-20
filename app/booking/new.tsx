@@ -16,7 +16,6 @@ export default function BookingDaysScreen() {
   const [singleDayNotice, setSingleDayNotice] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const continueLock = useRef(false);
   const addLock = useRef(false);
 
   useEffect(() => {
@@ -33,8 +32,8 @@ export default function BookingDaysScreen() {
       Alert.alert("Finish your event details", issues[0].message);
       return;
     }
-    if (continueLock.current) return;
-    continueLock.current = true;
+    // Stack `getId` singletons make a repeated push harmless; no sticky lock
+    // (the old one was never released, freezing Continue after going back).
     router.push("/booking/deliverables");
   };
 
@@ -74,9 +73,11 @@ export default function BookingDaysScreen() {
             onPress={() => {
               if (addLock.current) return;
               addLock.current = true;
-              void addDay().finally(() => {
-                addLock.current = false;
-              });
+              void addDay()
+                .catch((e) => Alert.alert("Couldn't add a day", e instanceof Error ? e.message : "Please try again."))
+                .finally(() => {
+                  addLock.current = false;
+                });
             }}
           />
           <Button label="Continue" flex={1} onPress={onContinue} disabled={!canContinue} />

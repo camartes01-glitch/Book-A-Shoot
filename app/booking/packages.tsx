@@ -6,6 +6,8 @@ import { Button, Muted } from "@/src/components/ui";
 import { useAppStore } from "@/src/state/AppProvider";
 import type { PackageTierId } from "@/src/types/booking";
 import { resolvePackageOptions, bookingPricingInputKey } from "@/src/engine/pricing";
+import { goBackTo } from "@/src/utils/wizardNav";
+import { colors } from "@/src/constants/theme";
 
 export default function PackagesScreen() {
   const params = useLocalSearchParams<{ mode?: string }>();
@@ -18,59 +20,41 @@ export default function PackagesScreen() {
   const options = useMemo(
     () => (activeDraft ? resolvePackageOptions(activeDraft) : []),
     // pricingKey changes whenever services, add-ons, days, times, or budget change.
-    [activeDraft, pricingKey],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pricingKey],
   );
 
   useEffect(() => {
-    setSelected(activeDraft?.selectedPackage ?? null);
+    if (activeDraft?.selectedPackage) setSelected(activeDraft.selectedPackage);
   }, [activeDraft?.selectedPackage]);
 
-  const onSelectPackage = async (tier: PackageTierId) => {
+  const [error, setError] = useState<string | null>(null);
+
+  // Selection is local until Continue — no storage write on every tap.
+  const onSelectPackage = (tier: PackageTierId) => {
     setSelected(tier);
-    try {
-      await selectPackage(tier);
-    } catch {
-      // non-blocking optimistic update
-    }
+    setError(null);
   };
 
-  const onContinue = async () => {
+  const commit = async (then: () => void) => {
     if (!selected || transitionLockRef.current) return;
     transitionLockRef.current = true;
     setLoading(true);
+    setError(null);
     try {
       await selectPackage(selected);
-      router.push("/booking/location-preference");
+      then();
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : "Could not save your package. Please try again.");
     } finally {
+      transitionLockRef.current = false;
       setLoading(false);
-      setTimeout(() => {
-        transitionLockRef.current = false;
-      }, 500);
     }
   };
 
-  const onSaveAndReturn = async () => {
-    if (!selected || transitionLockRef.current) return;
-    transitionLockRef.current = true;
-    setLoading(true);
-    try {
-      await selectPackage(selected);
-      router.replace("/booking/confirm");
-    } finally {
-      setLoading(false);
-      setTimeout(() => {
-        transitionLockRef.current = false;
-      }, 500);
-    }
-  };
-
-  const onBack = () => {
-    if (isEditMode) {
-      router.replace("/booking/confirm");
-    } else {
-      router.push("/booking/budget");
-    }
-  };
+  const onContinue = () => commit(() => router.push("/booking/location-preference"));
+  const onSaveAndReturn = () => commit(() => goBackTo("/booking/confirm"));
+  const onBack = () => goBackTo(isEditMode ? "/booking/confirm" : "/booking/budget");
 
   return (
     <WizardScreen
@@ -86,15 +70,17 @@ export default function PackagesScreen() {
       }
     >
       <Muted>
-        Essential is BASIC, Signature is MEDIUM, Elite is HIGH. Each overall price is the combined approved range for every service and add-on you selected, across every event day. It is not your budget and not a provider quote.
+        Each price is the combined approved range for everything you selected, across all event days — not your budget and not a final quote.
       </Muted>
+
+      {error ? <Muted style={{ color: colors.danger }}>{error}</Muted> : null}
 
       {options.map((pkg) => (
         <PackageTierCard
           key={pkg.id}
           pkg={pkg}
           selected={selected === pkg.id}
-          onSelect={() => void onSelectPackage(pkg.id)}
+          onSelect={() => onSelectPackage(pkg.id)}
           days={activeDraft?.days}
           deliverables={activeDraft?.deliverables}
         />

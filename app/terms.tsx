@@ -5,6 +5,7 @@
  */
 
 import React, { useMemo } from "react";
+import { LANDING_ROUTE } from "@/src/utils/landingRoute";
 import {
   Image,
   Pressable,
@@ -21,6 +22,7 @@ import { SEOHead } from "@/src/components/SEOHead";
 import { ArrowLeft } from "lucide-react-native";
 import { colors, radius, spacing } from "@/src/constants/theme";
 import { TERMS_AND_CONDITIONS_TEXT } from "@/src/constants/termsAndConditions";
+import { headingProps } from "@/src/components/seo/SeoBlocks";
 
 type BlockType =
   | "title"
@@ -47,7 +49,7 @@ export default function TermsPage() {
   const insets = useSafeAreaInsets();
   const isWide = W >= 768;
 
-  const goToHome = () => router.push("/");
+  const goToHome = () => router.push(LANDING_ROUTE as any);
 
   React.useEffect(() => {
     if (typeof document !== "undefined") {
@@ -146,7 +148,7 @@ export default function TermsPage() {
 
                 case "title":
                   return (
-                    <Text key={block.key} selectable style={styles.title}>
+                    <Text key={block.key} selectable {...headingProps(1)} style={styles.title}>
                       {block.content}
                     </Text>
                   );

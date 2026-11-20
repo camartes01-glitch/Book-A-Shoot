@@ -2,13 +2,14 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import type { AppNotification, Booking, EventDay, PackageTierId, ProviderLocationPreference } from "@/src/types/booking";
 import type { CustomerProfile } from "@/src/types/booking";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AppState } from "react-native";
 import * as authApi from "@/src/services/authApi";
 import * as bookingApi from "@/src/services/bookingApi";
 import { addNotification, getNotifications, markAllRead, deleteNotification as deleteNotificationStore, deleteNotifications as deleteNotificationsStore, clearAllNotifications as clearAllNotificationsStore, subscribeNotifications } from "@/src/services/notificationsStore";
 import { runEngineTick, runReplacementTick } from "@/src/services/notificationEngine";
 import { resolveNotificationRoute } from "@/src/domain/notificationRouting";
 import { buildNotificationContent, categoryForType } from "@/src/domain/notificationContent";
-import { isLocalWizardBooking, selectActiveWizardDraft } from "@/src/domain/bookingRequest";
+import { getDraftResumeRoute, isLocalWizardBooking, selectActiveWizardDraft } from "@/src/domain/bookingRequest";
 import { mergeEventDayPatch } from "@/src/domain/defaults";
 import { isCompletedBooking } from "@/src/domain/bookingFilters";
 import type { BudgetFeasibilityResult } from "@/src/engine/pricing";
@@ -23,6 +24,16 @@ import { normalizeRouteParam } from "@/src/utils/routeParam";
 import { makeId } from "@/src/utils/id";
 
 const WELCOME_SHOWN_KEY_PREFIX = "camartes-customer:welcome_shown:";
+
+/** Notification types delivered by a pre-scheduled OS notification. */
+const OS_SCHEDULED_TYPES = new Set<string>(["draft_resume_nudge", "draft_followup_nudge", "event_reminder", "marketing_nudge"]);
+
+/** Cheap change-detector for the bookings list (every save bumps updatedAt). */
+function bookingListSignature(list: Booking[]): string {
+  return list
+    .map((b) => `${b.bookingId}|${b.updatedAt}|${b.status}|${b.remoteStatus ?? ""}|${b.assigned_photographers?.length ?? 0}`)
+    .join(",");
+}
 
 async function maybeSendWelcomeNotification(profile: CustomerProfile): Promise<void> {
   const key = `${WELCOME_SHOWN_KEY_PREFIX}${profile.customerId}`;
@@ -52,9 +63,7 @@ type AppContextValue = {
   profile: CustomerProfile | null;
   login: (emailOrPhone: string, password: string) => Promise<void>;
   signup: (input: { name: string; email: string; phone: string; password: string }) => Promise<void>;
-  loginWithGoogle: (
-    idTokenOrUserInfo: string | { google_id: string; email: string; name: string; picture?: string | null },
-  ) => Promise<CustomerProfile>;
+  loginWithGoogle: (idToken: string, nonce?: string) => Promise<CustomerProfile>;
   logout: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   updateProfile: (patch: Partial<CustomerProfile>) => Promise<void>;
@@ -80,6 +89,8 @@ type AppContextValue = {
   loadVendorMatches: () => Promise<void>;
   selectVendor: (vendorId: string) => Promise<void>;
   submitVendorRequest: () => Promise<Booking>;
+  /** Saves edits to an already-sent request (same id; its photographers are notified). */
+  updateSentRequest: () => Promise<{ booking: Booking; updated: boolean; notifiedCount: number }>;
   respondToCounterOffer: (action: "accept" | "decline") => Promise<void>;
   confirmBooking: () => Promise<void>;
   confirmPhotographer: (bookingId: string, providerId: string) => Promise<Booking>;
@@ -111,6 +122,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const seenNotifIdsRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
   const activeDraftRef = useRef<Booking | null>(null);
+  /** Monotonic counter so only the latest day save publishes its result. */
+  const daySaveSeqRef = useRef(0);
   const bookingsRef = useRef<Booking[]>(bookings);
   const profileRef = useRef<CustomerProfile | null>(profile);
   useEffect(() => {
@@ -141,7 +154,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const current = await authApi.getStoredProfile();
     if (!current) return;
     const list = await bookingApi.listBookings(current.customerId);
-    setBookings(list);
+    // Skip the state update (and a full re-render of every booking screen)
+    // when nothing actually changed since the last poll.
+    setBookings((prev) => (bookingListSignature(prev) === bookingListSignature(list) ? prev : list));
     setActiveDraft((prev) => {
       if (prev) {
         const updated = list.find(
@@ -216,9 +231,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500)),
         ]);
         if (cancelled) return;
-        setProfile(stored);
-        if (stored) {
-          await adoptAuthenticatedBookings(stored.customerId);
+        // A slow network must not sign the customer out: keep the cached
+        // profile when session restore times out.
+        const effective = stored ?? cachedProfile ?? null;
+        setProfile(effective);
+        if (effective) {
+          await adoptAuthenticatedBookings(effective.customerId);
         }
         if (!cancelled) setNotifications(await getNotifications());
       } catch {
@@ -236,14 +254,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => subscribeNotifications(() => void refreshNotifications()), [refreshNotifications]);
 
+  // Tapping a draft reminder (OS banner or in-app toast) must open THAT draft,
+  // not whichever draft happens to be active.
+  const openDraftFromNotification = useCallback(async (notif: AppNotification): Promise<boolean> => {
+    if (notif.type !== "draft_resume_nudge" && notif.type !== "draft_followup_nudge") return false;
+    const bookingId = notif.bookingId || (notif.data?.booking_id as string | undefined);
+    if (!bookingId) return false;
+    const draft = await bookingApi.getBooking(bookingId);
+    if (!draft || !isLocalWizardBooking(draft)) {
+      router.push({ pathname: "/bookings/[bookingId]", params: { bookingId } });
+      return true;
+    }
+    activeDraftRef.current = draft;
+    setActiveDraft(draft);
+    router.push(getDraftResumeRoute(draft) as any);
+    return true;
+  }, []);
+
+  useEffect(() => {
+    pushNotificationService.setTapHandler(openDraftFromNotification);
+    return () => pushNotificationService.setTapHandler(null);
+  }, [openDraftFromNotification]);
+
   // Push notifications initialization
   useEffect(() => {
     pushNotificationService.init(profile?.customerId).catch(() => {});
   }, [profile?.customerId]);
 
-  // Periodic polling for notifications every 12 seconds
+  // Periodic polling for notifications every 12 seconds (foreground only — the
+  // OS push channel covers the background; polling there just drains battery
+  // and loads the backend). Overlapping polls are skipped, never stacked.
   useEffect(() => {
+    let inFlight = false;
     const poll = async () => {
+      if (inFlight || AppState.currentState !== "active") return;
+      inFlight = true;
       try {
         if (profileRef.current) {
           await refreshBookings();
@@ -266,16 +311,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setActiveToastNotification(newest);
           selectionFeedback().catch(() => {});
 
-          // Trigger system banner & sound so alerts appear even when phone is locked or app is minimized
-          void pushNotificationService.presentLocalNotification(newest.title, newest.body, {
-            sender_id: newest.userId || newest.firmId,
-            sender_name: newest.firmName,
-            booking_id: newest.bookingId,
-            type: newest.type,
-          });
+          // System banner for live updates. Reminder types are delivered by
+          // their own OS schedule (they fire even with the app closed), so
+          // presenting them again here would show the customer a duplicate.
+          if (!newest.type || !OS_SCHEDULED_TYPES.has(newest.type)) {
+            void pushNotificationService.presentLocalNotification(newest.title, newest.body, {
+              sender_id: newest.userId || newest.firmId,
+              sender_name: newest.firmName,
+              booking_id: newest.bookingId,
+              type: newest.type,
+            });
+          }
         }
       } catch {
         // Ignore network poll errors
+      } finally {
+        inFlight = false;
       }
     };
 
@@ -329,9 +380,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (notif.id) {
       void markNotificationRead(notif.id);
     }
+    if (notif.type === "draft_resume_nudge" || notif.type === "draft_followup_nudge") {
+      void openDraftFromNotification(notif);
+      return;
+    }
     const route = resolveNotificationRoute(notif, bookingsRef.current);
     router.push(route.params ? { pathname: route.pathname as any, params: route.params } : (route.pathname as any));
-  }, []);
+  }, [openDraftFromNotification]);
 
   const login = useCallback(
     async (emailOrPhone: string, password: string) => {
@@ -354,8 +409,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const loginWithGoogle = useCallback(
-    async (idTokenOrUserInfo: string | { google_id: string; email: string; name: string; picture?: string | null }) => {
-      const result = await authApi.loginWithGoogle(idTokenOrUserInfo);
+    async (idToken: string, nonce?: string) => {
+      const result = await authApi.loginWithGoogle(idToken, nonce);
       setProfile(result);
       await adoptAuthenticatedBookings(result.customerId);
       void maybeSendWelcomeNotification(result);
@@ -455,32 +510,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     async (dayId: string | string[], patch: Partial<EventDay>) => {
       const resolved = normalizeRouteParam(dayId);
       const { dayId: _ignoredId, order: _ignoredOrder, ...safePatch } = patch;
+      const seq = ++daySaveSeqRef.current;
 
-      // Immediately sync active draft in memory so UI reflects updates with zero delay
-      if (activeDraftRef.current) {
-        const cur = activeDraftRef.current;
-        const targetDay =
-          (resolved ? cur.days.find((d) => d.dayId === resolved) : null) ??
-          (cur.days.length === 1 ? cur.days[0] : null);
-        if (targetDay) {
-          const merged = mergeEventDayPatch(targetDay, safePatch);
-          const days = cur.days.map((d) => (d.dayId === targetDay.dayId ? merged : d));
-          const updatedDraft = { ...cur, days };
-          activeDraftRef.current = updatedDraft;
-          setActiveDraft(updatedDraft);
-          await bookingApi.saveBooking(updatedDraft);
-        }
+      // 1. Optimistic in-memory update so the UI reflects the change instantly.
+      //    updatedAt is bumped so a background refresh that started earlier can
+      //    never replace this newer draft with its older snapshot.
+      const cur = activeDraftRef.current;
+      const targetDay = cur
+        ? resolved
+          ? cur.days.find((d) => d.dayId === resolved) ?? null
+          : cur.days.length === 1
+            ? cur.days[0]
+            : null
+        : null;
+      if (cur && targetDay) {
+        const merged = mergeEventDayPatch(targetDay, safePatch);
+        const optimistic: Booking = {
+          ...cur,
+          days: cur.days.map((d) => (d.dayId === targetDay.dayId ? merged : d)),
+          updatedAt: new Date().toISOString(),
+        };
+        activeDraftRef.current = optimistic;
+        setActiveDraft(optimistic);
       }
 
-      const owner = resolved ? await bookingApi.getBookingContainingDay(resolved) : null;
-      const bookingId = owner?.bookingId ?? activeDraftRef.current?.bookingId;
-      if (!bookingId) return;
-      try {
-        const updated = await bookingApi.updateDay(bookingId, resolved, safePatch);
-        upsertLocalBooking(updated);
-      } catch (err) {
-        console.warn("[updateDay] sync fallback:", err);
-      }
+      // 2. One atomic, serialized persist. The pre-patch draft is passed as a
+      //    seed so the save self-heals if storage lost the booking.
+      const bookingId = cur?.bookingId ?? (resolved ? (await bookingApi.getBookingContainingDay(resolved))?.bookingId : null);
+      if (!bookingId) throw new Error("No active booking draft.");
+      // Seed only when the day really belongs to the active draft.
+      const saved = await bookingApi.updateDay(bookingId, resolved || targetDay?.dayId || "", safePatch, targetDay ? cur : null);
+      // A newer edit started while this one was saving: its own save will
+      // publish the final state — don't flash this intermediate one.
+      if (seq !== daySaveSeqRef.current) return;
+      if (activeDraftRef.current?.bookingId === saved.bookingId) activeDraftRef.current = saved;
+      upsertLocalBooking(saved);
     },
     [upsertLocalBooking],
   );
@@ -553,6 +617,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return withDraft((id) => bookingApi.submitVendorRequest(id));
   }, [withDraft]);
 
+  const updateSentRequest = useCallback(async () => {
+    const current = activeDraftRef.current;
+    if (!current) throw new Error("No active booking draft.");
+    const result = await bookingApi.updateSentRequest(current.bookingId);
+    upsertLocalBooking(result.booking);
+    void refreshBookings();
+    return result;
+  }, [upsertLocalBooking, refreshBookings]);
+
   const respondToCounterOffer = useCallback(
     async (action: "accept" | "decline") => {
       await withDraft((id) => bookingApi.respondToCounterOffer(id, action));
@@ -566,7 +639,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const confirmPhotographer = useCallback(
     async (bookingId: string, providerId: string) => {
-      // 1. Instant optimistic update across all bookings in store (0ms)
+      // 1. Instant optimistic update across all bookings in store (0ms);
+      //    rolled back below if the server refuses.
+      const previous = bookingsRef.current.find((b) => b.bookingId === bookingId || b.remoteBookingId === bookingId);
       setBookings((list) =>
         list.map((b) => {
           if (b.bookingId !== bookingId && b.remoteBookingId !== bookingId) return b;
@@ -604,8 +679,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }),
       );
 
-      // 2. Persist locally and sync remote
-      const updated = await bookingApi.confirmPhotographer(bookingId, providerId);
+      // 2. Confirm on the server, then persist locally
+      let updated: Booking;
+      try {
+        updated = await bookingApi.confirmPhotographer(bookingId, providerId);
+      } catch (err) {
+        if (previous) upsertLocalBooking(previous);
+        throw err;
+      }
       upsertLocalBooking(updated);
 
       // 3. Non-blocking background refresh so UI never blocks
@@ -676,12 +757,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const searchAgainBooking = useCallback(
     async (booking: Booking) => {
+      // Expired / finished searches restart on the SAME request (fresh 24 hours).
+      if (bookingApi.canRestartSearchRemotely(booking)) {
+        const { booking: restarted } = await bookingApi.restartSearch(booking.bookingId);
+        upsertLocalBooking(restarted);
+        void refreshBookings();
+        return restarted;
+      }
       const draft = await bookingApi.cloneBookingForSearchAgain(booking);
       setActiveDraft(draft);
       await refreshBookings();
       return draft;
     },
-    [refreshBookings],
+    [refreshBookings, upsertLocalBooking],
   );
 
   const markNotificationsRead = useCallback(async () => {
@@ -735,6 +823,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       loadVendorMatches,
       selectVendor,
       submitVendorRequest,
+      updateSentRequest,
       respondToCounterOffer,
       confirmBooking,
       confirmPhotographer,
@@ -780,6 +869,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       loadVendorMatches,
       selectVendor,
       submitVendorRequest,
+      updateSentRequest,
       respondToCounterOffer,
       confirmBooking,
       confirmPhotographer,

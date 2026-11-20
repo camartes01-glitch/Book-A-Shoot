@@ -5,6 +5,7 @@
  */
 
 import React from "react";
+import { LANDING_ROUTE } from "@/src/utils/landingRoute";
 import {
   Image,
   Linking,
@@ -38,6 +39,7 @@ import {
   Zap,
 } from "lucide-react-native";
 import { colors, radius, spacing } from "@/src/constants/theme";
+import { headingProps } from "@/src/components/seo/SeoBlocks";
 
 const PILLARS = [
   {
@@ -98,7 +100,7 @@ export default function AboutPage() {
   const isWide = W >= 768;
 
   const goToLogin = () => router.push("/(auth)/login");
-  const goToHome = () => router.push("/");
+  const goToHome = () => router.push(LANDING_ROUTE as any);
   const goToServices = () => router.push("/services");
   const openPartner = () => Linking.openURL("https://camartes.com");
 
@@ -156,7 +158,7 @@ export default function AboutPage() {
             {/* Rich scrim overlay for crisp contrast */}
             <View style={styles.phoneHeroOverlay} />
             <View style={styles.phoneHeroContent}>
-              <Text style={styles.phoneHeroHeading}>
+              <Text {...headingProps(1)} style={styles.phoneHeroHeading}>
                 Transforming Event Photography Through Trust & Technology
               </Text>
               <Text style={styles.phoneHeroSub}>
@@ -184,7 +186,7 @@ export default function AboutPage() {
           </View>
         ) : (
           <View style={[styles.heroSection, styles.heroSectionWide]}>
-            <Text style={[styles.heroHeading, styles.heroHeadingWide]}>
+            <Text {...headingProps(1)} style={[styles.heroHeading, styles.heroHeadingWide]}>
               Transforming Event Photography Through Trust & Technology
             </Text>
 

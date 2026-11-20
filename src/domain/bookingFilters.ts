@@ -267,6 +267,8 @@ export function canSearchAgain(b: Booking): boolean {
     return false;
   }
 
+  if (b.canSearchAgainRemote === true) return true;
+
   const status = getEffectiveBookingStatus(b);
   if (
     status === "EXPIRED" ||

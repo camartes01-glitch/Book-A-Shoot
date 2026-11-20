@@ -297,8 +297,12 @@ describe("custom budget processing and Enter key support", () => {
     const budgetSource = fs.readFileSync(path.resolve(__dirname, "../../../app/booking/budget.tsx"), "utf8");
     expect(budgetSource).toContain('returnKeyType="done"');
     expect(budgetSource).toContain("onSubmitEditing");
-    expect(budgetSource).toContain('onKeyDown');
+    // onSubmitEditing already handles Enter on web; a second onKeyDown handler
+    // double-submitted and stacked duplicate screens.
+    expect(budgetSource).not.toContain("onKeyDown:");
     expect(budgetSource).toContain('label="Enter"');
+    // Every submit path goes through one single-flight guard.
+    expect(budgetSource).toContain("busyRef.current");
   });
 
   test("ui.tsx Field component supports rightElement slot", () => {

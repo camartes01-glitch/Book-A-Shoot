@@ -103,9 +103,10 @@
     }
   ],
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/booking/day/:dayId/location", "destination": "/booking/day/[dayId]/location" },
+    { "source": "/booking/day/:dayId", "destination": "/booking/day/[dayId]" },
+    { "source": "/booking/vendor/:vendorId", "destination": "/booking/vendor/[vendorId]" },
+    { "source": "/bookings/:bookingId", "destination": "/bookings/[bookingId]" },
+    { "source": "/chat/:userId", "destination": "/chat/[userId]" }
   ]
 }

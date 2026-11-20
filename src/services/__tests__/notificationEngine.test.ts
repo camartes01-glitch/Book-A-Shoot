@@ -6,6 +6,7 @@ jest.mock("@/src/services/pushNotificationService", () => ({
     cancelScheduledNotification: jest.fn().mockResolvedValue(undefined),
     scheduleRepeatingEveryDays: jest.fn().mockResolvedValue(undefined),
     hasScheduled: jest.fn().mockResolvedValue(false),
+    cancelScheduledWhere: jest.fn().mockResolvedValue(0),
   },
 }));
 

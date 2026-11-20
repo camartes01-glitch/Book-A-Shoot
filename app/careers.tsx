@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useRef } from "react";
+import { LANDING_ROUTE } from "@/src/utils/landingRoute";
 import {
   ActivityIndicator,
   Image,
@@ -44,6 +45,7 @@ import { SEOHead } from "@/src/components/SEOHead";
 import { createBreadcrumbSchema } from "@/src/constants/seoSchemas";
 import { colors, radius, spacing } from "@/src/constants/theme";
 import { CAMARTES_API } from "@/src/services/camartesClient";
+import { headingProps } from "@/src/components/seo/SeoBlocks";
 
 const DISCIPLINES = [
   "Engineering & Tech",
@@ -99,7 +101,7 @@ export default function CareersPage() {
   const [submitted, setSubmitted] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  const goToHome = () => router.push("/");
+  const goToHome = () => router.push(LANDING_ROUTE as any);
   const goToServices = () => router.push("/services");
   const goToAbout = () => router.push("/about");
   const goToContact = () => router.push("/contact");
@@ -264,7 +266,7 @@ export default function CareersPage() {
           {/* Centered Hero Content directly on the image */}
           <View style={[styles.heroContent, isWide && styles.heroContentWide]}>
             {/* Main Heading in PLAIN BRAND ORANGE */}
-            <Text style={[styles.heroTitle, !isWide && styles.heroTitlePhone]}>
+            <Text {...headingProps(1)} style={[styles.heroTitle, !isWide && styles.heroTitlePhone]}>
               Work With Us.
             </Text>
 

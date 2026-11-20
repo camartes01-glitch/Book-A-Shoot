@@ -4,6 +4,8 @@ import { bookingRequirementPayload, selectedAddOnLabels, selectedCoreServiceLabe
 import { DEFAULT_EVENT_CATEGORIES, eventTypeLabels } from "@/src/constants/eventCategories";
 import { selectedPackageQuote } from "@/src/engine/pricing";
 import { formatInrRange, formatTime12h } from "@/src/utils/format";
+import { citySpellings, resolveProviderSearchTarget } from "@/src/domain/cityResolution";
+import { toCamartesReelsRequest } from "@/src/domain/reelsRequest";
 
 /** Masking helper for phone numbers */
 export function maskPhoneNumber(phone: string | null | undefined): string {
@@ -31,7 +33,8 @@ export function maskEmail(email: string | null | undefined): string {
 export type CamartesBookingRequest = {
   client_booking_id?: string;
   booking_id?: string;
-  provider_id: string;
+  /** null for CamReels: the backend chooses the videographers. */
+  provider_id: string | null;
   provider_profile_id: string | null;
   assigned_provider_ids?: string[];
   lead_broadcast?: boolean;
@@ -51,11 +54,15 @@ export type CamartesBookingRequest = {
   expected_delivery_date?: string | null;
   customer_id?: string | null;
   client_profile_id?: string | null;
+  /** `city` = the city whose photographers receive the request (provider
+   * preference aware); `cityAliases` = other spellings of it (Bangalore /
+   * Bengaluru) so exact-string matching on the server can't miss firms. */
   location_preference?: {
     type?: string;
     mode?: string;
     city?: string;
     formattedAddress?: string;
+    cityAliases?: string[];
   } | null;
   lead_details?: {
     source?: string;
@@ -63,6 +70,10 @@ export type CamartesBookingRequest = {
     header?: string;
     eventType: string;
     city: string;
+    dispatchCity?: string;
+    dispatchCityAliases?: string[];
+    eventCity?: string;
+    providerLocationMode?: string;
     venueAddress: string;
     packageTier: string | null;
     services: string[];
@@ -74,6 +85,10 @@ export type CamartesBookingRequest = {
     clientName?: string | null;
     clientContactMasked?: boolean;
     days?: any[];
+    /** "camreels" for CamReels requests (backend routes them to videographers only). */
+    segment?: string;
+    /** CamReels brief: machine fields (tierId, editingId, reelCount, planId) + display fields. */
+    reels?: Record<string, unknown>;
   };
 };
 
@@ -97,6 +112,10 @@ export function toCamartesBookingRequest(booking: Booking, profile: CustomerProf
     ? booking.assignedProviderIds
     : (booking.matches?.slice(0, 6).map((m) => m.vendorId) ?? []);
   const primaryId = booking.selectedVendorId || assignedIds[0];
+  if (booking.reels) {
+    // CamReels: the Camartes backend picks eligible videographers itself.
+    return toCamartesReelsRequest(booking, profile, assignedIds, primaryId || null);
+  }
   if (!primaryId) {
     throw new Error("Select a service provider or match providers first.");
   }
@@ -191,24 +210,26 @@ export function toCamartesBookingRequest(booking: Booking, profile: CustomerProf
   const addOns = Array.from(new Set(days.flatMap((d) => selectedAddOnLabels(d))));
   const eventType = eventTypes.join(" · ") || "Photography Shoot";
   const venueAddress = first?.location?.formattedAddress || first?.location?.city || "Event Location";
-  const city = first?.location?.city || booking.providerLocationPreference?.city || "Bangalore";
+  const eventCity = (first?.location?.city || "").trim();
+  // Dispatch city = the city whose photographers receive this request
+  // (customer's "another city" choice, else the event's city). Same rule as
+  // matching, via resolveProviderSearchTarget, so they can never disagree.
+  const target = resolveProviderSearchTarget(booking);
+  const city = target.city || eventCity;
+  if (!city) {
+    throw new Error("Set your event location (with a city) before sending a request.");
+  }
   const packageTier = quoted?.label || (booking.selectedPackage ? booking.selectedPackage.toUpperCase() : "Premium");
   const formattedStartTime = first?.startTime ? (first.startTime.includes("M") ? first.startTime : formatTime12h(first.startTime)) : "10:00 AM";
 
   const locPref = booking.providerLocationPreference;
-  const locationPrefObj = locPref
-    ? {
-        type: locPref.mode === "preferred_area" ? "specific_area" : locPref.mode === "another_area" ? "another_city" : "near_event",
-        mode: locPref.mode,
-        city: locPref.city || city,
-        formattedAddress: locPref.formattedAddress || venueAddress,
-      }
-    : {
-        type: "near_event",
-        mode: "event_location",
-        city,
-        formattedAddress: venueAddress,
-      };
+  const prefMode = locPref?.mode ?? "event_location";
+  const locationPrefObj = {
+    type: prefMode === "preferred_area" ? "specific_area" : prefMode === "another_area" ? "another_city" : "near_event",
+    mode: prefMode,
+    city,
+    formattedAddress: prefMode === "event_location" ? venueAddress : locPref?.formattedAddress || city,
+  };
 
   return {
     client_booking_id: booking.bookingId,
@@ -231,13 +252,17 @@ export function toCamartesBookingRequest(booking: Booking, profile: CustomerProf
     budget: booking.budget != null ? String(booking.budget) : null,
     deliverables: deliverablesSummary,
     expected_delivery_date: booking.expectedDeliveryDate || null,
-    location_preference: locationPrefObj,
+    location_preference: { ...locationPrefObj, cityAliases: citySpellings(city) },
     lead_details: {
       source: "book_a_shoot",
       channel: "book_a_shoot",
       header: "Book A Shoot",
       eventType,
       city,
+      dispatchCity: city,
+      dispatchCityAliases: citySpellings(city),
+      eventCity: eventCity || city,
+      providerLocationMode: prefMode,
       venueAddress,
       packageTier,
       services: detailedServices.length ? detailedServices : (cores.length ? cores : ["Candid Photography"]),
@@ -264,7 +289,7 @@ export function toCamartesBookingRequest(booking: Booking, profile: CustomerProf
         endTime: d.endTime ? formatTime12h(d.endTime) : null,
         overnight: d.overnight,
         venueAddress: d.location?.formattedAddress || d.location?.city || venueAddress,
-        city: d.location?.city || city,
+        city: (d.location?.city || "").trim() || eventCity || city,
         services: selectedDetailedServiceLabels(d),
         photography: d.photography,
         videography: d.videography,
@@ -353,6 +378,11 @@ export type RemoteBookingSnapshot = {
   services?: string[];
   message?: string | null;
   leadDetails?: Record<string, unknown> | null;
+  searchCycle?: number;
+  searchEndsAt?: string | null;
+  searchWindowClosed?: boolean;
+  canSearchAgain?: boolean;
+  lastEditedAt?: string | null;
 };
 
 function stringField(row: Record<string, unknown>, keys: string[]): string | null {
@@ -373,7 +403,7 @@ function parseAssignedPhotographers(raw: unknown): AssignedPhotographer[] | unde
       if (!providerId) return null;
       const name = stringField(r, ["business_name", "businessName", "studio_name", "studioName", "firm_name", "firmName", "name", "display_name", "full_name", "fullName"]) || "Photography Firm";
       const rating = typeof r.rating === "number" ? r.rating : (typeof r.avg_rating === "number" ? r.avg_rating : 4.8);
-      const city = stringField(r, ["city", "location"]) || "Bangalore";
+      const city = stringField(r, ["city", "location"]) || "";
       const profileImage = stringField(r, ["profile_image", "profileImage", "image_url", "imageUrl", "avatar"]);
       const hasAccepted = Boolean(r.has_accepted ?? r.hasAccepted ?? r.accepted);
       const hasRejected = Boolean(r.has_rejected ?? r.hasRejected);
@@ -545,6 +575,11 @@ export function parseRemoteBookingRow(payload: unknown): RemoteBookingSnapshot |
     services,
     message,
     leadDetails,
+    searchCycle: typeof row.search_cycle === "number" ? row.search_cycle : undefined,
+    searchEndsAt: stringField(row, ["search_ends_at"]),
+    searchWindowClosed: typeof row.search_window_closed === "boolean" ? row.search_window_closed : undefined,
+    canSearchAgain: typeof row.can_search_again === "boolean" ? row.can_search_again : undefined,
+    lastEditedAt: stringField(row, ["last_edited_at"]),
   };
 }
 
@@ -563,6 +598,16 @@ export function parseRemoteBookingList(payload: unknown): RemoteBookingSnapshot[
   return [];
 }
 
+/**
+ * A request that has already been sent to photographers. Editing one updates
+ * that same request (same id, same firms) instead of sending a new one.
+ */
+export function isSentRequest(booking: Pick<Booking, "status" | "remoteBookingId" | "bookingId"> | null | undefined): boolean {
+  if (!booking?.remoteBookingId) return false;
+  if (booking.bookingId?.startsWith("draft")) return false;
+  return !isLocalWizardBooking(booking) && booking.status !== "DRAFT";
+}
+
 export function isLocalWizardBooking(booking: Pick<Booking, "status" | "remoteBookingId">): boolean {
   if (booking.remoteBookingId) return false;
   return booking.status === "DRAFT" || booking.status === "SUBMITTED" || booking.status === "MATCHING" || booking.status === "VENDOR_SELECTED";
@@ -573,7 +618,8 @@ export function isLocalWizardBooking(booking: Pick<Booking, "status" | "remoteBo
 export function selectActiveWizardDraft<T extends Pick<Booking, "status" | "remoteBookingId" | "updatedAt" | "draftCompletionPct">>(
   bookings: T[],
 ): T | null {
-  const wizards = bookings.filter(isLocalWizardBooking);
+  // Reels requests have their own flow; never resume them in the event wizard.
+  const wizards = bookings.filter((b) => isLocalWizardBooking(b) && !(b as { reels?: unknown }).reels);
   if (!wizards.length) return null;
   const inProgress = wizards.filter((b) => (b.draftCompletionPct ?? 0) > 0);
   const pool = inProgress.length ? inProgress : wizards;
@@ -644,6 +690,11 @@ export function applyRemoteSnapshot(local: Booking, remote: RemoteBookingSnapsho
     assigned_count: remote.assignedCount ?? local.assigned_count,
     confirmed_provider_id: confirmedProviderId,
     assigned_photographers: assignedPhotographers,
+    searchCycle: remote.searchCycle ?? local.searchCycle,
+    searchEndsAt: remote.searchEndsAt ?? local.searchEndsAt,
+    searchWindowClosed: remote.searchWindowClosed ?? local.searchWindowClosed,
+    canSearchAgainRemote: remote.canSearchAgain ?? local.canSearchAgainRemote,
+    lastEditedAt: remote.lastEditedAt ?? local.lastEditedAt,
     selectedPackage,
     expectedDeliveryDate,
     budget: local.budget ?? (remote.budget ? Number(remote.budget) : null),

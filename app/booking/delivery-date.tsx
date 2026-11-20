@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { WizardScreen } from "@/src/components/WizardScreen";
@@ -34,10 +34,26 @@ export default function DeliveryDateScreen() {
     }
   }, [activeDraft, isEditMode]);
 
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const exclusive = async (fn: () => Promise<void>) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      await fn();
+    } catch (e) {
+      Alert.alert("Couldn't save", e instanceof Error ? e.message : "Please try again.");
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
+
   if (!activeDraft) return null;
   const finalEventDate = latestDate(activeDraft.days.map((d) => d.eventDate ?? ""));
 
-  const onContinue = async () => {
+  const onContinue = () => exclusive(async () => {
     const issues = validateExpectedDelivery(activeDraft.days, date);
     if (issues.length) {
       Alert.alert("Check the album delivery date", issues[0].message);
@@ -45,9 +61,9 @@ export default function DeliveryDateScreen() {
     }
     await updateExpectedDelivery(date!);
     router.push("/booking/budget");
-  };
+  });
 
-  const onSaveAndReturn = async () => {
+  const onSaveAndReturn = () => exclusive(async () => {
     const issues = validateExpectedDelivery(activeDraft.days, date);
     if (issues.length) {
       Alert.alert("Check the album delivery date", issues[0].message);
@@ -60,7 +76,7 @@ export default function DeliveryDateScreen() {
       // non-blocking
     }
     router.replace("/booking/confirm");
-  };
+  });
 
   const onBack = () => {
     if (isEditMode) {
@@ -77,9 +93,9 @@ export default function DeliveryDateScreen() {
       onBack={onBack}
       footer={
         isEditMode ? (
-          <Button label="Save & Return to Review" onPress={onSaveAndReturn} flex={1} />
+          <Button label="Save & Return to Review" onPress={() => void onSaveAndReturn()} loading={busy} disabled={busy} flex={1} />
         ) : (
-          <Button label="Continue to budget" onPress={onContinue} flex={1} />
+          <Button label="Continue to budget" onPress={() => void onContinue()} loading={busy} disabled={busy} flex={1} />
         )
       }
     >

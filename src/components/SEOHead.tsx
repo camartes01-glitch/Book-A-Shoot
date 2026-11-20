@@ -112,14 +112,13 @@ export const SEOHead: React.FC<SEOHeadProps> = ({
       <meta name="twitter:image:alt" content={displayTitle} />
 
       {/* Structured Data Scripts (JSON-LD) */}
+      {/* The head manager drops dangerouslySetInnerHTML when pre-rendering, so
+          JSON-LD is passed as the script's text. "<" is escaped so content
+          can never close the tag early. */}
       {structuredDataList.map((data, index) => (
-        <script
-          key={`structured-data-${index}`}
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify(data),
-          }}
-        />
+        <script key={`structured-data-${index}`} type="application/ld+json">
+          {JSON.stringify(data).replace(/</g, "\\u003c")}
+        </script>
       ))}
     </Head>
   );

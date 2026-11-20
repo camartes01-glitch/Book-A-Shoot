@@ -45,9 +45,8 @@ export type CustomerVendor = {
   basePricePerDay: number;
   /** `is_available` from the live catalog search. Unknown defaults to true. */
   listedAvailable: boolean;
+  /** Always true: contact details come only from the customer's booking after the firm accepts. */
   contactMaskedUntilAccepted: boolean;
-  phone?: string;
-  email?: string;
   isStudio?: boolean;
   isFirm?: boolean;
   serviceType?: string;

@@ -34,8 +34,22 @@ function notificationFromPushData(data: Record<string, unknown> | undefined): Ap
   };
 }
 
-function routeFromPushData(data: Record<string, unknown> | undefined): void {
-  const route = resolveNotificationRoute(notificationFromPushData(data), []);
+/** Optional app-level tap handler (registered by AppProvider) so taps can use
+ * live app state — e.g. load the right draft before resuming it. Returns true
+ * when it handled the navigation. */
+type TapHandler = (notification: AppNotification) => boolean | Promise<boolean>;
+let tapHandler: TapHandler | null = null;
+
+async function routeFromPushData(data: Record<string, unknown> | undefined): Promise<void> {
+  const notification = notificationFromPushData(data);
+  if (tapHandler) {
+    try {
+      if (await tapHandler(notification)) return;
+    } catch {
+      // fall back to static routing
+    }
+  }
+  const route = resolveNotificationRoute(notification, []);
   if (route.params) {
     router.push({ pathname: route.pathname as any, params: route.params });
   } else {
@@ -54,6 +68,10 @@ const DEFAULT_PREFS: NotificationPreferences = {
 };
 
 class PushNotificationService {
+  setTapHandler(handler: TapHandler | null): void {
+    tapHandler = handler;
+  }
+
   private registeredToken: string | null = null;
   private currentUserId: string | null = null;
   private isInitialized = false;
@@ -126,7 +144,7 @@ class PushNotificationService {
       });
       notif.onclick = () => {
         window.focus();
-        routeFromPushData(data);
+        void routeFromPushData(data);
       };
     } catch {
       // Notification constructor error ignored
@@ -211,7 +229,7 @@ class PushNotificationService {
       Notifications.addNotificationResponseReceivedListener((response: any) => {
         const data = response.notification.request.content.data as Record<string, unknown> | undefined;
         if (!data) return;
-        routeFromPushData(data);
+        void routeFromPushData(data);
       });
     } catch (e) {
       if (__DEV__) console.log("[PushNotifications] Native init note:", e);
@@ -274,8 +292,12 @@ class PushNotificationService {
     if (!(await this.ensurePermission(Notifications))) return;
     try {
       await this.cancelScheduledNotification(key);
+      // The key doubles as the native identifier: scheduling the same key again
+      // REPLACES the pending OS notification instead of adding a second one,
+      // even if our bookkeeping map was lost.
       const identifier = await Notifications.scheduleNotificationAsync({
-        content: { title: content.title, body: content.body, data: content.data },
+        identifier: key,
+        content: { title: content.title, body: content.body, data: { ...(content.data ?? {}), schedule_key: key } },
         trigger: buildTrigger(Notifications),
       });
       const map = await this.getScheduledMap();
@@ -322,17 +344,60 @@ class PushNotificationService {
   async cancelScheduledNotification(key: string): Promise<void> {
     const map = await this.getScheduledMap();
     const identifier = map[key];
-    if (!identifier) return;
     const Notifications = await this.loadNotificationsModule();
     if (Notifications) {
-      try {
-        await Notifications.cancelScheduledNotificationAsync(identifier);
-      } catch (e) {
-        if (__DEV__) console.log("[PushNotifications] Cancel note:", e);
+      for (const id of new Set([identifier, key].filter(Boolean) as string[])) {
+        try {
+          await Notifications.cancelScheduledNotificationAsync(id);
+        } catch (e) {
+          if (__DEV__) console.log("[PushNotifications] Cancel note:", e);
+        }
       }
     }
+    if (!identifier) return;
     delete map[key];
     await AsyncStorage.setItem(SCHEDULED_MAP_KEY, JSON.stringify(map));
+  }
+
+  /**
+   * Cancels every pending OS notification whose payload matches `predicate`
+   * (e.g. legacy per-draft nudges scheduled by older app versions), and drops
+   * matching bookkeeping keys.
+   */
+  async cancelScheduledWhere(
+    predicate: (data: Record<string, unknown>, identifier: string) => boolean,
+    keyPredicate?: (key: string) => boolean,
+  ): Promise<number> {
+    let cancelled = 0;
+    const Notifications = await this.loadNotificationsModule();
+    if (Notifications?.getAllScheduledNotificationsAsync) {
+      try {
+        const pending = (await Notifications.getAllScheduledNotificationsAsync()) as Array<{
+          identifier: string;
+          content?: { data?: Record<string, unknown> };
+        }>;
+        for (const req of pending) {
+          if (predicate(req.content?.data ?? {}, req.identifier)) {
+            await Notifications.cancelScheduledNotificationAsync(req.identifier).catch(() => undefined);
+            cancelled += 1;
+          }
+        }
+      } catch (e) {
+        if (__DEV__) console.log("[PushNotifications] Bulk cancel note:", e);
+      }
+    }
+    if (keyPredicate) {
+      const map = await this.getScheduledMap();
+      let changed = false;
+      for (const key of Object.keys(map)) {
+        if (keyPredicate(key)) {
+          delete map[key];
+          changed = true;
+        }
+      }
+      if (changed) await AsyncStorage.setItem(SCHEDULED_MAP_KEY, JSON.stringify(map));
+    }
+    return cancelled;
   }
 }
 

@@ -7,8 +7,9 @@
  * availability uses the catalog `is_available` flag when present. Do not
  * invent per-date booking calendars here.
  */
-import type { Booking, EventDay, PackageTierId, ProviderLocationPreference, VendorMatchResult } from "@/src/types/booking";
+import type { Booking, EventDay, PackageTierId, VendorMatchResult } from "@/src/types/booking";
 import type { CustomerVendor } from "@/src/types/vendor";
+import { canonicalCityName, resolveProviderSearchTarget } from "@/src/domain/cityResolution";
 
 export const MAX_MATCHES = 6;
 export const MAX_CONCURRENT_LEADS = 3;
@@ -201,8 +202,10 @@ export function isTwinCity(city: string): boolean {
 
 export function isCityMatch(targetCity: string, candidateCityOrArea: string): boolean {
   if (!targetCity || !targetCity.trim()) return true;
-  const target = targetCity.trim().toLowerCase();
-  const candidate = (candidateCityOrArea || "").trim().toLowerCase();
+  // Canonical names so "Bangalore" matches "Bengaluru", "Vizag" matches
+  // "Visakhapatnam", "Secunderabad" matches "Hyderabad", etc.
+  const target = canonicalCityName(targetCity).toLowerCase();
+  const candidate = canonicalCityName(candidateCityOrArea || "").toLowerCase();
   if (!candidate) return false;
 
   if (target === candidate || target.includes(candidate) || candidate.includes(target)) {
@@ -217,12 +220,12 @@ export function isCityMatch(targetCity: string, candidateCityOrArea: string): bo
   return false;
 }
 
-function vendorServesCity(vendor: CustomerVendor, city: string): boolean {
+export function vendorServesCity(vendor: Pick<CustomerVendor, "city" | "serviceAreas">, city: string): boolean {
   if (!city || !city.trim()) return true;
   const target = city.trim();
   const vCity = vendor.city || "";
   if (vCity && isCityMatch(target, vCity)) return true;
-  return vendor.serviceAreas.some((area) => isCityMatch(target, area));
+  return (vendor.serviceAreas ?? []).some((area) => isCityMatch(target, area));
 }
 
 /** Check vendor availability based on required capabilities. */
@@ -252,7 +255,7 @@ export function estimateVendorPrice(
 
 export function scoreVendor(
   vendor: CustomerVendor,
-  booking: Pick<Booking, "days" | "deliverables">,
+  booking: Pick<Booking, "days" | "deliverables" | "providerLocationPreference">,
   req: AggregatedRequirement,
   availability: { available: boolean },
   tier: PackageTierId,
@@ -265,8 +268,8 @@ export function scoreVendor(
   const ratingScore = vendor.rating / 5;
   const experienceScore = Math.min(1, vendor.experienceYears / 15);
   const portfolioScore = vendor.portfolioImages.length > 0 ? 1 : 0.4;
-  const eventCity = booking.days[0]?.location.city ?? "";
-  const locationScore = vendorServesCity(vendor, eventCity) ? 1 : 0.3;
+  const targetCity = resolveProviderSearchTarget(booking).city ?? "";
+  const locationScore = vendorServesCity(vendor, targetCity) ? 1 : 0.3;
 
   const baseScore =
     availabilityScore * MATCH_WEIGHTS.availability +
@@ -281,26 +284,6 @@ export function scoreVendor(
   return Math.round(baseScore * fairQueueBoost * 1000) / 1000;
 }
 
-function vendorServesLocationPreference(
-  vendor: CustomerVendor,
-  pref?: ProviderLocationPreference | null,
-  eventCity?: string,
-): boolean {
-  if (!pref || pref.mode === "event_location") {
-    return vendorServesCity(vendor, eventCity ?? "");
-  }
-  const target = (pref.city || "").trim();
-  if (!target) return vendorServesCity(vendor, eventCity ?? "");
-
-  if (isCityMatch(target, vendor.city)) {
-    return true;
-  }
-  if (vendor.area && isCityMatch(target, vendor.area)) {
-    return true;
-  }
-  return vendor.serviceAreas.some((area) => isCityMatch(target, area));
-}
-
 export function matchVendors(
   booking: Pick<Booking, "days" | "deliverables" | "providerLocationPreference">,
   vendors: CustomerVendor[],
@@ -309,9 +292,11 @@ export function matchVendors(
   excludedVendorIds?: string[],
 ): VendorMatchResult[] {
   const req = aggregateRequirement(booking.days as EventDay[]);
-  const eventCity = booking.days[0]?.location.city ?? "";
-  const locationPref = booking.providerLocationPreference;
-  const targetBudgetTier = getCustomerBudgetTier(budget);
+  // The ONE city this request is for — the customer's "another city" choice
+  // when they made one, otherwise the event's city. Firms outside it are
+  // never candidates.
+  const targetCity = resolveProviderSearchTarget(booking).city ?? "";
+  const targetBudgetTier: BudgetTier = getCustomerBudgetTier(budget);
 
   // Filter for photography firms:
   // Strictly filter only by:
@@ -332,7 +317,7 @@ export function matchVendors(
     (v) =>
       (!excludedVendorIds || !excludedVendorIds.includes(v.vendorId)) &&
       isPhotographyFirm(v) &&
-      vendorServesLocationPreference(v, locationPref, eventCity) &&
+      vendorServesCity(v, targetCity) &&
       ((v.activePendingLeads ?? 0) < MAX_CONCURRENT_LEADS) &&
       checkVendorAvailability(v, booking.days as EventDay[], req).available,
   );
@@ -344,7 +329,7 @@ export function matchVendors(
     const estimatedPrice = estimateVendorPrice(vendor, booking, tier);
     const matchScore = scoreVendor(vendor, booking, req, availability, tier, budget);
     const tierMatched = firmMatchesBudgetTier(vendor, targetBudgetTier);
-    const locationMatched = vendorServesCity(vendor, eventCity) || vendorServesLocationPreference(vendor, locationPref, eventCity);
+    const locationMatched = vendorServesCity(vendor, targetCity);
     const services: string[] = [];
     if (vendor.photography.traditional || vendor.photography.candid) services.push("Photography");
     if (vendor.videography.traditional || vendor.videography.candid) services.push("Videography");

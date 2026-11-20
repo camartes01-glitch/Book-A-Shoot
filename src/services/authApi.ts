@@ -16,11 +16,11 @@ import {
   signupDemo,
 } from "@/src/services/demoAuth";
 import { makeId } from "@/src/utils/id";
-import { signOutSupabase, updateSupabaseUserProfile } from "@/src/services/supabaseAuth";
+import { clearAllBookings, migrateBookingsToCustomer } from "@/src/services/bookingStore";
+import { signOutGoogle } from "@/src/services/googleNativeSignIn";
 
 const PROFILE_KEY = "camartes-customer:profile:v1";
 const PROFILES_REGISTRY_KEY = "camartes-customer:registry-by-email:v1";
-const BOOKINGS_KEY = "camartes-customer:bookings:v1";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 let loginInFlight: Promise<CustomerProfile> | null = null;
@@ -104,11 +104,6 @@ export async function saveProfileToRegistry(profile: CustomerProfile): Promise<v
 async function persistProfile(profile: CustomerProfile): Promise<CustomerProfile> {
   await AsyncStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
   await saveProfileToRegistry(profile);
-  try {
-    await updateSupabaseUserProfile({ name: profile.name, mobile: profile.mobile });
-  } catch {
-    // Non-fatal
-  }
   return profile;
 }
 
@@ -120,28 +115,6 @@ export async function getStoredProfile(): Promise<CustomerProfile | null> {
 async function clearLocalSession(): Promise<void> {
   await setAuthToken(null);
   await AsyncStorage.removeItem(PROFILE_KEY);
-}
-
-async function migrateBookingsToCustomer(oldCustomerId: string, newCustomerId: string): Promise<void> {
-  if (!oldCustomerId || !newCustomerId || oldCustomerId === newCustomerId) return;
-  try {
-    const raw = await AsyncStorage.getItem(BOOKINGS_KEY);
-    if (!raw) return;
-    const bookings = JSON.parse(raw);
-    if (!Array.isArray(bookings)) return;
-    let changed = false;
-    for (const b of bookings) {
-      if (b && b.customerId === oldCustomerId) {
-        b.customerId = newCustomerId;
-        changed = true;
-      }
-    }
-    if (changed) {
-      await AsyncStorage.setItem(BOOKINGS_KEY, JSON.stringify(bookings));
-    }
-  } catch {
-    // Non-fatal
-  }
 }
 
 /**
@@ -277,98 +250,35 @@ export async function signup(input: { name: string; email: string; phone: string
   return signupInFlight;
 }
 
-export async function loginWithGoogle(
-  idTokenOrUserInfo: string | { google_id: string; email: string; name: string; mobile?: string; picture?: string | null },
-): Promise<CustomerProfile> {
+/**
+ * Google sign-in, verified by the Camartes backend exactly like the Camartes app:
+ * the Google ID token (from native Google Sign-In or the website's Google redirect) is sent to
+ * POST /api/auth/google, which checks Google's signature, the audience and the nonce, then
+ * returns a Camartes session token. There is no offline/local fallback: no token, no sign-in.
+ */
+export async function loginWithGoogle(idToken: string, nonce?: string): Promise<CustomerProfile> {
   if (isDemoAuthMode()) {
     rejectDemoGoogleSignIn();
   }
-
-  let payload: unknown = null;
-  let fallback: Partial<CustomerProfile> = {};
-
-  if (typeof idTokenOrUserInfo === "string") {
-    const token = idTokenOrUserInfo.trim();
-    if (!token) {
-      throw new CamartesApiError("A valid Google ID token is required.", 400);
-    }
-    try {
-      payload = await camartesFetch<unknown>(
-        "/api/auth/google",
-        {
-          method: "POST",
-          body: JSON.stringify({ id_token: token, source: "book_a_shoot", client_app: "bookashoot" }),
-        },
-        { auth: false, requireAuth: false },
-      );
-    } catch {
-      try {
-        payload = await camartesFetch<unknown>(
-          "/api/auth/google-userinfo",
-          {
-            method: "POST",
-            body: JSON.stringify({ id_token: token, source: "book_a_shoot", client_app: "bookashoot" }),
-          },
-          { auth: false, requireAuth: false },
-        );
-      } catch {
-        // Camartes Google endpoint unavailable; fall back to local Google user
-      }
-    }
-  } else {
-    fallback = {
-      name: idTokenOrUserInfo.name,
-      email: idTokenOrUserInfo.email,
-      mobile: idTokenOrUserInfo.mobile,
-    };
-    try {
-      payload = await camartesFetch<unknown>(
-        "/api/auth/google-userinfo",
-        {
-          method: "POST",
-          body: JSON.stringify({ ...idTokenOrUserInfo, source: "book_a_shoot", client_app: "bookashoot" }),
-        },
-        { auth: false, requireAuth: false },
-      );
-    } catch {
-      // Camartes Google endpoint unavailable; fall back to local Google user
-    }
+  if (googleLoginInFlight) return googleLoginInFlight;
+  const token = idToken.trim();
+  if (!token) {
+    throw new CamartesApiError("A valid Google ID token is required.", 400);
   }
-
-  if (payload) {
-    const sessionToken = extractAccessToken(payload);
-    if (sessionToken) {
-      await setAuthToken(sessionToken);
-    }
-    const fromPayload = profileFromCamartesUser(payload, fallback);
-    try {
-      const me = await camartesFetch<unknown>("/api/auth/me", {}, { auth: true, requireAuth: true });
-      const profile = profileFromCamartesUser(me, { ...fromPayload, ...fallback });
-      const reconciled = await reconcileProfileByEmail(profile);
-      return persistProfile(reconciled);
-    } catch {
-      const reconciled = await reconcileProfileByEmail(fromPayload);
-      return persistProfile(reconciled);
-    }
-  }
-
-  const userInfo =
-    typeof idTokenOrUserInfo === "string"
-      ? { google_id: makeId("g"), email: "", name: "Customer", mobile: "" }
-      : idTokenOrUserInfo;
-
-  const remembered = userInfo.email ? await getProfileFromRegistry(userInfo.email) : null;
-  const profile: CustomerProfile = {
-    customerId: remembered?.customerId || (userInfo.google_id ? `google-${userInfo.google_id}` : makeId("cust")),
-    name: userInfo.name || remembered?.name || userInfo.email.split("@")[0] || "Customer",
-    email: userInfo.email || remembered?.email || "",
-    mobile: userInfo.mobile || remembered?.mobile || "",
-    avatarInitials: initialsOf(userInfo.name || remembered?.name || userInfo.email),
-    savedAddresses: remembered?.savedAddresses ?? [],
-  };
-
-  const reconciled = await reconcileProfileByEmail(profile);
-  return persistProfile(reconciled);
+  googleLoginInFlight = (async () => {
+    const payload = await camartesFetch<unknown>(
+      "/api/auth/google",
+      {
+        method: "POST",
+        body: JSON.stringify({ id_token: token, nonce, source: "book_a_shoot", client_app: "bookashoot" }),
+      },
+      { auth: false, requireAuth: false },
+    );
+    return profileAfterAuth(payload);
+  })().finally(() => {
+    googleLoginInFlight = null;
+  });
+  return googleLoginInFlight;
 }
 
 export async function restoreSession(): Promise<CustomerProfile | null> {
@@ -404,29 +314,6 @@ export async function restoreSession(): Promise<CustomerProfile | null> {
     }
   }
 
-  // Safety net: restore from active Supabase Google OAuth session if stored profile was cleared
-  try {
-    const { supabase } = await import("./supabaseClient");
-    const { data } = await supabase.auth.getSession();
-    if (data?.session?.user) {
-      const { extractUserInfoFromSupabaseUser } = await import("./supabaseAuth");
-      const userInfo = extractUserInfoFromSupabaseUser(data.session.user);
-      const remembered = userInfo.email ? await getProfileFromRegistry(userInfo.email) : null;
-      const profile: CustomerProfile = {
-        customerId: remembered?.customerId || (userInfo.google_id ? `google-${userInfo.google_id}` : makeId("cust")),
-        name: userInfo.name || remembered?.name || userInfo.email.split("@")[0] || "Customer",
-        email: userInfo.email || remembered?.email || "",
-        mobile: userInfo.mobile || remembered?.mobile || "",
-        avatarInitials: initialsOf(userInfo.name || remembered?.name || userInfo.email),
-        savedAddresses: remembered?.savedAddresses ?? [],
-      };
-      const reconciled = await reconcileProfileByEmail(profile);
-      return persistProfile(reconciled);
-    }
-  } catch {
-    // Non-blocking
-  }
-
   return null;
 }
 
@@ -435,29 +322,6 @@ export async function updateProfile(patch: Partial<CustomerProfile>): Promise<Cu
   const lookupEmail = existing?.email || patch.email;
   if (!existing && lookupEmail) {
     existing = await getProfileFromRegistry(lookupEmail);
-  }
-  if (!existing) {
-    // Safety net: check active Supabase OAuth session
-    try {
-      const { supabase } = await import("./supabaseClient");
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.user) {
-        const { extractUserInfoFromSupabaseUser } = await import("./supabaseAuth");
-        const userInfo = extractUserInfoFromSupabaseUser(data.session.user);
-        const email = patch.email || userInfo.email;
-        const remembered = email ? await getProfileFromRegistry(email) : null;
-        existing = {
-          customerId: remembered?.customerId || (userInfo.google_id ? `google-${userInfo.google_id}` : makeId("cust")),
-          name: patch.name || userInfo.name || remembered?.name || "Customer",
-          email: email || remembered?.email || "",
-          mobile: patch.mobile || userInfo.mobile || remembered?.mobile || "",
-          avatarInitials: initialsOf(patch.name || userInfo.name || "Customer"),
-          savedAddresses: remembered?.savedAddresses ?? [],
-        };
-      }
-    } catch {
-      // Non-blocking
-    }
   }
   if (!existing) throw new Error("No signed-in customer.");
   
@@ -502,8 +366,8 @@ export async function logout(): Promise<void> {
     return;
   }
 
-  // 2. Clean up Supabase OAuth session and inform backend asynchronously without blocking the user
-  void signOutSupabase().catch(() => {});
+  // 2. Forget the device's Google account choice and end the backend session, without blocking the user
+  void signOutGoogle().catch(() => {});
   void camartesFetch("/api/auth/logout", { method: "POST" }, { requireAuth: false, timeoutMs: 3000 }).catch(() => {});
 }
 
@@ -511,16 +375,15 @@ export async function logout(): Promise<void> {
  * Permanently deletes the current user's account and all associated data.
  *
  * Workflow:
- * 1. Calls the Camartes backend to delete the user (backend uses Supabase service_role to remove from auth.users).
- * 2. Destroys the Supabase OAuth session on the client.
+ * 1. Calls the Camartes backend to delete the user.
+ * 2. Signs the device out of Google.
  * 3. Clears all local AsyncStorage data (profile, bookings, registry, welcome flags, notifications).
  */
 export async function deleteAccount(): Promise<void> {
-  const { deleteSupabaseAccount } = await import("./supabaseAuth");
   const token = await getAuthToken();
   const storedProfile = await getStoredProfile();
 
-  // 1. Ask Camartes backend to delete the user (server-side Supabase deletion with service_role key)
+  // 1. Ask the Camartes backend to delete the user
   if (token && !isDemoAuthMode()) {
     try {
       await camartesFetch(
@@ -539,12 +402,8 @@ export async function deleteAccount(): Promise<void> {
     }
   }
 
-  // 2. Destroy the Supabase OAuth session
-  try {
-    await deleteSupabaseAccount();
-  } catch {
-    // Non-fatal: local cleanup is more important
-  }
+  // 2. Forget the device's Google account choice
+  await signOutGoogle();
 
   // 3. Clear all local data
   await clearLocalSession();
@@ -565,7 +424,7 @@ export async function deleteAccount(): Promise<void> {
 
   // Clear bookings, notifications, and welcome flags
   try {
-    await AsyncStorage.removeItem(BOOKINGS_KEY);
+    await clearAllBookings();
   } catch {
     // Non-fatal
   }

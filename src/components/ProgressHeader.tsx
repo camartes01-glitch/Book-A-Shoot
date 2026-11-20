@@ -12,6 +12,7 @@ import { router } from "expo-router";
 import { colors, fontWeights, radius, spacing } from "@/src/constants/theme";
 import { useAppStore } from "@/src/state/AppProvider";
 import { selectionFeedback } from "@/src/utils/haptics";
+import { goBackTo } from "@/src/utils/wizardNav";
 import {
   VISUAL_INDEX,
   WIZARD_STEPS,
@@ -82,31 +83,31 @@ export function ProgressHeader({
 
     switch (targetStepId) {
       case "event":
-        router.push(`/booking/day/${targetDayId}?step=event`);
+        router.navigate(`/booking/day/${targetDayId}?step=event`);
         break;
       case "photography":
-        router.push(`/booking/day/${targetDayId}?step=photography`);
+        router.navigate(`/booking/day/${targetDayId}?step=photography`);
         break;
       case "videography":
-        router.push(`/booking/day/${targetDayId}?step=videography`);
+        router.navigate(`/booking/day/${targetDayId}?step=videography`);
         break;
       case "addons":
-        router.push(`/booking/deliverables`);
+        goBackTo("/booking/deliverables");
         break;
       case "budget":
-        router.push(`/booking/budget`);
+        goBackTo("/booking/budget");
         break;
       case "packages":
-        router.push(`/booking/packages`);
+        goBackTo("/booking/packages");
         break;
       case "location":
-        router.push(`/booking/location-preference`);
+        goBackTo("/booking/location-preference");
         break;
       case "providers":
-        router.push(`/booking/matches`);
+        goBackTo("/booking/matches");
         break;
       case "review":
-        router.push(`/booking/confirm`);
+        goBackTo("/booking/confirm");
         break;
     }
   };

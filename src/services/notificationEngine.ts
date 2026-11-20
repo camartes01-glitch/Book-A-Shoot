@@ -26,7 +26,16 @@ import { hasFirmTimedOut, calculateBusinessSla } from "@/src/engine/businessHour
 import { isDemoAuthMode } from "@/src/config/authMode";
 
 const STATE_KEY = "camartes-customer:notif_engine_state:v1";
+/** Draft reminders: at most TWO per draft, ever — the first ~20h after the
+ * customer stops editing, a different follow-up 3 days later — and never more
+ * often than every 3 days across all drafts combined. */
 const DRAFT_NUDGE_AFTER_HOURS = 20;
+const DRAFT_FOLLOWUP_AFTER_DAYS = 3;
+const DRAFT_MIN_GAP_DAYS = 3;
+const DRAFT_MAX_AGE_DAYS = 14;
+/** The single OS schedule slot shared by all drafts. */
+const DRAFT_SCHEDULE_KEY = "draft_nudge";
+const DAY_MS = 86_400_000;
 const MARKETING_NUDGE_EVERY_DAYS = 3;
 /**
  * Firms are given 60 active business minutes to accept/reject between 9:00 AM and 9:00 PM.
@@ -47,17 +56,31 @@ type BookingEngineState = {
   firstSeenAt?: string;
   remindedKeys: string[];
   scheduledReminderKeys: string[];
+  /** When the first draft reminder fired. */
   draftNudgedAt?: string;
+  /** When the follow-up (second and last) draft reminder fired. */
+  draftFollowupAt?: string;
+  /** Legacy per-draft schedule flag from older app versions; ignored. */
   draftScheduled?: boolean;
   /** Set once an automatic replacement search comes back empty, so we don't
    * hammer the vendor catalog every tick while the pool is exhausted. */
   replacementExhaustedAt?: string;
   batchRejectionFired?: boolean;
+  /** `${searchCycle}:${outcome}` already announced (one notice per 24h search). */
+  searchOutcomeKeys?: string[];
+  /** Last observed `${searchCycle}:${open | outcome}`; a notice needs a transition. */
+  lastSearchState?: string;
 };
 
 type EngineState = {
   bookings: Record<string, BookingEngineState>;
   lastMarketingNudgeAt?: string;
+  /** Last time ANY draft reminder fired (global spacing across drafts). */
+  lastDraftNudgeAt?: string;
+  /** `${bookingId}:${stage}:${dueIso}` currently scheduled in the OS slot. */
+  draftScheduleSignature?: string;
+  /** Per-draft OS schedules from older versions have been purged. */
+  legacyDraftSchedulesPurged?: boolean;
 };
 
 function emptyBookingState(): BookingEngineState {
@@ -101,7 +124,13 @@ async function loadState(): Promise<EngineState> {
     const raw = await AsyncStorage.getItem(STATE_KEY);
     if (!raw) return { bookings: {} };
     const parsed = JSON.parse(raw) as Partial<EngineState>;
-    return { bookings: parsed.bookings || {}, lastMarketingNudgeAt: parsed.lastMarketingNudgeAt };
+    return {
+      bookings: parsed.bookings || {},
+      lastMarketingNudgeAt: parsed.lastMarketingNudgeAt,
+      lastDraftNudgeAt: parsed.lastDraftNudgeAt,
+      draftScheduleSignature: parsed.draftScheduleSignature,
+      legacyDraftSchedulesPurged: parsed.legacyDraftSchedulesPurged,
+    };
   } catch {
     return { bookings: {} };
   }
@@ -182,32 +211,121 @@ function isBookingInPast(booking: Booking): boolean {
   return false;
 }
 
-async function processDraft(booking: Booking, profile: CustomerProfile, bstate: BookingEngineState): Promise<boolean> {
-  if (bstate.draftNudgedAt) return false;
-  if (isBookingInPast(booking) || hoursSince(booking.updatedAt) > 168) {
-    bstate.draftNudgedAt = nowIso();
-    return false;
+/** A draft worth reminding about: the customer actually chose an event, it is
+ * recent, and its dates are not already in the past. Empty "Book now"
+ * placeholders are never nudged. */
+function isNudgeableDraft(booking: Booking): boolean {
+  if (isBookingInPast(booking)) return false;
+  if (hoursSince(booking.updatedAt) > DRAFT_MAX_AGE_DAYS * 24) return false;
+  return (booking.days || []).some((d) => (d.eventTypeIds || []).length > 0);
+}
+
+type DraftStage = { type: "draft_resume_nudge" | "draft_followup_nudge"; dueAt: number };
+
+function nextDraftStage(booking: Booking, bstate: BookingEngineState, lastGlobalNudgeAt?: string): DraftStage | null {
+  if (bstate.draftFollowupAt) return null; // both reminders already sent
+  const globalEarliest = lastGlobalNudgeAt ? new Date(lastGlobalNudgeAt).getTime() + DRAFT_MIN_GAP_DAYS * DAY_MS : 0;
+  if (!bstate.draftNudgedAt) {
+    const base = new Date(booking.updatedAt).getTime() + DRAFT_NUDGE_AFTER_HOURS * 3_600_000;
+    return { type: "draft_resume_nudge", dueAt: Math.max(base, globalEarliest) };
   }
+  const base = new Date(bstate.draftNudgedAt).getTime() + DRAFT_FOLLOWUP_AFTER_DAYS * DAY_MS;
+  return { type: "draft_followup_nudge", dueAt: Math.max(base, globalEarliest) };
+}
 
-  const scheduleKey = `draft_resume:${booking.bookingId}`;
-  const params: NotificationParams = { customerName: profile.name, eventName: getBookingEventTitle(booking) };
-  const resumeRoute = getDraftResumeRoute(booking);
-
-  if (hoursSince(booking.updatedAt) < DRAFT_NUDGE_AFTER_HOURS) {
-    if (!bstate.draftScheduled) {
-      const { title, body } = buildNotificationContent("draft_resume_nudge", params);
-      const when = new Date(new Date(booking.updatedAt).getTime() + DRAFT_NUDGE_AFTER_HOURS * 3_600_000);
-      await pushNotificationService.scheduleAt(scheduleKey, { title, body, data: { type: "draft_resume_nudge", resumeRoute } }, when);
-      bstate.draftScheduled = true;
-      return true;
+/**
+ * Draft reminders for ALL drafts, decided together:
+ *  - only the most recently edited nudgeable draft is ever considered;
+ *  - stage 1 (`draft_resume_nudge`) then stage 2 (`draft_followup_nudge`, different copy), then never again;
+ *  - future reminders live in ONE OS schedule slot (fires with the app closed);
+ *    due reminders are recorded in-app exactly once (the OS already showed them).
+ */
+async function processDrafts(drafts: Booking[], profile: CustomerProfile, state: EngineState): Promise<void> {
+  if (!state.legacyDraftSchedulesPurged) {
+    // Older versions scheduled one OS notification PER draft — purge them so
+    // already-queued reminders stop firing after this update.
+    try {
+      await pushNotificationService.cancelScheduledWhere(
+        (data, identifier) => data.type === "draft_resume_nudge" && identifier !== DRAFT_SCHEDULE_KEY,
+        (key) => key.startsWith("draft_resume:"),
+      );
+      state.legacyDraftSchedulesPurged = true;
+    } catch {
+      // Best effort; retried next tick. Never blocks other notifications.
     }
-    return false;
   }
 
-  await fire("draft_resume_nudge", params, { bookingId: booking.bookingId, data: { resumeRoute } });
-  bstate.draftNudgedAt = nowIso();
-  await pushNotificationService.cancelScheduledNotification(scheduleKey);
-  return true;
+  const target = drafts
+    .filter(isNudgeableDraft)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+  const bstate = target ? getBState(state, target) : null;
+  const stage = target && bstate ? nextDraftStage(target, bstate, state.lastDraftNudgeAt) : null;
+
+  if (!target || !bstate || !stage) {
+    if (state.draftScheduleSignature) {
+      await pushNotificationService.cancelScheduledNotification(DRAFT_SCHEDULE_KEY);
+      state.draftScheduleSignature = undefined;
+    }
+    return;
+  }
+
+  const params: NotificationParams = { customerName: profile.name, eventName: getBookingEventTitle(target) };
+  const data = { type: stage.type, booking_id: target.bookingId, resumeRoute: getDraftResumeRoute(target) };
+
+  if (stage.dueAt <= Date.now()) {
+    await fire(stage.type, params, { bookingId: target.bookingId, data });
+    const now = nowIso();
+    if (stage.type === "draft_resume_nudge") bstate.draftNudgedAt = now;
+    else bstate.draftFollowupAt = now;
+    state.lastDraftNudgeAt = now;
+    setBState(state, target, bstate);
+    await pushNotificationService.cancelScheduledNotification(DRAFT_SCHEDULE_KEY);
+    state.draftScheduleSignature = undefined;
+    return;
+  }
+
+  const signature = `${target.bookingId}:${stage.type}:${new Date(stage.dueAt).toISOString()}`;
+  if (state.draftScheduleSignature !== signature) {
+    const { title, body } = buildNotificationContent(stage.type, params);
+    await pushNotificationService.scheduleAt(DRAFT_SCHEDULE_KEY, { title, body, data }, new Date(stage.dueAt));
+    state.draftScheduleSignature = signature;
+  }
+}
+
+/**
+ * In-app notice when a 24-hour photographer search ends: "It's not you, it's
+ * us" when nobody accepted, or "your photographers are ready" when some did.
+ * One notice per search cycle; nothing for searches that ended before this
+ * device first saw the booking.
+ */
+async function processSearchOutcome(booking: Booking, bstate: BookingEngineState): Promise<void> {
+  if (booking.confirmed_provider_id || isBookingInPast(booking)) return;
+  const effective = getEffectiveBookingStatus(booking);
+  const acceptedCount = (booking.assigned_photographers || []).filter((f) => f.has_accepted && !isFirmRejected(f)).length;
+  let type: "search_expired" | "search_window_closed" | null = null;
+  if (effective === "EXPIRED" && String(booking.remoteStatus || "").toLowerCase() === "expired") type = "search_expired";
+  else if (booking.searchWindowClosed && effective === "VENDOR_ACCEPTED" && acceptedCount > 0) type = "search_window_closed";
+
+  const key = `${booking.searchCycle ?? 1}:${type ?? "open"}`;
+  const previous = bstate.lastSearchState;
+  bstate.lastSearchState = key;
+  if (!type) return;
+  const seen = bstate.searchOutcomeKeys || [];
+  if (seen.includes(key)) return;
+  bstate.searchOutcomeKeys = [...seen, key].slice(-20);
+  // Only announce a search this device watched end (never history, e.g. right after an app update).
+  if (!previous || previous === key) return;
+
+  await fire(
+    type,
+    {
+      eventName: getBookingEventTitle(booking),
+      eventDate: formatDateLong(booking.days?.[0]?.eventDate ?? null),
+      firmCount: acceptedCount,
+      searchCycle: booking.searchCycle ?? 1,
+    },
+    { bookingId: booking.bookingId, data: { action: "search_again", search_cycle: booking.searchCycle ?? 1 } },
+  );
 }
 
 async function processAcceptRejectDiff(booking: Booking, profile: CustomerProfile, bstate: BookingEngineState): Promise<boolean> {
@@ -526,8 +644,10 @@ export async function runEngineTick(bookings: Booking[], profile: CustomerProfil
 async function runEngineTickInner(bookings: Booking[], profile: CustomerProfile | null): Promise<void> {
   if (!profile || !bookings.length) {
     if (profile) {
-      // Still worth an idle-nudge check even with zero bookings on record.
+      // Still worth an idle-nudge check even with zero bookings on record,
+      // and any pending draft reminder must be cancelled (no drafts left).
       const state = await loadState();
+      await processDrafts([], profile, state);
       await processMarketingNudge(bookings, profile, state);
       await saveState(state);
     }
@@ -536,22 +656,28 @@ async function runEngineTickInner(bookings: Booking[], profile: CustomerProfile 
 
   const state = await loadState();
 
+  // Separate drafts and non-drafts so we can throttle draft nudges globally
+  const drafts: Booking[] = [];
+  const nonDrafts: Booking[] = [];
+
   for (const booking of bookings) {
-    const bstate = getBState(state, booking);
-
     if (isDraftBooking(booking)) {
-      await processDraft(booking, profile, bstate);
+      drafts.push(booking);
     } else {
-      await processAcceptRejectDiff(booking, profile, bstate);
-      await processEventReminder(booking, profile, bstate);
+      nonDrafts.push(booking);
     }
+  }
 
-    // Bookkeeping (knownFirmIds, scheduledReminderKeys, ...) is refreshed on
-    // every tick regardless of whether a notification fired this time, so the
-    // full state is always persisted below rather than gated on a "changed"
-    // flag — otherwise a quiet tick would drop the diff baseline entirely.
+  // Process non-draft bookings normally (accept/reject diffs, reminders)
+  for (const booking of nonDrafts) {
+    const bstate = getBState(state, booking);
+    await processSearchOutcome(booking, bstate);
+    await processAcceptRejectDiff(booking, profile, bstate);
+    await processEventReminder(booking, profile, bstate);
     setBState(state, booking, bstate);
   }
+
+  await processDrafts(drafts, profile, state);
 
   await processMarketingNudge(bookings, profile, state);
   await saveState(state);

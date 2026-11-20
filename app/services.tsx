@@ -8,6 +8,7 @@
  */
 
 import React, { useMemo, useState } from "react";
+import { LANDING_ROUTE } from "@/src/utils/landingRoute";
 import {
   Image,
   Linking,
@@ -51,6 +52,7 @@ import {
 } from "lucide-react-native";
 import { colors, fontWeights, radius, radiusSm, spacing } from "@/src/constants/theme";
 import { categoryImageFor } from "@/src/constants/homeMedia";
+import { headingProps } from "@/src/components/seo/SeoBlocks";
 
 interface ServiceItem {
   id: string;
@@ -259,7 +261,7 @@ export default function ServicesPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   const goToLogin = () => router.push("/(auth)/login");
-  const goToHome = () => router.push("/");
+  const goToHome = () => router.push(LANDING_ROUTE as any);
   const goToAbout = () => router.push("/about");
 
   React.useEffect(() => {
@@ -318,7 +320,7 @@ export default function ServicesPage() {
       >
         {/* ── Header Banner (Eyebrow removed, clean spacing) ─────────────── */}
         <View style={[styles.headerSection, isWide ? styles.headerSectionWide : styles.headerSectionPhone]}>
-          <Text style={[styles.heading, isWide ? styles.headingWide : styles.headingPhone]}>
+          <Text {...headingProps(1)} style={[styles.heading, isWide ? styles.headingWide : styles.headingPhone]}>
             Dedicated Event Services
           </Text>
           <Text style={[styles.subheading, isWide && styles.subheadingWide]}>

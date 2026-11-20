@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useEffect } from "react";
+import { LANDING_ROUTE } from "@/src/utils/landingRoute";
 import {
   ActivityIndicator,
   Image,
@@ -45,6 +46,7 @@ import {
 } from "lucide-react-native";
 import { colors, radius, spacing } from "@/src/constants/theme";
 import { CAMARTES_API } from "@/src/services/camartesClient";
+import { headingProps } from "@/src/components/seo/SeoBlocks";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Official Social Media Icons
@@ -130,7 +132,7 @@ export default function ContactPage() {
     }
   }, []);
 
-  const goToHome = () => router.push("/");
+  const goToHome = () => router.push(LANDING_ROUTE as any);
   const goToServices = () => router.push("/services");
   const goToAbout = () => router.push("/about");
   const goToBlogs = () => router.push("/blogs");
@@ -302,7 +304,7 @@ export default function ContactPage() {
           {/* Centered Hero Content directly on the image */}
           <View style={[styles.heroContent, isWide && styles.heroContentWide]}>
             {/* Main Heading in PLAIN ORANGE (Theme Primary Shade) */}
-            <Text style={[styles.heroTitle, !isWide && styles.heroTitlePhone]}>
+            <Text {...headingProps(1)} style={[styles.heroTitle, !isWide && styles.heroTitlePhone]}>
               Fall In Love, Steal Glances.{"\n"}
               For Everything Else — Book A Shoot.
             </Text>

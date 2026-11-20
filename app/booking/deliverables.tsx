@@ -78,7 +78,23 @@ export default function DeliverablesScreen() {
 
   const hasAlbum = Boolean(d?.photo?.album);
 
+  const [continuing, setContinuing] = useState(false);
+  const continuingRef = useRef(false);
+
   const onContinue = async () => {
+    // Synchronous guard: a double tap must never push Budget twice.
+    if (continuingRef.current) return;
+    continuingRef.current = true;
+    setContinuing(true);
+    try {
+      await continueFlow();
+    } finally {
+      continuingRef.current = false;
+      setContinuing(false);
+    }
+  };
+
+  const continueFlow = async () => {
     if (d) await updateDeliverables(d);
     if (hasAlbum) {
       router.push(`/booking/delivery-date${isEditMode ? "?mode=edit" : ""}`);
@@ -117,6 +133,8 @@ export default function DeliverablesScreen() {
         <Button
           label={hasAlbum ? "Continue to Album Delivery Date" : "Continue to Budget"}
           onPress={onContinue}
+          loading={continuing}
+          disabled={continuing}
           flex={1}
         />
       }

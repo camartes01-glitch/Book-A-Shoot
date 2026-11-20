@@ -18,7 +18,6 @@ import { Muted, ScreenTitle } from "@/src/components/ui";
 import { useAppStore } from "@/src/state/AppProvider";
 import { colors, radius, radiusSm, spacing, touchTarget } from "@/src/constants/theme";
 import { CamartesApiError } from "@/src/services/camartesClient";
-import { updateSupabaseUserProfile } from "@/src/services/supabaseAuth";
 
 function resolveAppRoute(target?: string | null): string {
   if (
@@ -58,28 +57,6 @@ export default function CompleteProfileScreen() {
     }
   }, [profile]);
 
-  useEffect(() => {
-    if (!email) {
-      (async () => {
-        try {
-          const { supabase } = await import("@/src/services/supabaseClient");
-          const { data } = await supabase.auth.getSession();
-          if (data?.session?.user) {
-            const uEmail = data.session.user.email || "";
-            const uName =
-              data.session.user.user_metadata?.full_name ||
-              data.session.user.user_metadata?.name ||
-              "";
-            if (uEmail) setEmail(uEmail);
-            if (uName && !name) setName(uName);
-          }
-        } catch {
-          // Ignore
-        }
-      })();
-    }
-  }, [email, name]);
-
   const cleanDigits = phone.replace(/\D/g, "").slice(-10);
   const isValidPhone = cleanDigits.length === 10 && /^[6-9]/.test(cleanDigits);
   const isValidName = name.trim().length >= 2;
@@ -103,15 +80,6 @@ export default function CompleteProfileScreen() {
         mobile: cleanDigits,
         email: userEmail || undefined,
       });
-
-      try {
-        await updateSupabaseUserProfile({
-          name: name.trim(),
-          mobile: cleanDigits,
-        });
-      } catch {
-        // Non-fatal if Supabase update fails
-      }
 
       const destination = resolveAppRoute(returnTarget);
       router.replace(destination as any);

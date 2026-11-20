@@ -39,6 +39,8 @@ export const DEFAULT_EVENT_CATEGORIES: EventCategory[] = [
   { id: "real_estate_shoot", group: "commercial", label: "Real Estate Shoot", enabled: true, order: 21 },
   { id: "food_photography", group: "commercial", label: "Food Photography", enabled: true, order: 22 },
   { id: "commercial_other", group: "commercial", label: "Other Commercial Shoot", enabled: true, order: 23 },
+  // CamReels requests only (own booking flow). Disabled so it never appears in the event picker.
+  { id: "camreels_shoot", group: "commercial", label: "CamReels Shoot", enabled: false, order: 99 },
 
   { id: "ganesh_pooja", group: "pooja", label: "Ganesh Pooja", enabled: true, order: 24 },
   { id: "satyanarayan_pooja", group: "pooja", label: "Satyanarayan Pooja", enabled: true, order: 25 },

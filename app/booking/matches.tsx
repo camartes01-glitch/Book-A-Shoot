@@ -10,6 +10,7 @@ import { useAppStore } from "@/src/state/AppProvider";
 import { MAX_MATCHES } from "@/src/engine/matching";
 import { selectedPackageQuote } from "@/src/engine/pricing";
 import { colors, fontWeights, spacing } from "@/src/constants/theme";
+import { goBackTo } from "@/src/utils/wizardNav";
 
 export default function VendorMatchesScreen() {
   const { activeDraft, loadVendorMatches, selectVendor } = useAppStore();
@@ -55,7 +56,7 @@ export default function VendorMatchesScreen() {
     <WizardScreen
       title="Suitable Photographers"
       step="providers"
-      onBack={() => router.push("/booking/location-preference")}
+      onBack={() => goBackTo("/booking/location-preference")}
       footer={
         matches.length > 0 ? (
           <Button

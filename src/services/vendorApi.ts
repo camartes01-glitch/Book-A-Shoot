@@ -17,6 +17,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { CustomerVendor } from "@/src/types/vendor";
 
 import { CAMARTES_API } from "@/src/services/camartesClient";
+import { canonicalCityName, citySpellings } from "@/src/domain/cityResolution";
 export { CAMARTES_API };
 const VENDOR_CACHE_KEY = "camartes-customer:vendor-cache:v1";
 
@@ -40,7 +41,6 @@ type RawSearchHit = {
   location?: string;
   service_type?: string;
   business_category?: string;
-  contact_phone?: string;
   avg_rating?: number;
   average_rating?: number;
   rating?: number;
@@ -82,6 +82,9 @@ export type CatalogQuery = {
   serviceTypes?: string[];
   latitude?: number | null;
   longitude?: number | null;
+  /** The customer explicitly chose this city ("Another city"): never widen
+   * the search to other cities when it returns no firms. */
+  strictCity?: boolean;
 };
 
 const HYD_METRO_KEYWORDS = [
@@ -135,6 +138,11 @@ async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): 
   try {
     const rawCity = query.city?.trim() || "";
     const { mainCity, twinCity } = resolveSearchCity(rawCity);
+    // Every spelling of the city ("Bangalore" + "Bengaluru", "Hyderabad" +
+    // "Secunderabad"): firms registered under either name must be found.
+    const spellings = Array.from(
+      new Set([mainCity, twinCity, ...citySpellings(rawCity)].filter((c): c is string => Boolean(c)).map((c) => c.trim())),
+    ).filter((c, i, arr) => arr.findIndex((x) => x.toLowerCase() === c.toLowerCase()) === i);
 
     const fetchForCity = async (cityStr: string | null): Promise<RawSearchHit[]> => {
       try {
@@ -184,19 +192,17 @@ async function fetchServiceType(serviceType: string, query: CatalogQuery = {}): 
       return [];
     };
 
-    // Query main city and twin city in parallel for optimum speed
-    const [mainHits, twinHits] = await Promise.all([
-      fetchForCity(mainCity || null),
-      twinCity ? fetchForCity(twinCity) : Promise.resolve([]),
-    ]);
-
-    const combined = [...mainHits, ...twinHits];
+    // Query every spelling in parallel.
+    const results = await Promise.all(spellings.length ? spellings.map((c) => fetchForCity(c)) : [fetchForCity(null)]);
+    const combined = results.flat();
     if (combined.length > 0) {
       return combined;
     }
 
-    // Broad fallback without city filter if both returned 0 hits
-    if (mainCity) {
+    // Broad fallback without a city filter only when the city was inferred
+    // from the event. An explicitly chosen city is never widened — the
+    // matcher would otherwise be handed firms from other cities.
+    if (mainCity && !query.strictCity) {
       return await fetchForCity(null);
     }
 
@@ -292,7 +298,6 @@ type Aggregate = {
   vendorId: string;
   name: string;
   city: string;
-  phone?: string;
   about: string;
   experienceYears: number;
   ratingSum: number;
@@ -361,7 +366,6 @@ function newAggregate(vendorId: string): Aggregate {
 function mergeHit(acc: Aggregate, hit: RawSearchHit) {
   acc.name = acc.name || hit.business_name || hit.studio_name || hit.firm_name || hit.display_name || hit.full_name || hit.name || "Studio";
   acc.city = acc.city || hit.city || hit.location || "";
-  acc.phone = acc.phone || hit.contact_phone || undefined;
   acc.about = acc.about || hit.tagline || hit.description || "";
   acc.experienceYears = Math.max(acc.experienceYears, hit.years_experience ?? 0);
   const rating = ratingOf(hit);
@@ -497,26 +501,34 @@ function toCustomerVendor(acc: Aggregate, fetchedLive: boolean): CustomerVendor 
     liveSource: fetchedLive,
     basePricePerDay,
     listedAvailable: acc.isAvailable,
+    // The public catalog never carries contact details: phone / email / WhatsApp come only from the
+    // customer's own booking, once the firm accepts (assigned_photographers[].contact_unlocked).
     contactMaskedUntilAccepted: true,
-    phone: acc.phone,
     leadsToday: acc.leadsToday ?? 0,
     lastLeadDispatchedAt: acc.lastLeadDispatchedAt,
     activePendingLeads: acc.activePendingLeads ?? 0,
   };
 }
 
-async function readCache(): Promise<CustomerVendor[]> {
+/** The offline cache is per city: a cached Vijayawada catalog must never be
+ * served for a Hyderabad search when the network is slow. */
+function cacheKeyFor(city: string | null | undefined): string {
+  const { mainCity } = resolveSearchCity(canonicalCityName(city));
+  return `${VENDOR_CACHE_KEY}:${mainCity.toLowerCase() || "all"}`;
+}
+
+async function readCache(city: string | null | undefined): Promise<CustomerVendor[]> {
   try {
-    const raw = await AsyncStorage.getItem(VENDOR_CACHE_KEY);
+    const raw = await AsyncStorage.getItem(cacheKeyFor(city));
     return raw ? (JSON.parse(raw) as CustomerVendor[]) : [];
   } catch {
     return [];
   }
 }
 
-async function writeCache(vendors: CustomerVendor[]): Promise<void> {
+async function writeCache(city: string | null | undefined, vendors: CustomerVendor[]): Promise<void> {
   try {
-    await AsyncStorage.setItem(VENDOR_CACHE_KEY, JSON.stringify(vendors));
+    await AsyncStorage.setItem(cacheKeyFor(city), JSON.stringify(vendors));
   } catch {
     /* best-effort cache */
   }
@@ -552,17 +564,17 @@ export async function fetchVendorCatalog(query: CatalogQuery = {}): Promise<Vend
     let vendors = [...byId.values()].map((acc) => toCustomerVendor(acc, true));
 
     if (vendors.length) {
-      await writeCache(vendors);
+      await writeCache(query.city, vendors);
     } else {
       // Fallback: If network query returned 0 hits due to slow/sleeping backend, check local cache
-      const cached = await readCache();
+      const cached = await readCache(query.city);
       if (cached.length) {
         vendors = cached;
       }
     }
     return { vendors, live: vendors.length > 0 && allHits.length > 0, fetchedAt: new Date().toISOString() };
   } catch (error) {
-    const cached = await readCache();
+    const cached = await readCache(query.city);
     if (cached.length) {
       return { vendors: cached, live: false, fetchedAt: new Date().toISOString() };
     }

@@ -231,7 +231,30 @@ export type AssignedPhotographer = {
   };
 };
 
+/** CamReels request (Book A Shoot reels segment). Present only on CamReels bookings. */
+export type ReelsRequest = {
+  /** "reels": priced per reel (3-packs cheaper); "monthly": CamReels Monthly. Older drafts may say "single". */
+  plan?: "reels" | "monthly" | "single";
+  /** Id from REELS_CONTENT_TYPES, e.g. "instagram_reels". */
+  contentType: string;
+  /** Number of reels (0 for Monthly: unlimited). */
+  reelCount: number;
+  /** "edited": edited reels; "raw": raw footage only. Monthly is always edited. */
+  editing: "edited" | "raw";
+  /** Legacy field from the tier era; no longer used. */
+  tier?: PackageTierId;
+  /** Id from REELS_SETTINGS, e.g. "studio". */
+  setting: string;
+  durationHours: number;
+  notes: string;
+  /** Fixed total in INR (min and max are equal). */
+  quoteMin: number;
+  quoteMax: number;
+};
+
 export type Booking = {
+  /** Set only for CamReels requests. */
+  reels?: ReelsRequest | null;
   bookingId: string;
   customerId: string;
   status: BookingStatus;
@@ -285,6 +308,16 @@ export type Booking = {
    * separate one. Empty for every booking created before this feature.
    */
   replacementWaveIds?: string[];
+  /** Which 24-hour photographer search this is (1 = first send; +1 per "Search again"). */
+  searchCycle?: number;
+  /** When the current 24-hour search ends (ISO). */
+  searchEndsAt?: string | null;
+  /** The current search is over (no more firms are being contacted). */
+  searchWindowClosed?: boolean;
+  /** Server says "Search again" can restart the search on this same request. */
+  canSearchAgainRemote?: boolean;
+  /** Last time the customer updated this request after sending it (ISO). */
+  lastEditedAt?: string | null;
 };
 
 export type CustomerProfile = {
@@ -311,9 +344,14 @@ export type AppNotificationType =
   | "vendor_accepted"
   | "vendor_rejected"
   | "new_search_dispatched"
+  | "request_updated"
+  | "search_expired"
+  | "search_window_closed"
+  | "search_restarted"
   | "chat_message"
   | "event_reminder"
   | "draft_resume_nudge"
+  | "draft_followup_nudge"
   | "marketing_nudge"
   | "message"
   | "booking"

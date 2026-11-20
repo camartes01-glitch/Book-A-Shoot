@@ -48,14 +48,6 @@ export const WEBSITE_SCHEMA = {
   publisher: {
     "@id": `${BASE_URL}/#organization`,
   },
-  potentialAction: {
-    "@type": "SearchAction",
-    target: {
-      "@type": "EntryPoint",
-      urlTemplate: `${BASE_URL}/services?q={search_term_string}`,
-    },
-    "query-input": "required name=search_term_string",
-  },
 };
 
 export const HOMEPAGE_FAQ_SCHEMA = {
@@ -184,48 +176,5 @@ export function createBreadcrumbSchema(items: Array<{ name: string; path: string
       name: item.name,
       item: `${BASE_URL}${item.path.startsWith("/") ? item.path : `/${item.path}`}`,
     })),
-  };
-}
-
-export function createLocalBusinessSchema({
-  city,
-  serviceName,
-  path,
-  minPrice,
-  maxPrice,
-  neighborhoods,
-}: {
-  city: string;
-  serviceName: string;
-  path: string;
-  minPrice: string;
-  maxPrice: string;
-  neighborhoods: string[];
-}) {
-  return {
-    "@context": "https://schema.org",
-    "@type": "ProfessionalService",
-    name: `${serviceName} in ${city} — Book A Shoot`,
-    image: `${BASE_URL}/blog1.webp`,
-    url: `${BASE_URL}${path}`,
-    telephone: "+91-9494747732",
-    priceRange: `₹${minPrice} - ₹${maxPrice}`,
-    address: {
-      "@type": "PostalAddress",
-      addressLocality: city,
-      addressRegion: city === "Bengaluru" ? "Karnataka" : "Telangana & Andhra Pradesh",
-      addressCountry: "IN",
-    },
-    areaServed: neighborhoods.map((n) => ({
-      "@type": "AdministrativeArea",
-      name: `${n}, ${city}`,
-    })),
-    aggregateRating: {
-      "@type": "AggregateRating",
-      ratingValue: "4.9",
-      reviewCount: "148",
-      bestRating: "5",
-      worstRating: "1",
-    },
   };
 }

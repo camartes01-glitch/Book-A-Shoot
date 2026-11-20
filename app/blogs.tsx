@@ -9,6 +9,7 @@
  */
 
 import React from "react";
+import { LANDING_ROUTE } from "@/src/utils/landingRoute";
 import {
   Image,
   Platform,
@@ -19,7 +20,9 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { router } from "expo-router";
+import { Link, router, type Href } from "expo-router";
+import { SERVICE_CITY_PAGES, getCity, serviceCityPath } from "@/src/seo/seoContent";
+import { headingProps } from "@/src/components/seo/SeoBlocks";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UniversalFooter } from "@/src/components/UniversalFooter";
 import { UniversalNavbar } from "@/src/components/UniversalNavbar";
@@ -58,7 +61,7 @@ export default function BlogsPage() {
   const isMobile = W < 768;
 
   const goToLogin = () => router.push("/(auth)/login");
-  const goToHome = () => router.push("/");
+  const goToHome = () => router.push(LANDING_ROUTE as any);
   const goToServices = () => router.push("/services");
 
   const blogPostingSchema = {
@@ -86,7 +89,7 @@ export default function BlogsPage() {
     },
     mainEntityOfPage: {
       "@type": "WebPage",
-      "@id": "https://www.bookashoot.online/blogs",
+      "@id": "https://www.bookashoot.online/blog/indian-wedding-photography-trends-2026",
     },
   };
 
@@ -95,7 +98,7 @@ export default function BlogsPage() {
     { name: "Blogs & Insights", path: "/blogs" },
     {
       name: "Indian Wedding Photography Trends 2026",
-      path: "/blogs",
+      path: "/blog/indian-wedding-photography-trends-2026",
     },
   ]);
 
@@ -118,7 +121,7 @@ export default function BlogsPage() {
       <SEOHead
         title="Indian Wedding Photography Trends 2026: What's Changing? — Book A Shoot"
         description="Discover the biggest Indian wedding photography trends in 2026, from documentary photography and cinematic films to Reels, content creators, drones and same-day edits."
-        canonicalPath="/blogs"
+        canonicalPath="/blog/indian-wedding-photography-trends-2026"
         ogImage="/blog1.webp"
         ogType="article"
         publishedTime="2026-09-25T00:00:00+05:30"
@@ -175,6 +178,7 @@ export default function BlogsPage() {
               </View>
 
               <Text
+                {...headingProps(1)}
                 style={[
                   styles.mainTitle,
                   isWide && styles.mainTitleWide,
@@ -331,7 +335,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 1 ─────────────────────────────────────────── */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 1. The Shift From Posed Photography to Real Moments
               </Text>
               <Text style={styles.paragraph}>
@@ -391,7 +395,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 2 ─────────────────────────────────────────── */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 2. Candid Wedding Photography Is Becoming More Personal
               </Text>
               <Text style={styles.paragraph}>
@@ -444,7 +448,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 3 ─────────────────────────────────────────── */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 3. Your Wedding Does Not Have to Look Like Everyone Else's
               </Text>
               <Text style={styles.paragraph}>
@@ -470,7 +474,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 4 ─────────────────────────────────────────── */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 4. Wedding Photography Is Becoming More Than Photography
               </Text>
               <Text style={styles.paragraph}>
@@ -511,7 +515,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 5 ─────────────────────────────────────────── */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 5. The Rise of Wedding Content Creators in India
               </Text>
               <Text style={styles.paragraph}>
@@ -556,7 +560,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 6 ─────────────────────────────────────────── */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 6. Wedding Reels Are Becoming Part of the Wedding Experience
               </Text>
               <Text style={styles.paragraph}>
@@ -581,7 +585,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 7 ─────────────────────────────────────────── */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 7. Cinematic Wedding Videography
               </Text>
               <Text style={styles.paragraph}>
@@ -615,7 +619,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 8 ─────────────────────────────────────────── */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 8. Same-Day Wedding Edits
               </Text>
               <Text style={styles.paragraph}>
@@ -641,7 +645,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 9 ─────────────────────────────────────────── */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 9. Drone Photography for Indian Weddings
               </Text>
               <Text style={styles.paragraph}>
@@ -661,7 +665,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 10 & 11 ───────────────────────────────────── */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 10. Natural Colours and Realistic Skin Tones
               </Text>
               <Text style={styles.paragraph}>
@@ -674,7 +678,7 @@ export default function BlogsPage() {
                 The bride should still look like herself. The groom should still look like himself. Good editing should enhance the memory rather than replace it.
               </Text>
 
-              <Text style={[styles.sectionHeading, { marginTop: 28 }]}>
+              <Text {...headingProps(2)} style={[styles.sectionHeading, { marginTop: 28 }]}>
                 11. Film-Inspired Wedding Photography
               </Text>
               <Text style={styles.paragraph}>
@@ -687,7 +691,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 12 & 13 ───────────────────────────────────── */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 12. Multi-Day Indian Weddings Need Multi-Day Photography Planning
               </Text>
               <Text style={styles.paragraph}>
@@ -704,7 +708,7 @@ export default function BlogsPage() {
                 ))}
               </View>
 
-              <Text style={[styles.sectionHeading, { marginTop: 28 }]}>
+              <Text {...headingProps(2)} style={[styles.sectionHeading, { marginTop: 28 }]}>
                 13. How to Choose a Wedding Photographer in India
               </Text>
               <Text style={styles.paragraph}>
@@ -717,7 +721,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 14 ────────────────────────────────────────── */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 14. What Should You Ask Before Booking a Wedding Photographer?
               </Text>
               <Text style={styles.paragraph}>
@@ -749,7 +753,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 15 & 16 ───────────────────────────────────── */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 15. How Much Does Wedding Photography Cost in India?
               </Text>
               <Text style={styles.paragraph}>
@@ -762,7 +766,7 @@ export default function BlogsPage() {
                 </Text>
               </View>
 
-              <Text style={[styles.sectionHeading, { marginTop: 28 }]}>
+              <Text {...headingProps(2)} style={[styles.sectionHeading, { marginTop: 28 }]}>
                 16. How Early Should You Book a Wedding Photographer?
               </Text>
               <Text style={styles.paragraph}>
@@ -772,7 +776,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 17: RESPONSIVE MULTI-DAY PLANNING TABLE ───── */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 17. How to Plan Photography for a Multi-Day Wedding
               </Text>
               <Text style={styles.paragraph}>
@@ -829,7 +833,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 18 & 19 ───────────────────────────────────── */}
             <View style={styles.sectionBlock}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 18. Photography Is About More Than the Couple
               </Text>
               <Text style={styles.paragraph}>
@@ -842,7 +846,7 @@ export default function BlogsPage() {
                 The wedding is about the couple. But the memories belong to the whole family.
               </Text>
 
-              <Text style={[styles.sectionHeading, { marginTop: 28 }]}>
+              <Text {...headingProps(2)} style={[styles.sectionHeading, { marginTop: 28 }]}>
                 19. The Future of Wedding Photography Is About Storytelling
               </Text>
               <Text style={styles.paragraph}>
@@ -864,7 +868,7 @@ export default function BlogsPage() {
 
             {/* ── SECTION 20 & 21: HOW BOOK A SHOOT HELPS ──────────── */}
             <View style={[styles.sectionBlock, styles.ctaCardBlock]}>
-              <Text style={styles.sectionHeading}>
+              <Text {...headingProps(2)} style={styles.sectionHeading}>
                 20. How Camartes Book A Shoot Can Help
               </Text>
               <Text style={styles.paragraph}>
@@ -889,10 +893,30 @@ export default function BlogsPage() {
               <Text style={[styles.paragraph, { marginTop: 14 }]}>
                 Then find the vetted professionals and services that match your exact requirements across Hyderabad, Bangalore, and Andhra Pradesh.
               </Text>
+              <Text style={styles.paragraph}>
+                Find wedding photographers near you:{" "}
+                {SERVICE_CITY_PAGES.filter((p) => p.service === "wedding").map((p, i, list) => (
+                  <React.Fragment key={p.city}>
+                    <Link href={serviceCityPath(p.service, p.city) as Href} style={{ color: colors.primaryDark, fontWeight: "700", textDecorationLine: "underline" }}>
+                      wedding photographers in {getCity(p.city)?.name}
+                    </Link>
+                    {i < list.length - 1 ? ", " : "."}
+                  </React.Fragment>
+                ))}{" "}
+                Planning a couple shoot first? See{" "}
+                <Link href={serviceCityPath("pre-wedding", "hyderabad") as Href} style={{ color: colors.primaryDark, fontWeight: "700", textDecorationLine: "underline" }}>
+                  pre-wedding photographers in Hyderabad
+                </Link>{" "}
+                or{" "}
+                <Link href={serviceCityPath("pre-wedding", "vijayawada") as Href} style={{ color: colors.primaryDark, fontWeight: "700", textDecorationLine: "underline" }}>
+                  Vijayawada
+                </Link>
+                .
+              </Text>
 
               <View style={styles.dividerLight} />
 
-              <Text style={[styles.sectionHeading, { marginTop: 16 }]}>
+              <Text {...headingProps(2)} style={[styles.sectionHeading, { marginTop: 16 }]}>
                 21. Planning a Wedding or Event Shoot?
               </Text>
               <Text style={styles.paragraph}>

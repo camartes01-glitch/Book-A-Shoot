@@ -1,3 +1,7 @@
+// Every field is placed into the HTML email our team receives: escape it so input cannot inject markup or links
+const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const escapeAll = (body) => Object.fromEntries(Object.entries(body || {}).map(([k, v]) => [k, typeof v === 'string' ? escapeHtml(v) : v]));
+
 export default async function handler(req, res) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Credentials', true);
@@ -18,7 +22,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { fullName, email, phone, serviceType, eventDate, city, budget, message } = req.body || {};
+    const { fullName, email, phone, serviceType, eventDate, city, budget, message } = escapeAll(req.body);
 
     if (!fullName || !email || !message) {
       return res.status(400).json({ error: 'Name, email, and message are required' });

@@ -86,7 +86,7 @@ describe("booking matching and submission against Camartes", () => {
     expect(matched.remoteBookingId ?? null).toBeNull();
   });
 
-  test("submit without a Camartes vendor token creates a valid dispatched lead request", async () => {
+  async function readyToSubmit() {
     const created = await bookingApi.createBooking("cust-1");
     await bookingApi.updateDay(created.bookingId, created.days[0].dayId, completeDay());
     await bookingApi.updateExpectedDelivery(created.bookingId, "2099-11-01");
@@ -94,11 +94,72 @@ describe("booking matching and submission against Camartes", () => {
     await bookingApi.selectPackage(created.bookingId, "signature");
     const matched = await bookingApi.getVendorMatches(created.bookingId);
     await bookingApi.selectVendor(matched.bookingId, "user_25493cf5103e");
+    return matched;
+  }
+
+  // Regression: a failed dispatch used to fabricate a local "bk_…" booking and
+  // show "Request sent" although no photographer was ever contacted (so no
+  // alarm/notification could ever ring). It must now fail loudly and keep the
+  // draft so the customer can retry.
+  test("a rejected POST /api/bookings never fabricates a sent request and keeps the draft", async () => {
+    const matched = await readyToSubmit();
+    await expect(bookingApi.submitVendorRequest(matched.bookingId)).rejects.toBeInstanceOf(CamartesApiError);
+    const after = await bookingApi.getBooking(matched.bookingId);
+    expect(after?.status).toBe("VENDOR_SELECTED");
+    expect(after?.remoteBookingId ?? null).toBeNull();
+    expect((await bookingApi.readAllBookings()).some((b) => b.bookingId.startsWith("bk_"))).toBe(false);
+  });
+
+  test("a successful dispatch stores the server booking id and replaces the draft", async () => {
+    const posts: unknown[] = [];
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/providers/service/")) return jsonResponse(200, [LIVE_PHOTOGRAPHY_FIRM]);
+      if (url.includes("/api/bookings") && init?.method === "POST") {
+        posts.push(JSON.parse(String(init.body)));
+        return jsonResponse(200, { booking_id: "srv_123", status: "pending" });
+      }
+      return jsonResponse(404, {});
+    }) as typeof fetch;
+    const matched = await readyToSubmit();
     const submitted = await bookingApi.submitVendorRequest(matched.bookingId);
+    expect(posts).toHaveLength(1);
+    expect(submitted.bookingId).toBe("srv_123");
     expect(submitted.status).toBe("REQUEST_SENT");
-    expect(submitted.bookingId.startsWith("bk_")).toBe(true);
-    const after = await bookingApi.getBooking(submitted.bookingId);
-    expect(after?.status).toBe("REQUEST_SENT");
+    expect(await bookingApi.getBooking(matched.bookingId)).toBeNull();
+  });
+
+  test("a gateway error (backend waking up) is retried once, then succeeds", async () => {
+    let attempts = 0;
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/providers/service/")) return jsonResponse(200, [LIVE_PHOTOGRAPHY_FIRM]);
+      if (url.includes("/api/bookings") && init?.method === "POST") {
+        attempts += 1;
+        return attempts === 1 ? jsonResponse(503, { detail: "waking up" }) : jsonResponse(200, { booking_id: "srv_retry", status: "pending" });
+      }
+      return jsonResponse(404, {});
+    }) as typeof fetch;
+    const matched = await readyToSubmit();
+    const submitted = await bookingApi.submitVendorRequest(matched.bookingId);
+    expect(attempts).toBe(2);
+    expect(submitted.bookingId).toBe("srv_retry");
+  }, 15000);
+
+  test("a 400 validation error is NOT retried (no duplicate dispatch / double alarms)", async () => {
+    let attempts = 0;
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/providers/service/")) return jsonResponse(200, [LIVE_PHOTOGRAPHY_FIRM]);
+      if (url.includes("/api/bookings") && init?.method === "POST") {
+        attempts += 1;
+        return jsonResponse(400, { detail: "bad request" });
+      }
+      return jsonResponse(404, {});
+    }) as typeof fetch;
+    const matched = await readyToSubmit();
+    await expect(bookingApi.submitVendorRequest(matched.bookingId)).rejects.toMatchObject({ status: 400 });
+    expect(attempts).toBe(1);
   });
 
   test("failed POST /api/bookings 400 stays on review and does not invent a booking id", async () => {

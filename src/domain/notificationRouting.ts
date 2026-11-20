@@ -116,6 +116,9 @@ export function resolveNotificationRoute(n: AppNotification, bookings: Booking[]
       }
       return findBookingId(n) ? bookingRoute(n) : NOTIFICATIONS_ROUTE;
     }
+    case "draft_resume_nudge":
+    case "draft_followup_nudge":
+      return draftResumeRoute(n, bookings);
     case "welcome":
     case "marketing_nudge":
       return HOME_ROUTE;

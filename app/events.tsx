@@ -118,6 +118,7 @@ export default function AllEventsScreen() {
     let poojaAdded = false;
 
     DEFAULT_EVENT_CATEGORIES.forEach((cat) => {
+      if (!cat.enabled) return; // e.g. CamReels has its own flow
       if (cat.group === "pooja") {
         if (!poojaAdded) {
           poojaAdded = true;

@@ -28,13 +28,16 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { router } from "expo-router";
+import { Link, router, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UniversalFooter } from "@/src/components/UniversalFooter";
 import { UniversalNavbar } from "@/src/components/UniversalNavbar";
 import { SEOHead } from "@/src/components/SEOHead";
 import { SEOImage } from "@/src/components/SEOImage";
-import { ORGANIZATION_SCHEMA, WEBSITE_SCHEMA, HOMEPAGE_FAQ_SCHEMA } from "@/src/constants/seoSchemas";
+import { ORGANIZATION_SCHEMA, WEBSITE_SCHEMA } from "@/src/constants/seoSchemas";
+import { SEO_CITIES, cityPath } from "@/src/seo/seoContent";
+import { headingProps } from "@/src/components/seo/SeoBlocks";
+import { ReelsTeaser } from "@/src/components/reels/ReelsTeaser";
 import Svg, { Path, Polygon } from "react-native-svg";
 import {
   ArrowRight,
@@ -190,8 +193,6 @@ const SERVICES = [
   { id: "pooja", label: "Sacred Pooja", tagline: "Auspicious Vedic rituals & homams" },
 ] as const;
 
-// Selected cities only
-const CITIES = ["Hyderabad", "Bangalore", "Andhra Pradesh"] as const;
 
 // Why Book A Shoot — KYC Verified emphasized
 const WHY_US = [
@@ -415,7 +416,7 @@ export default function LandingPage() {
     resetAutoPlay();
   };
 
-  const { profile } = useAppStore();
+  const { profile, startNewBooking } = useAppStore();
   const isLoggedIn = Boolean(profile);
 
   const goToLogin = () => {
@@ -426,11 +427,24 @@ export default function LandingPage() {
     }
   };
 
-  const goToBooking = () => {
-    if (isLoggedIn) {
-      router.push("/booking/new");
-    } else {
+  const startingRef = useRef(false);
+  const goToBooking = async () => {
+    if (!isLoggedIn) {
       router.push("/(auth)/login");
+      return;
+    }
+    // Start a fresh draft and open its event editor (the days list bounces
+    // back home when there is no active draft).
+    if (startingRef.current) return;
+    startingRef.current = true;
+    try {
+      const booking = await startNewBooking();
+      const firstDayId = booking.days[0]?.dayId;
+      router.push(firstDayId ? `/booking/day/${firstDayId}` : "/booking/new");
+    } catch {
+      router.push("/(tabs)");
+    } finally {
+      startingRef.current = false;
     }
   };
 
@@ -485,7 +499,10 @@ export default function LandingPage() {
             },
         ]}
       >
-        <Text style={[styles.heroHeadline, isWide ? styles.heroHeadlineWide : styles.heroHeadlinePhone]}>
+        <Text
+          {...(idx === 0 ? headingProps(1) : {})}
+          style={[styles.heroHeadline, isWide ? styles.heroHeadlineWide : styles.heroHeadlinePhone]}
+        >
           {slide.headline}
         </Text>
         <Text style={[styles.heroSub, isWide ? { maxWidth: 440 } : styles.heroSubPhone]}>{slide.sub}</Text>
@@ -530,7 +547,7 @@ export default function LandingPage() {
           "drone photography",
           "event photographers bangalore",
         ]}
-        structuredData={[ORGANIZATION_SCHEMA, WEBSITE_SCHEMA, HOMEPAGE_FAQ_SCHEMA]}
+        structuredData={[ORGANIZATION_SCHEMA, WEBSITE_SCHEMA]}
       />
 
       {/* ── Initial Opening Splash Animation ───────────────────────────── */}
@@ -623,6 +640,9 @@ export default function LandingPage() {
             );
           })}
         </View>
+
+        {/* ── REELS VIDEOGRAPHY ─────────────────────────────────────── */}
+        <ReelsTeaser width={W} isWide={isWide} />
 
         {/* ── HOW IT WORKS (Eyebrow Removed) ────────────────────────── */}
         <View
@@ -884,38 +904,26 @@ export default function LandingPage() {
             </View>
 
             <View style={styles.citiesTriangleLayout}>
-              {/* Row 1: 2 pills side by side */}
-              <View style={styles.citiesTopRow}>
-                {CITIES.slice(0, 2).map((city) => (
-                  <Pressable
-                    key={city}
-                    id={`city-chip-${city.toLowerCase().replace(/ /g, "-")}`}
-                    onPress={goToBooking}
-                    style={({ pressed }) => [styles.cityChipOnOrange, styles.cityChipRow, pressed && styles.pressed]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Book photographers in ${city}`}
-                  >
-                    <MapPin size={18} color={colors.primaryDark} />
-                    <Text style={styles.cityNameOnOrange}>{city}</Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              {/* Row 2: 3rd pill in the center like a triangle */}
-              {CITIES.length > 2 && (
-                <View style={styles.citiesBottomRow}>
-                  <Pressable
-                    id={`city-chip-${CITIES[2].toLowerCase().replace(/ /g, "-")}`}
-                    onPress={goToBooking}
-                    style={({ pressed }) => [styles.cityChipOnOrange, styles.cityChipCenter, pressed && styles.pressed]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Book photographers in ${CITIES[2]}`}
-                  >
-                    <MapPin size={18} color={colors.primaryDark} />
-                    <Text style={styles.cityNameOnOrange}>{CITIES[2]}</Text>
-                  </Pressable>
+              {/* Each city is a crawlable link to its own landing page. */}
+              {[SEO_CITIES.slice(0, 2), SEO_CITIES.slice(2)].map((row, r) => (
+                <View key={r} style={styles.citiesTopRow}>
+                  {row.map((city) => (
+                    <Link key={city.slug} href={cityPath(city.slug) as Href} asChild>
+                      <Pressable
+                        id={`city-chip-${city.slug}`}
+                        style={({ pressed }) => [styles.cityChipOnOrange, styles.cityChipRow, pressed && styles.pressed]}
+                        accessibilityLabel={`Photographers in ${city.name}`}
+                      >
+                        <MapPin size={18} color={colors.primaryDark} />
+                        <Text style={styles.cityNameOnOrange}>{city.name}</Text>
+                      </Pressable>
+                    </Link>
+                  ))}
                 </View>
-              )}
+              ))}
+              <Link href={"/photographers" as Href} style={styles.citiesAllLink}>
+                See all cities and services
+              </Link>
             </View>
           </View>
         </View>
@@ -2074,6 +2082,13 @@ const styles = StyleSheet.create({
   cityChipCenter: {
     paddingHorizontal: 26,
     paddingVertical: 14,
+  },
+  citiesAllLink: {
+    marginTop: 8,
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.white,
+    textDecorationLine: "underline",
   },
   cityNameOnOrange: {
     fontSize: 16,

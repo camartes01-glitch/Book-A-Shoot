@@ -40,3 +40,14 @@ jest.mock("expo-router", () => ({
   },
 }));
 
+
+jest.mock("@react-native-google-signin/google-signin", () => ({
+  GoogleSignin: {
+    configure: jest.fn(),
+    hasPlayServices: jest.fn(async () => true),
+    signIn: jest.fn(async () => ({ type: "success", data: { idToken: "mock-google-id-token" } })),
+    signOut: jest.fn(async () => null),
+  },
+  isErrorWithCode: (e) => Boolean(e && typeof e === "object" && "code" in e),
+  statusCodes: { SIGN_IN_CANCELLED: "SIGN_IN_CANCELLED", IN_PROGRESS: "IN_PROGRESS", PLAY_SERVICES_NOT_AVAILABLE: "PLAY_SERVICES_NOT_AVAILABLE" },
+}));

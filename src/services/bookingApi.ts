@@ -15,6 +15,7 @@ import {
   applyRemoteSnapshot,
   catalogServiceTypes,
   isLocalWizardBooking,
+  isSentRequest,
   parseRemoteBookingList,
   parseRemoteBookingRow,
   remoteBookingIdOf,
@@ -23,10 +24,11 @@ import {
   toCamartesBookingRequest,
   mapCamartesBookingStatus,
 } from "@/src/domain/bookingRequest";
-import { getBookingEventTitle, isCompletedBooking, TERMINAL_STATUSES } from "@/src/domain/bookingFilters";
+import { getBookingEventTitle, getEffectiveBookingStatus, isCompletedBooking, TERMINAL_STATUSES } from "@/src/domain/bookingFilters";
 import { buildNotificationContent, categoryForType } from "@/src/domain/notificationContent";
 import { checkBudgetFeasibility, generatePackageOptions } from "@/src/engine/pricing";
-import { matchVendors } from "@/src/engine/matching";
+import { matchVendors, vendorServesCity } from "@/src/engine/matching";
+import { resolveProviderSearchTarget } from "@/src/domain/cityResolution";
 import { defaultExpectedDeliveryDate, validateBooking, validateBudget } from "@/src/engine/validation";
 import { cacheVendorProfile, fetchVendorById, fetchVendorCatalog, getCachedVendorProfile } from "@/src/services/vendorApi";
 import { camartesFetch, CamartesApiError, getAuthToken } from "@/src/services/camartesClient";
@@ -34,8 +36,11 @@ import { getStoredProfile } from "@/src/services/authApi";
 import { makeId } from "@/src/utils/id";
 import { addNotification } from "@/src/services/notificationsStore";
 import { isDemoAuthMode } from "@/src/config/authMode";
-
-const BOOKINGS_KEY = "camartes-customer:bookings:v1";
+import {
+  migrateBookingsToCustomer as migrateStoredBookings,
+  mutateBookings,
+  readAllBookings as readStoredBookings,
+} from "@/src/services/bookingStore";
 
 /**
  * A "Search Again" retry (booking.replacedBookingId set) dispatches to freshly
@@ -60,28 +65,8 @@ function buildDispatchNotification(
   return { type, title, body };
 }
 
-export async function readAllBookings(): Promise<Booking[]> {
-  try {
-    const raw = await AsyncStorage.getItem(BOOKINGS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Booking[];
-    if (!Array.isArray(parsed)) return [];
-    const seen = new Set<string>();
-    const deduplicated: Booking[] = [];
-    for (const b of parsed) {
-      const id = b.bookingId || b.remoteBookingId;
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      deduplicated.push(b);
-    }
-    return deduplicated;
-  } catch {
-    return [];
-  }
-}
-
-async function writeAllBookings(bookings: Booking[]): Promise<void> {
-  await AsyncStorage.setItem(BOOKINGS_KEY, JSON.stringify(bookings));
+export function readAllBookings(): Promise<Booking[]> {
+  return readStoredBookings();
 }
 
 /**
@@ -90,22 +75,25 @@ async function writeAllBookings(bookings: Booking[]): Promise<void> {
  * (e.g., user previously signed in with Google → now signs in with email/password,
  * or vice versa, with the same email address).
  */
-export async function migrateBookingsToCustomer(
-  oldCustomerId: string,
-  newCustomerId: string,
-): Promise<void> {
-  if (!oldCustomerId || !newCustomerId || oldCustomerId === newCustomerId) return;
-  const all = await readAllBookings();
-  let changed = false;
-  for (const b of all) {
-    if (b.customerId === oldCustomerId) {
-      b.customerId = newCustomerId;
-      changed = true;
-    }
-  }
-  if (changed) {
-    await writeAllBookings(all);
-  }
+export function migrateBookingsToCustomer(oldCustomerId: string, newCustomerId: string): Promise<void> {
+  return migrateStoredBookings(oldCustomerId, newCustomerId);
+}
+
+function sameBooking(a: Booking, b: Pick<Booking, "bookingId" | "remoteBookingId">): boolean {
+  return a.bookingId === b.bookingId || Boolean(b.remoteBookingId && a.remoteBookingId === b.remoteBookingId);
+}
+
+/** Pure upsert used inside storage mutators. */
+function upsertInto(all: Booking[], next: Booking): Booking[] {
+  const idx = all.findIndex((b) => sameBooking(b, next));
+  if (idx === -1) return [next, ...all];
+  const copy = [...all];
+  copy[idx] = next;
+  return copy;
+}
+
+function stampForSave(booking: Booking): Booking {
+  return touch({ ...booking, draftCompletionPct: computeCompletionPct(booking) });
 }
 
 function touch(booking: Booking): Booking {
@@ -128,14 +116,22 @@ function sortBookings(bookings: Booking[]): Booking[] {
   return [...bookings].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
 }
 
-export async function saveBooking(booking: Booking): Promise<Booking> {
-  const next = touch({ ...booking, draftCompletionPct: computeCompletionPct(booking) });
-  const all = await readAllBookings();
-  const idx = all.findIndex((b) => b.bookingId === next.bookingId || (next.remoteBookingId && b.remoteBookingId === next.remoteBookingId));
-  if (idx === -1) all.unshift(next);
-  else all[idx] = next;
-  await writeAllBookings(all);
-  return next;
+export function saveBooking(booking: Booking): Promise<Booking> {
+  const next = stampForSave(booking);
+  return mutateBookings((all) => ({ next: upsertInto(all, next), result: next }));
+}
+
+/** Persist `booking` and drop the given superseded ids in one atomic write
+ * (used when a local draft id is replaced by the server's booking id). */
+function replaceBooking(booking: Booking, supersededIds: Array<string | null | undefined>): Promise<Booking> {
+  const next = stampForSave(booking);
+  const drop = new Set(supersededIds.filter((id): id is string => Boolean(id)));
+  return mutateBookings((all) => {
+    const remaining = all.filter(
+      (b) => !sameBooking(b, next) && !drop.has(b.bookingId) && !(b.remoteBookingId && drop.has(b.remoteBookingId)),
+    );
+    return { next: [next, ...remaining], result: next };
+  });
 }
 
 function bookingLooksLike(local: Booking, remoteId: string): boolean {
@@ -359,41 +355,39 @@ function invalidateStalePackageAndMatches(
 
 /** Local drafts plus Camartes `GET /api/bookings/my-bookings` when signed in. */
 export async function listBookings(customerId: string): Promise<Booking[]> {
-  const allStored = await readAllBookings();
-  const deletedIds = await getDeletedBookingIds();
-  const local = allStored.filter(
-    (b) =>
-      b.customerId === customerId &&
-      !deletedIds.has(b.bookingId) &&
-      (!b.remoteBookingId || !deletedIds.has(b.remoteBookingId)),
-  );
+  const isDeleted = (b: Booking, deletedIds: Set<string>) =>
+    deletedIds.has(b.bookingId) || Boolean(b.remoteBookingId && deletedIds.has(b.remoteBookingId));
+  const localFor = (all: Booking[], deletedIds: Set<string>) =>
+    all.filter((b) => b.customerId === customerId && !isDeleted(b, deletedIds));
+
+  // 1. Network first, OUTSIDE the storage lock — this can take many seconds on
+  //    a cold backend and must never hold up (or overwrite) wizard saves.
+  let remote: unknown;
   try {
-    const remote = await camartesFetch<unknown>("/api/bookings/my-bookings", {}, { requireAuth: true });
-    const remoteList = parseRemoteBookingList(remote);
-    const combinedLocal = [...local];
+    remote = await camartesFetch<unknown>("/api/bookings/my-bookings", {}, { requireAuth: true });
+  } catch {
+    const [allStored, deletedIds] = await Promise.all([readAllBookings(), getDeletedBookingIds()]);
+    return sortBookings(localFor(allStored, deletedIds));
+  }
+
+  // 2. Merge against the LATEST stored bookings (read inside the lock), so a
+  //    draft created or edited while the request was in flight is preserved.
+  const deletedIds = await getDeletedBookingIds();
+  const remoteList = parseRemoteBookingList(remote);
+  return mutateBookings((allStored) => {
+    const combinedLocal = localFor(allStored, deletedIds);
     for (const b of allStored) {
-      if (deletedIds.has(b.bookingId) || (b.remoteBookingId && deletedIds.has(b.remoteBookingId))) continue;
-      if (!combinedLocal.some((cl) => cl.bookingId === b.bookingId)) {
-        if (remoteList.some((r) => bookingLooksLike(b, r.id))) {
-          combinedLocal.push({ ...b, customerId });
-        }
+      if (isDeleted(b, deletedIds)) continue;
+      if (!combinedLocal.some((cl) => cl.bookingId === b.bookingId) && remoteList.some((r) => bookingLooksLike(b, r.id))) {
+        combinedLocal.push({ ...b, customerId });
       }
     }
     const merged = mergeLocalWithRemote(combinedLocal, remote, customerId, deletedIds);
-    await writeAllBookings([
-      ...allStored.filter(
-        (b) =>
-          b.customerId !== customerId &&
-          !deletedIds.has(b.bookingId) &&
-          (!b.remoteBookingId || !deletedIds.has(b.remoteBookingId)) &&
-          !merged.some((m) => bookingLooksLike(b, m.bookingId)),
-      ),
-      ...merged,
-    ]);
-    return merged;
-  } catch {
-    return sortBookings(local);
-  }
+    const others = allStored.filter(
+      (b) => b.customerId !== customerId && !isDeleted(b, deletedIds) && !merged.some((m) => bookingLooksLike(b, m.bookingId)),
+    );
+    return { next: [...others, ...merged], result: merged };
+  });
 }
 
 export async function getBookingContainingDay(dayId: string | string[]): Promise<Booking | null> {
@@ -635,16 +629,11 @@ export async function refreshRemoteBookingStatus(bookingId: string): Promise<Boo
       return await saveBooking(terminalBooking);
     }
   } catch {
+    // my-bookings failed (offline, signed out, server error), so we can't
+    // confirm the booking is really gone. Never cancel a customer's booking
+    // on an unconfirmed 404 - keep it as-is and check again next refresh.
     if (directNotFound && booking) {
-      const terminalBooking: Booking = {
-        ...booking,
-        status: "CUSTOMER_CANCELLED",
-        remoteStatus: "deleted",
-        firms_status_message: "Booking request no longer exists.",
-        assigned_photographers: [],
-        assigned_count: 0,
-      };
-      return await saveBooking(terminalBooking);
+      return booking;
     }
   }
 
@@ -669,10 +658,9 @@ let startFreshInFlight: Promise<Booking> | null = null;
 
 export async function startFreshBooking(customerId: string): Promise<Booking> {
   if (startFreshInFlight) return startFreshInFlight;
-  const inFlight = (async () => {
-    await dayWriteChain.catch(() => undefined);
-    return createBooking(customerId);
-  })();
+  // createBooking goes through the serialized storage queue, so it is ordered
+  // after any in-flight day write automatically.
+  const inFlight = createBooking(customerId);
   startFreshInFlight = inFlight;
   try {
     return await inFlight;
@@ -714,8 +702,6 @@ export async function duplicateExistingDay(bookingId: string, dayId: string): Pr
   return saveBooking({ ...booking, days: [...booking.days, day], ...invalidateStalePackageAndMatches(booking) });
 }
 
-let dayWriteChain: Promise<unknown> = Promise.resolve();
-
 function serviceFingerprint(day: EventDay): string {
   return JSON.stringify({
     photography: day.photography,
@@ -726,58 +712,70 @@ function serviceFingerprint(day: EventDay): string {
   });
 }
 
-export async function updateDay(bookingId: string, dayId: string | string[], patch: Partial<EventDay>): Promise<Booking> {
+function findDayInBooking(booking: Booking | null | undefined, dayId: string): EventDay | null {
+  if (!booking?.days?.length) return null;
+  return (dayId ? booking.days.find((d) => d.dayId === dayId) : null) ?? (booking.days.length === 1 ? booking.days[0] : null);
+}
+
+/**
+ * Atomically merge `patch` into one event day and persist it.
+ *
+ * `seed` is the caller's in-memory copy of the booking. If the booking is
+ * somehow missing from storage (e.g. storage was cleared by the OS, or an
+ * older app version lost it), the seed is written back instead of failing —
+ * the customer's on-screen draft is the source of truth, so a save must never
+ * be rejected just because the disk copy disappeared.
+ */
+export function updateDay(
+  bookingId: string,
+  dayId: string | string[],
+  patch: Partial<EventDay>,
+  seed?: Booking | null,
+): Promise<Booking> {
   const resolvedDayId = normalizeRouteParam(dayId);
-  const write = dayWriteChain.then(async () => {
-    let booking = await getBooking(bookingId);
-    let current = resolvedDayId ? booking?.days.find((d) => d.dayId === resolvedDayId) ?? null : null;
-    if (!current) {
-      const owner = resolvedDayId ? await getBookingContainingDay(resolvedDayId) : null;
-      if (owner) {
-        booking = owner;
-        current = owner.days.find((d) => d.dayId === resolvedDayId) ?? null;
-      }
-    }
-    if (!current && booking?.days && booking.days.length > 0) {
-      current = (resolvedDayId ? booking.days.find((d) => d.dayId === resolvedDayId) : null) ?? (booking.days.length === 1 ? booking.days[0] : null);
+  const { dayId: _ignoredId, order: _ignoredOrder, ...safePatch } = patch;
+  return mutateBookings((all) => {
+    // The booking that OWNS this day always wins — never patch a same-index
+    // day of a different booking just because a stale booking id was passed.
+    const owner = resolvedDayId ? all.find((b) => b.days.some((d) => d.dayId === resolvedDayId)) ?? null : null;
+    let booking: Booking | null = owner ?? all.find((b) => b.bookingId === bookingId || b.remoteBookingId === bookingId) ?? null;
+    let current: EventDay | null = owner
+      ? owner.days.find((d) => d.dayId === resolvedDayId) ?? null
+      : findDayInBooking(booking, resolvedDayId);
+
+    // Self-heal: storage lost the booking, but the caller's in-memory copy has it.
+    if (!owner && seed && seed.days.some((d) => d.dayId === resolvedDayId || !resolvedDayId)) {
+      booking = seed;
+      current = findDayInBooking(seed, resolvedDayId);
     }
     if (!booking || !current) {
       throw new Error("Could not save this event day.");
     }
-    const { dayId: _ignoredId, order: _ignoredOrder, ...safePatch } = patch;
-    const merged = mergeEventDayPatch(current, safePatch);
-    const days = booking.days.map((d) => (d.dayId === current!.dayId ? merged : d));
-    const servicesChanged = serviceFingerprint(current) !== serviceFingerprint(merged);
-    const selectedPackage = booking.selectedPackage ?? "signature";
-    return saveBooking({
+    const target = current;
+    const merged = mergeEventDayPatch(target, safePatch);
+    const days = booking.days.map((d) => (d.dayId === target.dayId ? merged : d));
+    const servicesChanged = serviceFingerprint(target) !== serviceFingerprint(merged);
+    const saved = stampForSave({
       ...booking,
       days,
       ...(servicesChanged ? invalidateStalePackageAndMatches(booking) : {}),
-      selectedPackage,
+      selectedPackage: booking.selectedPackage ?? "signature",
     });
+    return { next: upsertInto(all, saved), result: saved };
   });
-  dayWriteChain = write.then(
-    () => undefined,
-    () => undefined,
-  );
-  return write;
 }
 
-export async function deleteDay(bookingId: string, dayId: string): Promise<Booking> {
-  const write = dayWriteChain.then(async () => {
-    const booking = await getBooking(bookingId);
+export function deleteDay(bookingId: string, dayId: string): Promise<Booking> {
+  return mutateBookings((all) => {
+    const booking = all.find((b) => b.bookingId === bookingId || b.remoteBookingId === bookingId);
     if (!booking) throw new Error("Booking not found");
     if (booking.days.length <= 1) {
       throw new Error("A booking must have at least one event day.");
     }
     const days = booking.days.filter((d) => d.dayId !== dayId).map((d, i) => ({ ...d, order: i + 1 }));
-    return saveBooking({ ...booking, days, ...invalidateStalePackageAndMatches(booking) });
+    const saved = stampForSave({ ...booking, days, ...invalidateStalePackageAndMatches(booking) });
+    return { next: upsertInto(all, saved), result: saved };
   });
-  dayWriteChain = write.then(
-    () => undefined,
-    () => undefined,
-  );
-  return write;
 }
 
 export async function reorderDays(bookingId: string, orderedDayIds: string[]): Promise<Booking> {
@@ -838,7 +836,8 @@ export async function selectPackage(bookingId: string, tier: PackageTierId): Pro
     ...booking,
     selectedPackage: tier,
     packageOptions,
-    status: "MATCHING",
+    // A sent request keeps its live status while the customer edits it.
+    status: isSentRequest(booking) ? booking.status : "MATCHING",
     ...invalidateMatches(booking),
   });
 }
@@ -859,6 +858,9 @@ export async function updateProviderLocationPreference(
 export async function getVendorMatches(bookingId: string): Promise<Booking> {
   let booking = await getBooking(bookingId);
   if (!booking) throw new Error("Booking not found");
+  // Photographers for a sent request are managed by Camartes; re-matching on
+  // the device would overwrite its live status and firm list while editing.
+  if (isSentRequest(booking)) return booking;
   if (!booking.expectedDeliveryDate) {
     const defaultDelivery = defaultExpectedDeliveryDate(booking.days);
     if (defaultDelivery) {
@@ -872,13 +874,14 @@ export async function getVendorMatches(bookingId: string): Promise<Booking> {
   }
 
   const first = [...booking.days].sort((a, b) => a.order - b.order)[0];
-  const queryCity = booking.providerLocationPreference?.city || first?.location?.city || null;
+  const target = resolveProviderSearchTarget(booking);
   const { vendors } = await fetchVendorCatalog({
-    city: queryCity,
+    city: target.city,
     eventDate: first?.eventDate || null,
     serviceTypes: catalogServiceTypes(booking.days),
-    latitude: first?.location?.latitude,
-    longitude: first?.location?.longitude,
+    latitude: target.latitude,
+    longitude: target.longitude,
+    strictCity: target.explicit,
   });
   const chosenPackage = booking.selectedPackage ?? "signature";
   const matches = matchVendors(
@@ -929,6 +932,82 @@ export async function selectVendor(bookingId: string, vendorId: string): Promise
   });
 }
 
+/** Generous timeout: the Camartes API can cold-start, and dispatch fans out
+ * push notifications/alarms to every assigned firm before responding. */
+const DISPATCH_TIMEOUT_MS = 45000;
+const DISPATCH_RETRY_DELAY_MS = 2000;
+
+/** Statuses where the request provably never reached the booking handler, so
+ * a retry cannot create a duplicate booking (no double alarms for vendors). */
+function isSafeToRetry(err: unknown): boolean {
+  return err instanceof CamartesApiError && (err.status === 0 || err.status === 502 || err.status === 503 || err.status === 504);
+}
+
+/** After a timeout the server may still have created the booking. Look for it
+ * by our client booking id before telling the customer to retry. */
+async function findDispatchedBooking(clientBookingId: string): Promise<unknown | null> {
+  try {
+    const remote = await camartesFetch<unknown>("/api/bookings/my-bookings", {}, { requireAuth: true, timeoutMs: 15000 });
+    const rows = Array.isArray(remote)
+      ? remote
+      : ((remote as Record<string, unknown> | null)?.bookings as unknown[] | undefined) ?? [];
+    return (
+      (rows as Array<Record<string, unknown>>).find(
+        (row) =>
+          row &&
+          (row.client_booking_id === clientBookingId ||
+            row.booking_id === clientBookingId ||
+            row.id === clientBookingId ||
+            (row.lead_details as Record<string, unknown> | undefined)?.client_booking_id === clientBookingId),
+      ) ?? null
+    );
+  } catch {
+    return null;
+  }
+}
+
+async function dispatchBookingRequest(clientBookingId: string, body: unknown): Promise<unknown> {
+  const post = () =>
+    camartesFetch<unknown>(
+      "/api/bookings",
+      { method: "POST", body: JSON.stringify(body) },
+      { auth: true, requireAuth: false, timeoutMs: DISPATCH_TIMEOUT_MS },
+    );
+  try {
+    return await post();
+  } catch (err) {
+    if (isSafeToRetry(err)) {
+      await new Promise((resolve) => setTimeout(resolve, DISPATCH_RETRY_DELAY_MS));
+      try {
+        return await post();
+      } catch (retryErr) {
+        throw toDispatchError(retryErr);
+      }
+    }
+    if (err instanceof CamartesApiError && err.status === 408) {
+      const existing = await findDispatchedBooking(clientBookingId);
+      if (existing) return existing;
+    }
+    throw toDispatchError(err);
+  }
+}
+
+function toDispatchError(err: unknown): Error {
+  if (!(err instanceof CamartesApiError)) {
+    return err instanceof Error ? err : new Error("Could not send your request. Please try again.");
+  }
+  if (err.status === 401) {
+    return new CamartesApiError("Your session has expired. Please sign in again to send this request — your booking details are saved.", 401);
+  }
+  if (err.status === 0 || err.status === 408 || err.status >= 502) {
+    return new CamartesApiError(
+      "Couldn't reach our photographers right now. Check your internet connection and tap Send Request again — your booking details are saved.",
+      err.status,
+    );
+  }
+  return err;
+}
+
 export async function submitVendorRequest(bookingId: string): Promise<Booking> {
   let booking = await getBooking(bookingId);
   if (!booking) throw new Error("Booking not found");
@@ -941,7 +1020,11 @@ export async function submitVendorRequest(bookingId: string): Promise<Booking> {
   const issues = validateBooking(booking);
   if (issues.length) throw new Error(issues[0].message);
 
-  if (!booking.assignedProviderIds?.length && (!booking.matches || booking.matches.length === 0)) {
+  // CamReels: the Camartes backend chooses the videographers (freelance
+  // videographers + opted-in videography firms). Never pre-assign photo firms.
+  const serverPicks = Boolean(booking.reels);
+
+  if (!serverPicks && !booking.assignedProviderIds?.length && (!booking.matches || booking.matches.length === 0)) {
     try {
       booking = await getVendorMatches(booking.bookingId);
     } catch (e) {
@@ -953,11 +1036,19 @@ export async function submitVendorRequest(bookingId: string): Promise<Booking> {
     ? booking.assignedProviderIds
     : (booking.matches?.slice(0, 6).map((m) => m.vendorId) ?? []);
 
-  if (assigned.length === 0) {
+  if (serverPicks) {
+    assigned = [];
+  } else if (assigned.length === 0) {
     try {
-      const firstDay = [...booking.days].sort((a, b) => a.order - b.order)[0];
-      const queryCity = booking.providerLocationPreference?.city || firstDay?.location?.city || null;
-      const { vendors } = await fetchVendorCatalog({ city: queryCity });
+      const target = resolveProviderSearchTarget(booking);
+      const { vendors: catalog } = await fetchVendorCatalog({
+        city: target.city,
+        latitude: target.latitude,
+        longitude: target.longitude,
+        strictCity: target.explicit,
+      });
+      // Never dispatch outside the chosen city: keep only firms that serve it.
+      const vendors = catalog.filter((v) => vendorServesCity(v, target.city ?? ""));
       if (vendors.length > 0) {
         assigned = vendors.slice(0, 6).map((v) => v.vendorId);
         booking.assignedProviderIds = assigned;
@@ -969,13 +1060,12 @@ export async function submitVendorRequest(bookingId: string): Promise<Booking> {
           completedBookings: v.completedBookings ?? 25,
           available: true,
           matchScore: 90,
-          city: v.city ?? queryCity ?? "Hyderabad",
+          city: v.city || target.city || "",
           area: v.area,
           imageUrl: v.portfolioImages?.[0],
           priceBreakdown: { photography: 0, videography: 0, addOns: 0, deliverables: 0, subtotal: 0, taxes: 0, total: 0 },
           estimatedPrice: booking.budget || 25000,
-          contactPhone: v.phone || "+919876543210",
-          contactEmail: v.email || "support@bookashoot.com",
+          // No contact details here: the booking endpoint returns them once this firm accepts
         }));
       }
     } catch (e) {
@@ -1007,32 +1097,24 @@ export async function submitVendorRequest(bookingId: string): Promise<Booking> {
         ? `${assignedCount} verified photography partner${assignedCount > 1 ? "s" : ""} assigned`
         : null;
 
-    const previousId = booking.bookingId;
-    const replacedId = booking.replacedBookingId;
-    const submitted = await saveBooking({
-      ...booking,
-      bookingId: demoId,
-      remoteBookingId: demoId,
-      remoteStatus: "request_sent",
-      status: "REQUEST_SENT",
-      assignedProviderIds: assigned,
-      firms_status_message: firmsStatusMessage,
-      assigned_count: assignedCount,
-      leadDistribution: {
-        totalAssigned: assignedCount,
-        assignedAt: new Date().toISOString(),
+    const submitted = await replaceBooking(
+      {
+        ...booking,
+        bookingId: demoId,
+        remoteBookingId: demoId,
+        remoteStatus: "request_sent",
+        status: "REQUEST_SENT",
+        assignedProviderIds: assigned,
+        firms_status_message: firmsStatusMessage,
+        assigned_count: assignedCount,
+        leadDistribution: {
+          totalAssigned: assignedCount,
+          assignedAt: new Date().toISOString(),
+        },
+        contactMasked: true,
       },
-      contactMasked: true,
-    });
-
-    const remaining = (await readAllBookings()).filter(
-      (b) =>
-        b.bookingId !== previousId &&
-        b.bookingId !== submitted.bookingId &&
-        (!replacedId || (b.bookingId !== replacedId && b.remoteBookingId !== replacedId))
+      [booking.bookingId, booking.replacedBookingId],
     );
-    await writeAllBookings(remaining);
-    await saveBooking(submitted);
 
     const dispatchNotif = buildDispatchNotification(submitted, assigned, profile);
     await addNotification({
@@ -1055,65 +1137,42 @@ export async function submitVendorRequest(bookingId: string): Promise<Booking> {
       ? `${assignedCount} verified photography partner${assignedCount > 1 ? "s" : ""} assigned`
       : null;
 
-  let remoteId: string | null = null;
-  let remoteStatus: string = "request_sent";
-  let parsedSnapshot: ReturnType<typeof parseRemoteBookingRow> = null;
-
-  try {
-    const body = toCamartesBookingRequest(booking, profile);
-    const response = await camartesFetch<unknown>(
-      "/api/bookings",
-      { method: "POST", body: JSON.stringify(body) },
-      { auth: true, requireAuth: false },
-    );
-    remoteId = remoteBookingIdOf(response);
-    if (remoteId) {
-      remoteStatus = remoteStatusOf(response) ?? "request_sent";
-      parsedSnapshot = parseRemoteBookingRow(response);
-    }
-  } catch (err) {
-    if (err instanceof CamartesApiError && (err.status === 400 || err.status === 403 || err.status === 500)) {
-      throw err;
-    }
-    // If Camartes backend requires vendor auth or is offline,
-    // generate verified lead booking ID for Book A Shoot customer request
-    remoteId = `bk_${makeId("req")}`;
-    remoteStatus = "request_sent";
-  }
-
+  // The request MUST reach Camartes: that POST is what notifies and rings the
+  // photographers' phones. Never fabricate a local "sent" booking on failure —
+  // that showed "Request sent" while no photographer was ever contacted. On
+  // failure the draft is left intact and the customer gets a clear retry error.
+  const body = toCamartesBookingRequest(booking, profile);
+  const response = await dispatchBookingRequest(booking.bookingId, body);
+  const remoteId = remoteBookingIdOf(response);
   if (!remoteId) {
-    remoteId = `bk_${makeId("req")}`;
+    throw new CamartesApiError(
+      "We couldn't confirm your request with our photographers. Please tap Send Request again.",
+      502,
+    );
   }
-
+  const remoteStatus = remoteStatusOf(response) ?? "request_sent";
+  const parsedSnapshot = parseRemoteBookingRow(response);
   const mapped = mapCamartesBookingStatus(remoteStatus) ?? "REQUEST_SENT";
-  const previousId = booking.bookingId;
-  const replacedId = booking.replacedBookingId;
 
-  const submitted = await saveBooking({
-    ...booking,
-    bookingId: remoteId,
-    remoteBookingId: remoteId,
-    remoteStatus,
-    status: mapped,
-    assignedProviderIds: assigned,
-    firms_status_message: parsedSnapshot?.firmsStatusMessage ?? firmsStatusMessage,
-    assigned_count: parsedSnapshot?.assignedCount ?? assignedCount,
-    assigned_photographers: parsedSnapshot?.assignedPhotographers,
-    leadDistribution: {
-      totalAssigned: assignedCount,
-      assignedAt: new Date().toISOString(),
+  const submitted = await replaceBooking(
+    {
+      ...booking,
+      bookingId: remoteId,
+      remoteBookingId: remoteId,
+      remoteStatus,
+      status: mapped,
+      assignedProviderIds: assigned,
+      firms_status_message: parsedSnapshot?.firmsStatusMessage ?? firmsStatusMessage,
+      assigned_count: parsedSnapshot?.assignedCount ?? assignedCount,
+      assigned_photographers: parsedSnapshot?.assignedPhotographers,
+      leadDistribution: {
+        totalAssigned: assignedCount,
+        assignedAt: new Date().toISOString(),
+      },
+      contactMasked: true,
     },
-    contactMasked: true,
-  });
-
-  const remaining = (await readAllBookings()).filter(
-    (b) =>
-      b.bookingId !== previousId &&
-      b.bookingId !== submitted.bookingId &&
-      (!replacedId || (b.bookingId !== replacedId && b.remoteBookingId !== replacedId))
+    [booking.bookingId, booking.replacedBookingId],
   );
-  await writeAllBookings(remaining);
-  await saveBooking(submitted);
 
   const dispatchNotif = buildDispatchNotification(submitted, assigned, profile);
   await addNotification({
@@ -1128,6 +1187,169 @@ export async function submitVendorRequest(bookingId: string): Promise<Booking> {
   });
 
   return submitted;
+}
+
+const EDITABLE_REQUEST_FIELDS = [
+  "event_type",
+  "event_date",
+  "event_time",
+  "end_date",
+  "duration_hours",
+  "venue_address",
+  "message",
+  "budget",
+  "location_preference",
+  "lead_details",
+  "client_name",
+  "client_phone",
+] as const;
+
+function friendlyRequestError(err: unknown, offline: string): Error {
+  if (err instanceof CamartesApiError) {
+    if (err.status === 0 || err.status === 408 || err.status >= 502) return new CamartesApiError(offline, err.status);
+    if (err.status === 401) return new CamartesApiError("Your session has expired. Please sign in again and retry.", 401);
+    return err;
+  }
+  return err instanceof Error ? err : new Error(offline);
+}
+
+/**
+ * Saves the customer's edits to a request they already sent. The request keeps
+ * its id and its photographers (nothing is re-sent or re-rung) and Camartes
+ * tells every photographer still working on it what changed. Sending the same
+ * details twice is a no-op on the server, so retries are safe.
+ */
+export async function updateSentRequest(
+  bookingId: string,
+): Promise<{ booking: Booking; updated: boolean; notifiedCount: number }> {
+  const booking = await getBooking(bookingId);
+  if (!booking) throw new Error("Booking not found");
+  if (!isSentRequest(booking) || !booking.remoteBookingId) {
+    throw new Error("This request hasn't been sent yet. Tap Send booking request instead.");
+  }
+  const issues = validateBooking(booking);
+  if (issues.length) throw new Error(issues[0].message);
+
+  const nowIso = new Date().toISOString();
+  if (isDemoAuthMode()) {
+    const saved = await saveBooking({ ...booking, lastEditedAt: nowIso });
+    return { booking: saved, updated: true, notifiedCount: booking.assignedProviderIds?.length ?? 0 };
+  }
+
+  const profile = await getStoredProfile();
+  // The body builder needs a provider id; the update endpoint ignores firm
+  // fields entirely (the request keeps the photographers it already has).
+  const anyFirm =
+    booking.selectedVendorId || booking.confirmed_provider_id || booking.assignedProviderIds?.[0] || "unchanged";
+  const full = toCamartesBookingRequest({ ...booking, selectedVendorId: anyFirm }, profile) as unknown as Record<string, unknown>;
+  const body: Record<string, unknown> = {};
+  for (const key of EDITABLE_REQUEST_FIELDS) {
+    if (full[key] !== undefined && full[key] !== null) body[key] = full[key];
+  }
+
+  let response: { updated?: boolean; notified_count?: number; booking?: Record<string, unknown> } | null;
+  try {
+    response = await camartesFetch(
+      `/api/bookings/${encodeURIComponent(booking.remoteBookingId)}/details`,
+      { method: "PUT", body: JSON.stringify(body) },
+      { auth: true, requireAuth: false, timeoutMs: 30000 },
+    );
+  } catch (err) {
+    throw friendlyRequestError(
+      err,
+      "Couldn't reach Camartes to update your request. Your changes are saved on this phone, so just tap Update request again.",
+    );
+  }
+
+  const updated = response?.updated !== false;
+  const notifiedCount = typeof response?.notified_count === "number" ? response.notified_count : 0;
+  const lastEditedAt = (response?.booking?.last_edited_at as string | undefined) ?? (updated ? nowIso : booking.lastEditedAt);
+  const saved = await saveBooking({ ...booking, lastEditedAt: lastEditedAt ?? null });
+
+  if (updated) {
+    const { title, body: text } = buildNotificationContent("request_updated", {
+      eventName: getBookingEventTitle(saved),
+      firmCount: notifiedCount,
+    });
+    await addNotification({
+      id: makeId("ntf"),
+      title,
+      body: text,
+      type: "request_updated",
+      category: categoryForType("request_updated"),
+      createdAt: nowIso,
+      read: false,
+      bookingId: saved.bookingId,
+      data: { edited_at: lastEditedAt ?? nowIso },
+    });
+  }
+  return { booking: saved, updated, notifiedCount };
+}
+
+/**
+ * "Search again" restarts the photographer search on the SAME request when its
+ * 24-hour search ended (expired, or closed with fewer than 6 acceptances).
+ * Cancelled requests still start a fresh request instead.
+ */
+export function canRestartSearchRemotely(booking: Booking): boolean {
+  if (isDemoAuthMode() || !isSentRequest(booking)) return false;
+  if (booking.canSearchAgainRemote === true) return true;
+  if (booking.canSearchAgainRemote === false) return false;
+  // Older server rows without the flag: an expired search can be restarted.
+  return booking.status === "EXPIRED" || getEffectiveBookingStatus(booking) === "EXPIRED";
+}
+
+export async function restartSearch(
+  bookingId: string,
+): Promise<{ booking: Booking; restarted: boolean; message: string | null }> {
+  const booking = await getBooking(bookingId);
+  if (!booking?.remoteBookingId) throw new Error("Booking not found");
+
+  let response: Record<string, unknown> | null;
+  try {
+    response = await camartesFetch<Record<string, unknown>>(
+      `/api/bookings/${encodeURIComponent(booking.remoteBookingId)}/search-again`,
+      { method: "POST", body: "{}" },
+      { auth: true, requireAuth: false, timeoutMs: DISPATCH_TIMEOUT_MS },
+    );
+  } catch (err) {
+    throw friendlyRequestError(err, "Couldn't reach Camartes right now. Check your connection and tap Search again.");
+  }
+
+  const snapshot = parseRemoteBookingRow(response);
+  const merged = snapshot ? applyRemoteSnapshot(booking, snapshot) : booking;
+  const restarted = response?.restarted === true;
+  const message =
+    typeof response?.firms_status_message === "string"
+      ? response.firms_status_message
+      : typeof response?.message === "string"
+        ? response.message
+        : null;
+  const saved = await saveBooking({
+    ...merged,
+    searchWindowClosed: restarted ? false : merged.searchWindowClosed,
+    canSearchAgainRemote: restarted ? false : merged.canSearchAgainRemote,
+    firms_status_message: message ?? merged.firms_status_message,
+  });
+
+  if (restarted) {
+    const { title, body } = buildNotificationContent("search_restarted", {
+      eventName: getBookingEventTitle(saved),
+      firmCount: typeof response?.assigned_count === "number" ? response.assigned_count : undefined,
+    });
+    await addNotification({
+      id: makeId("ntf"),
+      title,
+      body,
+      type: "search_restarted",
+      category: categoryForType("search_restarted"),
+      createdAt: new Date().toISOString(),
+      read: false,
+      bookingId: saved.bookingId,
+      data: { search_cycle: saved.searchCycle ?? 2 },
+    });
+  }
+  return { booking: saved, restarted, message };
 }
 
 export async function respondToCounterOffer(bookingId: string, action: "accept" | "decline"): Promise<Booking> {
@@ -1183,6 +1405,29 @@ export async function confirmPhotographer(bookingId: string, providerId: string)
     throw new Error("This booking has not been submitted to Camartes yet.");
   }
 
+  // The server is the source of truth: confirm there FIRST. Marking the booking
+  // confirmed locally while the server refused (e.g. the firm hasn't accepted,
+  // or another partner is already confirmed) left the customer believing a firm
+  // was booked that was never told. The server call is idempotent, so a retry
+  // after a timeout is safe.
+  if (!isDemoAuthMode()) {
+    try {
+      await camartesFetch<{ status?: string; message?: string }>(
+        `/api/bookings/${encodeURIComponent(targetId)}/confirm`,
+        { method: "POST", body: JSON.stringify({ provider_id: providerId }) },
+        { auth: true, requireAuth: false, timeoutMs: 30000 },
+      );
+    } catch (err) {
+      if (err instanceof CamartesApiError) {
+        if (err.status === 0 || err.status === 408) {
+          throw new Error("Couldn't reach Camartes to confirm. Check your connection and try again - nothing was changed.");
+        }
+        throw new Error(err.message || "Camartes couldn't confirm this partner. Please try again.");
+      }
+      throw err;
+    }
+  }
+
   const updatedPhotographers = (booking.assigned_photographers || []).map((firm) => {
     const isThisFirm = firm.provider_id === providerId || firm.id === providerId;
     return {
@@ -1229,19 +1474,6 @@ export async function confirmPhotographer(bookingId: string, providerId: string)
     bookingId: targetId,
   });
 
-  // 3. Sync with remote backend asynchronously
-  if (!isDemoAuthMode()) {
-    try {
-      await camartesFetch<{ status?: string; message?: string }>(
-        `/api/bookings/${encodeURIComponent(targetId)}/confirm`,
-        { method: "POST", body: JSON.stringify({ provider_id: providerId }) },
-        { auth: true, requireAuth: false },
-      );
-    } catch (err) {
-      console.warn("Could not confirm with remote backend, updating locally:", err);
-    }
-  }
-
   return updated;
 }
 
@@ -1277,11 +1509,12 @@ export async function cancelBooking(bookingId: string): Promise<Booking> {
 }
 
 export async function deleteDraft(bookingId: string): Promise<void> {
-  const all = await readAllBookings();
-  const target = all.find((b) => b.bookingId === bookingId || (b.remoteBookingId && b.remoteBookingId === bookingId));
+  const target = (await readAllBookings()).find(
+    (b) => b.bookingId === bookingId || (b.remoteBookingId && b.remoteBookingId === bookingId),
+  );
   await markBookingAsDeleted(bookingId, target?.remoteBookingId);
-  await writeAllBookings(
-    all.filter((b) => {
+  await mutateBookings((all) => ({
+    next: all.filter((b) => {
       if (b.bookingId === bookingId) return false;
       if (b.remoteBookingId && b.remoteBookingId === bookingId) return false;
       if (target) {
@@ -1290,7 +1523,8 @@ export async function deleteDraft(bookingId: string): Promise<void> {
       }
       return true;
     }),
-  );
+    result: undefined,
+  }));
 }
 
 export async function deleteBooking(
@@ -1407,12 +1641,14 @@ export async function dispatchReplacementFirms(
   (booking.matches || []).forEach((m) => excludedSet.add(m.vendorId));
 
   const first = [...booking.days].sort((a, b) => a.order - b.order)[0];
+  const target = resolveProviderSearchTarget(booking);
   const { vendors } = await fetchVendorCatalog({
-    city: booking.providerLocationPreference?.city || first?.location?.city || null,
+    city: target.city,
     eventDate: first?.eventDate || null,
     serviceTypes: catalogServiceTypes(booking.days),
-    latitude: first?.location?.latitude,
-    longitude: first?.location?.longitude,
+    latitude: target.latitude,
+    longitude: target.longitude,
+    strictCity: target.explicit,
   });
   const candidates = matchVendors(
     booking,

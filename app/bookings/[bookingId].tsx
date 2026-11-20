@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Alert, AppState, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { Calendar, Camera, CheckCircle2, Clapperboard, Clock, Film, Image as ImageLucide, Lock, Mail, MapPin, Phone, ShieldCheck, Sparkles, Video, XCircle } from "lucide-react-native";
+import { Calendar, Camera, CheckCircle2, ChevronLeft, Clock, MapPin, ShieldCheck, Sparkles, XCircle } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ProgressHeader } from "@/src/components/ProgressHeader";
 import { Badge, Button, Card, Muted, ScreenTitle, SectionTitle } from "@/src/components/ui";
 import { CandidateFirmCard } from "@/src/components/CandidateFirmCard";
 import { FirmDetailModal } from "@/src/components/FirmDetailModal";
@@ -25,6 +24,9 @@ import { normalizeRouteParam } from "@/src/utils/routeParam";
 
 import { ConfirmDialog } from "@/src/components/ConfirmDialog";
 import { isLocalWizardBooking, getDraftResumeRoute } from "@/src/domain/bookingRequest";
+import { resolveProviderSearchTarget } from "@/src/domain/cityResolution";
+import { reelsDeliverableLine, reelsPackageLabel } from "@/src/domain/reelsRequest";
+import { normalizeReelsPlan, reelsContentLabel } from "@/src/constants/reels";
 
 const TERMINAL_ALTERNATE = new Set(["VENDOR_REJECTED", "CUSTOMER_CANCELLED", "VENDOR_CANCELLED", "EXPIRED"]);
 const CONTACT_UNLOCKED = new Set(["VENDOR_ACCEPTED", "CUSTOMER_CONFIRMED", "PAYMENT_PENDING", "CONFIRMED", "IN_PROGRESS", "COMPLETED"]);
@@ -72,7 +74,7 @@ export default function BookingDetailScreen() {
   const [confirmingFirmId, setConfirmingFirmId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (syncList = true) => {
     try {
       // 1. Immediately render cached booking if present (0ms!)
       let current = await bookingApi.getBooking(bookingId);
@@ -95,8 +97,8 @@ export default function BookingDetailScreen() {
         return;
       }
 
-      // 3. Keep bookings list in sync non-blockingly
-      void refreshBookings();
+      // 3. Keep bookings list in sync non-blockingly (not on every status poll)
+      if (syncList) void refreshBookings();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not refresh this booking from Camartes.");
       const local = await bookingApi.getBooking(bookingId);
@@ -115,7 +117,9 @@ export default function BookingDetailScreen() {
 
   useEffect(() => {
     if (booking?.status !== "REQUEST_SENT" || !booking.remoteBookingId) return;
-    const interval = setInterval(() => void load(), 8000);
+    const interval = setInterval(() => {
+      if (AppState.currentState === "active") void load(false);
+    }, 8000);
     return () => clearInterval(interval);
   }, [booking?.status, booking?.remoteBookingId, load]);
 
@@ -148,7 +152,7 @@ export default function BookingDetailScreen() {
   if (missing && !booking) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top", "left", "right", "bottom"]}>
-        <ProgressHeader title="Booking details" step="providers" onBack={handleBackToBookings} />
+        <DetailHeader title="Booking details" onBack={handleBackToBookings} />
         <View style={{ padding: spacing.lg, gap: spacing.md }}>
           <Muted>This booking was not found on this device.</Muted>
           <Button label="Back to bookings" onPress={handleBackToBookings} />
@@ -325,24 +329,22 @@ export default function BookingDetailScreen() {
       setBooking(optimisticBooking);
     }
 
-    // 3. Immediately show confirmed alert to user
-    Alert.alert(
-      "Photography Partner Confirmed!",
-      `${firm.name} is now locked as your official photography partner.`,
-    );
-
-    // 4. Run background persist & remote confirmation
+    // 3. Confirm with the server; announce success only once it is real
     try {
       const targetId = currentBooking?.bookingId || bookingId;
       const updated = await confirmPhotographer(targetId, providerId);
       if (updated) {
         setBooking(updated);
       }
+      Alert.alert(
+        "Photography Partner Confirmed!",
+        `${firm.name} is now locked as your official photography partner.`,
+      );
     } catch (err: any) {
-      console.warn("Background confirmation warning:", err);
+      if (currentBooking) setBooking(currentBooking); // roll back the optimistic view
       const msg = err?.message || "Failed to confirm photography partner.";
       setError(msg);
-      Alert.alert("Confirmation Issue", msg);
+      Alert.alert("Couldn't confirm partner", msg);
     }
   };
 
@@ -405,102 +407,112 @@ export default function BookingDetailScreen() {
     }
   };
 
+  const dispatchCity = resolveProviderSearchTarget(booking).city || bookingCity;
+  const sortedDays = [...booking.days].sort((a, b) => a.order - b.order);
+  const firstDay = sortedDays[0];
+  const extraDays = sortedDays.length - 1;
+  const effectiveStatus = getEffectiveBookingStatus(booking);
+  const estimateText = booking.reels
+    ? formatInrRange(booking.reels.quoteMin, booking.reels.quoteMax)
+    : effectiveQuoted && effectiveQuoted.maxPrice > 0
+      ? formatInrRange(effectiveQuoted.minPrice, effectiveQuoted.maxPrice)
+      : booking.budget
+        ? formatInr(booking.budget)
+        : null;
+  const deliveryDate = booking.reels ? null : booking.expectedDeliveryDate || defaultExpectedDeliveryDate(booking.days);
+  if (booking.reels) {
+    // Reels requests: show the reel requirements instead of event deliverables.
+    deliverablesSummary.splice(
+      0,
+      deliverablesSummary.length,
+      reelsDeliverableLine(booking.reels),
+      reelsContentLabel(booking.reels.contentType),
+      ...(normalizeReelsPlan(booking.reels.plan) === "monthly" ? [] : [`${booking.reels.durationHours} hr shoot`]),
+      "DSLR camera + gimbal",
+    );
+  }
+  const awaiting = !hasAnyAccepted && !isCancelled && !TERMINAL_ALTERNATE.has(booking.status) && !isDraft;
+  const firmCountLabel = assignedFirms.length > 0 ? `${assignedFirms.length} firm${assignedFirms.length === 1 ? "" : "s"}` : "top firms";
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top", "left", "right", "bottom"]}>
-      <ProgressHeader title="Booking details" step="providers" onBack={handleBackToBookings} />
+      <DetailHeader title="Booking details" onBack={handleBackToBookings} />
       <ScrollView
-        contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}
+        contentContainerStyle={styles.scroll}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={colors.primary}
-            colors={[colors.primary]}
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} colors={[colors.primary]} />
         }
       >
-        <Card style={styles.topCard}>
-          {booking.firms_status_message ? (
-            <View
-              style={styles.firmsStatusPill}
-              testID="firms-status-badge"
-            >
-              <Text style={styles.firmsStatusText}>
-                {booking.firms_status_message}
-              </Text>
-            </View>
-          ) : null}
-          <ScreenTitle>{getBookingEventTitle(booking)}</ScreenTitle>
-          <Muted style={{ fontSize: 12, marginTop: -2, marginBottom: 4 }}>ID: {displayId}</Muted>
-          <Badge label={STATUS_LABEL[getEffectiveBookingStatus(booking)]} tone={STATUS_TONE[getEffectiveBookingStatus(booking)]} />
-          {booking.remoteStatus ? <Muted>Camartes status: {booking.remoteStatus}</Muted> : null}
+        {/* ── Summary ─────────────────────────────────────────── */}
+        <Card style={styles.summaryCard}>
+          <View style={styles.summaryTop}>
+            <Text style={styles.summaryTitle} numberOfLines={2}>
+              {getBookingEventTitle(booking)}
+            </Text>
+            <Badge label={STATUS_LABEL[effectiveStatus]} tone={STATUS_TONE[effectiveStatus]} />
+          </View>
+          <View style={styles.factsGrid}>
+            <Fact
+              icon={<Calendar size={14} color={colors.primaryDark} />}
+              label="Date"
+              value={
+                firstDay?.eventDate
+                  ? `${formatDateLong(firstDay.eventDate)}${extraDays > 0 ? ` +${extraDays} day${extraDays > 1 ? "s" : ""}` : ""}`
+                  : "Date pending"
+              }
+            />
+            <Fact icon={<MapPin size={14} color={colors.primaryDark} />} label="City" value={firstDay?.location?.city || "—"} />
+            <Fact icon={<Sparkles size={14} color={colors.primaryDark} />} label="Package" value={booking.reels ? `CamReels · ${reelsPackageLabel(booking.reels)}` : effectiveQuoted?.label || packageLabel} />
+            {estimateText ? (
+              <Fact icon={<ShieldCheck size={14} color={colors.primaryDark} />} label="Estimate" value={estimateText} />
+            ) : null}
+          </View>
+          <Text style={styles.bookingId} selectable>
+            Booking ID · {displayId}
+          </Text>
         </Card>
 
-        {error ? <Muted style={{ color: colors.danger, fontWeight: "700" }}>{error}</Muted> : null}
-
-        {TERMINAL_ALTERNATE.has(booking.status) ? (
-          <Card style={{ borderColor: colors.danger }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <XCircle size={18} color={colors.danger} />
-              <SectionTitle>{STATUS_LABEL[getEffectiveBookingStatus(booking)]}</SectionTitle>
-            </View>
-            <Muted style={{ marginTop: 4 }}>
-              {booking.firms_status_message || "This booking is no longer active."}
-            </Muted>
-          </Card>
+        {error ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
         ) : null}
 
-        {/* Rapido-Style Top 6 Dispatch Status Banner when awaiting acceptance */}
-        {!hasAnyAccepted && !isCancelled && !TERMINAL_ALTERNATE.has(booking.status) ? (
-          <Card style={styles.waitingBannerCard}>
-            <View style={styles.waitingBannerHeader}>
+        {/* ── Status ──────────────────────────────────────────── */}
+        {TERMINAL_ALTERNATE.has(booking.status) ? (
+          <StatusBanner
+            tone="danger"
+            icon={<XCircle size={18} color={colors.danger} />}
+            title={STATUS_LABEL[effectiveStatus]}
+            body={booking.firms_status_message || "This booking is no longer active."}
+          />
+        ) : awaiting ? (
+          <StatusBanner
+            tone="info"
+            icon={
               <View style={styles.radarPingWrap}>
                 <View style={styles.radarPingRing} />
                 <View style={styles.radarPingDot} />
               </View>
-              <View style={{ flex: 1, gap: 3 }}>
-                <Text style={styles.waitingBannerTitle}>
-                  Request Dispatched to Top 6 Studios
-                </Text>
-                <Text style={styles.waitingBannerSubtitle}>
-                  We've sent your request to the top 6 firms in {bookingCity}. Please be patient while a best photographer accepts you.
-                </Text>
-              </View>
-            </View>
-            <View style={styles.waitingBannerFooter}>
-              <ShieldCheck size={13} color="#EA580C" />
-              <Text style={styles.waitingBannerFooterText}>
-                Live partner availability checking active · Studio name and contacts unlock on acceptance
-              </Text>
-            </View>
-          </Card>
+            }
+            title={`Request sent to ${firmCountLabel} in ${dispatchCity}`}
+            body="We'll notify you the moment a studio accepts. Studio names and contacts unlock after acceptance."
+          />
+        ) : hasAnyAccepted && !isConfirmed ? (
+          <StatusBanner
+            tone="success"
+            icon={<CheckCircle2 size={18} color={colors.success} />}
+            title="A studio accepted your request"
+            body="Review their profile below and confirm to lock in your booking."
+          />
         ) : null}
 
-        {/* Accepted Partner Callout when a studio has accepted */}
-        {hasAnyAccepted && !isConfirmed ? (
-          <Card style={styles.acceptedBannerCard}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <CheckCircle2 size={18} color="#EA580C" />
-              <Text style={styles.acceptedBannerTitle}>Photography Partner Accepted!</Text>
-            </View>
-            <Text style={styles.acceptedBannerSubtitle}>
-              A top studio has accepted your shoot request. Review their portfolio and confirm to lock in your booking.
-            </Text>
-          </Card>
-        ) : null}
-
-        {/* Candidate Photography Firms List with Rapido Privacy Design */}
+        {/* ── Photography firms ───────────────────────────────── */}
         {assignedFirms.length > 0 ? (
-          <View style={{ gap: 10 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <SectionTitle>Candidate Photography Firms ({assignedFirms.length})</SectionTitle>
-              <Muted style={{ fontSize: 11, color: colors.muted }}>Pull down to refresh</Muted>
-            </View>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: -4, marginBottom: 2 }}>
-              <Clock size={12} color="#EA580C" />
-              <Text style={{ fontSize: 12, color: "#9A3412", fontWeight: "600" }}>
-                Tap on any firm card to track live response status & shoot timeline
-              </Text>
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionHeading}>Photography firms</Text>
+              <Text style={styles.sectionMeta}>Pull down to refresh</Text>
             </View>
             <View style={{ gap: 8 }}>
               {assignedFirms.map((firm, index) => (
@@ -519,22 +531,12 @@ export default function BookingDetailScreen() {
                       return;
                     }
                     if (!f.has_accepted) {
-                      Alert.alert(
-                        "Request Pending",
-                        `This studio hasn't accepted your request yet. Chat will unlock as soon as they accept your booking request.`,
-                        [{ text: "Got it" }]
-                      );
+                      Alert.alert("Request pending", "Chat unlocks as soon as this studio accepts your request.", [{ text: "Got it" }]);
                       return;
                     }
                     router.push({
                       pathname: "/chat/[userId]",
-                      params: {
-                        userId: pid,
-                        name: f.name,
-                        picture: f.profile_image || "",
-                        phone: f.contact_phone || "",
-                        accepted: "true",
-                      },
+                      params: { userId: pid, name: f.name, picture: f.profile_image || "", phone: f.contact_phone || "", accepted: "true" },
                     });
                   }}
                 />
@@ -544,213 +546,108 @@ export default function BookingDetailScreen() {
         ) : null}
 
         {booking.status === "CUSTOMER_CONFIRMED" || booking.status === "PAYMENT_PENDING" ? (
-          <Card>
-            <SectionTitle>Payment</SectionTitle>
-            <Muted>
-              Complete payment with Razorpay to finalize your booking. Status will transition to Confirmed upon backend verification.
-            </Muted>
-            {booking.estimatedAmount ? (
-              <Muted style={{ fontWeight: "700", color: colors.ink, marginVertical: 4 }}>
-                Payable Amount: {formatInr(booking.estimatedAmount)}
-              </Muted>
-            ) : null}
-            <Button
-              label={busy ? "Processing Payment..." : "Pay with Razorpay"}
-              onPress={handleInitiatePayment}
-              disabled={busy}
-              loading={busy}
-            />
+          <Card style={{ gap: 8 }}>
+            <Text style={styles.sectionHeading}>Payment</Text>
+            <Text style={styles.bodyText}>Complete payment to finalise your booking.</Text>
+            {booking.estimatedAmount ? <Text style={styles.valueStrong}>Payable: {formatInr(booking.estimatedAmount)}</Text> : null}
+            <Button label={busy ? "Processing payment…" : "Pay with Razorpay"} onPress={handleInitiatePayment} disabled={busy} loading={busy} />
           </Card>
         ) : null}
 
-        {/* EXECUTIVE BOOKING SPECIFICATION & MULTI-EVENT BREAKDOWN */}
-        <View style={{ gap: 12, marginTop: 4 }}>
-          <View style={{ gap: 4 }}>
-            <SectionTitle>Shoot Specification & Requirements</SectionTitle>
-            <Muted>Complete breakdown of scheduled event days, crew requirements, and post-production deliverables.</Muted>
-          </View>
-
-          {/* Scheduled Event Days Cards */}
-          {booking.days.map((day) => {
+        {/* ── Event days ──────────────────────────────────────── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionHeading}>{sortedDays.length > 1 ? `Event days (${sortedDays.length})` : "Event details"}</Text>
+          {sortedDays.map((day) => {
             const minutes = day?.startTime && day?.endTime ? durationMinutes(day.startTime, day.endTime, day.overnight) : null;
-            const eventTitle = getDayEventTitle(day);
-            const servicesText = getDayServicesText(day);
             const addOnsText = getDayAddOnsText(day);
-
+            const timing = [
+              day.startTime && day.endTime ? `${formatTime12h(day.startTime)} – ${formatTime12h(day.endTime)}` : null,
+              day.overnight ? "ends next day" : null,
+              minutes != null ? formatDuration(minutes) : null,
+            ]
+              .filter(Boolean)
+              .join(" · ");
             return (
-              <Card key={day.dayId} style={styles.eventDayCard}>
-                {/* Event Header */}
-                <View style={styles.eventCardHeader}>
-                  <View style={styles.eventCardTitleGroup}>
+              <Card key={day.dayId} style={styles.dayCard}>
+                <View style={styles.dayHeader}>
+                  {sortedDays.length > 1 ? (
                     <View style={styles.dayBadge}>
                       <Text style={styles.dayBadgeText}>Day {day.order}</Text>
                     </View>
-                    <Text style={styles.eventCardTitle} numberOfLines={1}>
-                      {eventTitle}
-                    </Text>
-                  </View>
+                  ) : null}
+                  <Text style={styles.dayTitle} numberOfLines={2}>
+                    {getDayEventTitle(day)}
+                  </Text>
                 </View>
-
-                <View style={styles.divider} />
-
-                {/* Date & Timings */}
-                <View style={styles.detailRow}>
-                  <Calendar size={15} color="#EA580C" style={styles.detailIcon} />
-                  <View style={{ flex: 1, gap: 1 }}>
-                    <Text style={styles.detailLabel}>Date & Schedule</Text>
-                    <Text style={styles.detailValueText}>
-                      {day.eventDate ? formatDateLong(day.eventDate) : "Date pending"}
-                    </Text>
-                    <Text style={styles.detailSubValueText}>
-                      {day.startTime ? formatTime12h(day.startTime) : "--"} – {day.endTime ? formatTime12h(day.endTime) : "--"}
-                      {day.overnight ? " · Overnight (ends next day)" : ""}
-                      {minutes != null ? ` · ${formatDuration(minutes)}` : ""}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Venue Location */}
-                <View style={styles.detailRow}>
-                  <MapPin size={15} color="#EA580C" style={styles.detailIcon} />
-                  <View style={{ flex: 1, gap: 1 }}>
-                    <Text style={styles.detailLabel}>Venue Location</Text>
-                    <Text style={styles.detailValueText}>
-                      {day.location?.formattedAddress || day.location?.city || "Location pending"}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Coverage Requirements */}
-                <View style={styles.detailRow}>
-                  <Camera size={15} color="#EA580C" style={styles.detailIcon} />
-                  <View style={{ flex: 1, gap: 1 }}>
-                    <Text style={styles.detailLabel}>Photography & Videography Crew</Text>
-                    <Text style={styles.detailValueText}>{servicesText}</Text>
-                  </View>
-                </View>
-
-                {/* Add-ons */}
+                <InfoRow
+                  icon={<Clock size={15} color={colors.muted} />}
+                  label="When"
+                  value={day.eventDate ? formatDateLong(day.eventDate) : "Date pending"}
+                  sub={timing}
+                />
+                <InfoRow
+                  icon={<MapPin size={15} color={colors.muted} />}
+                  label="Venue"
+                  value={day.location?.formattedAddress || day.location?.city || "Location pending"}
+                />
+                <InfoRow icon={<Camera size={15} color={colors.muted} />} label="Crew" value={getDayServicesText(day)} />
                 {addOnsText !== "None" ? (
-                  <View style={styles.detailRow}>
-                    <Sparkles size={15} color="#EA580C" style={styles.detailIcon} />
-                    <View style={{ flex: 1, gap: 1 }}>
-                      <Text style={styles.detailLabel}>Day Add-ons</Text>
-                      <Text style={styles.detailValueText}>{addOnsText}</Text>
-                    </View>
-                  </View>
+                  <InfoRow icon={<Sparkles size={15} color={colors.muted} />} label="Add-ons" value={addOnsText} />
                 ) : null}
               </Card>
             );
           })}
+        </View>
 
-          {/* Common Deliverables Card */}
-          <Card>
-            <View style={styles.eventCardHeader}>
-              <View style={styles.eventCardTitleGroup}>
-                <View style={styles.dayBadge}>
-                  <Text style={styles.dayBadgeText}>Deliverables</Text>
-                </View>
-                <Text style={styles.eventCardTitle}>Post-Production & Handover</Text>
+        {/* ── Deliverables ────────────────────────────────────── */}
+        <View style={styles.section}>
+          <Text style={styles.sectionHeading}>Deliverables</Text>
+          <Card style={styles.dayCard}>
+            {deliverablesSummary.length ? (
+              <View style={styles.chips}>
+                {deliverablesSummary.map((item) => (
+                  <View key={item} style={styles.chip}>
+                    <Text style={styles.chipText}>{item}</Text>
+                  </View>
+                ))}
               </View>
-            </View>
-
-            <View style={styles.divider} />
-
-            {booking.deliverables?.video?.teaserCinematicEnabled ? (
-              <View style={styles.detailRow}>
-                <Clapperboard size={15} color="#EA580C" style={styles.detailIcon} />
-                <View style={{ flex: 1, gap: 1 }}>
-                  <Text style={styles.detailLabel}>Teaser Highlight</Text>
-                  <Text style={styles.detailValueText}>
-                    Cinematic Teaser ({booking.deliverables.video?.teaserDurationMinutes || 1} min)
-                  </Text>
-                </View>
-              </View>
+            ) : (
+              <Text style={styles.bodyText}>Edited photos and videos as agreed with your studio.</Text>
+            )}
+            {deliveryDate ? (
+              <InfoRow icon={<Clock size={15} color={colors.muted} />} label="Target delivery" value={formatDateLong(deliveryDate)} />
             ) : null}
-
-            <View style={styles.detailRow}>
-              <ImageLucide size={15} color="#EA580C" style={styles.detailIcon} />
-              <View style={{ flex: 1, gap: 1 }}>
-                <Text style={styles.detailLabel}>Photo Deliverables</Text>
-                <Text style={styles.detailValueText}>
-                  {booking.deliverables?.photo?.editedPhotosOption === "custom"
-                    ? `${booking.deliverables.photo.editedPhotosCustomCount ?? 0} edited photos`
-                    : `${booking.deliverables?.photo?.editedPhotosOption || 200} edited photos`}
-                  {booking.deliverables?.photo?.album
-                    ? ` · Printed Album (${booking.deliverables.photo.albumPagesOption === "custom" ? booking.deliverables.photo.albumPagesCustomCount : booking.deliverables.photo.albumPagesOption || 20} pages)`
-                    : ""}
-                  {booking.deliverables?.photo?.rawPhotos ? " · All raw files" : ""}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Video size={15} color="#EA580C" style={styles.detailIcon} />
-              <View style={{ flex: 1, gap: 1 }}>
-                <Text style={styles.detailLabel}>Video Deliverables</Text>
-                <Text style={styles.detailValueText}>
-                  {booking.deliverables?.video?.editedTraditionalVideoCount || 1} traditional film(s) · {booking.deliverables?.video?.editedCinematicVideoCount || 1} cinematic story
-                  {booking.deliverables?.video?.rawVideo ? " · All raw video footage" : ""}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.detailRow}>
-              <Clock size={15} color="#EA580C" style={styles.detailIcon} />
-              <View style={{ flex: 1, gap: 1 }}>
-                <Text style={styles.detailLabel}>Target Delivery Date</Text>
-                <Text style={styles.detailValueText}>
-                  {formatDateLong(booking.expectedDeliveryDate || defaultExpectedDeliveryDate(booking.days))}
-                </Text>
-              </View>
-            </View>
-          </Card>
-
-          {/* Package Tier & Estimate Card */}
-          <Card>
-            <View style={styles.eventCardHeader}>
-              <View style={styles.eventCardTitleGroup}>
-                <View style={[styles.dayBadge, { backgroundColor: "#FEF3C7" }]}>
-                  <Text style={[styles.dayBadgeText, { color: "#D97706" }]}>Package</Text>
-                </View>
-                <Text style={styles.eventCardTitle}>
-                  {effectiveQuoted?.label || packageLabel}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.divider} />
-
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Muted style={{ fontWeight: "700" }}>Approved Estimate Range</Muted>
-              <Text style={{ fontSize: 16, fontWeight: "800", color: "#EA580C" }}>
-                {effectiveQuoted && effectiveQuoted.maxPrice > 0
-                  ? formatInrRange(effectiveQuoted.minPrice, effectiveQuoted.maxPrice)
-                  : booking.budget
-                    ? formatInr(booking.budget)
-                    : "Standard Tier"}
-              </Text>
-            </View>
-            <Muted style={{ fontSize: 11.5, marginTop: 4 }}>
-              Customer-approved milestone budget covering {booking.days.length} event day{booking.days.length > 1 ? "s" : ""} & selected post-production deliverables.
-            </Muted>
           </Card>
         </View>
 
+        {/* ── Actions ─────────────────────────────────────────── */}
         {!isCompletedBooking(booking) ? (
-          <View style={{ gap: spacing.sm, marginVertical: spacing.md }}>
+          <View style={{ gap: spacing.sm, marginTop: spacing.xs }}>
             {canSearchAgain(booking) ? (
               <Button
-                label="Search Again"
+                label="Search again"
                 variant="primary"
                 onPress={async () => {
                   setBusy(true);
                   try {
-                    await searchAgainBooking(booking);
-                    router.push("/booking/confirm");
+                    const next = await searchAgainBooking(booking);
+                    if (isLocalWizardBooking(next) && next.reels) {
+                      // Reels have no event wizard: resend straight to fresh videographers.
+                      await bookingApi.getVendorMatches(next.bookingId);
+                      const sent = await bookingApi.submitVendorRequest(next.bookingId);
+                      router.replace(`/bookings/${sent.bookingId}`);
+                    } else if (isLocalWizardBooking(next)) {
+                      router.push("/booking/confirm");
+                    } else {
+                      setBooking(next);
+                      Alert.alert(
+                        "We're searching again",
+                        next.firms_status_message ||
+                          "Your request is back with photographers for the next 24 hours. We'll let you know as they accept.",
+                      );
+                    }
                   } catch (e) {
-                    const msg = e instanceof Error ? e.message : "Could not prepare booking for retry.";
-                    Alert.alert("Search again", msg);
+                    Alert.alert("Search again", e instanceof Error ? e.message : "Could not prepare booking for retry.");
                   } finally {
                     setBusy(false);
                   }
@@ -760,26 +657,23 @@ export default function BookingDetailScreen() {
               />
             ) : null}
 
-            {!isCancelled ? (
+            {isDraft ? (
               <Button
-                label="Edit event details"
-                variant="outline"
+                label="Continue booking"
+                variant="primary"
                 onPress={async () => {
                   try {
                     const loaded = await loadDraft(booking.bookingId);
-                    const active = loaded ?? booking;
-                    const target = getDraftResumeRoute(active);
-                    router.push(target as any);
+                    router.push(getDraftResumeRoute(loaded ?? booking) as any);
                   } catch (e) {
-                    const msg = e instanceof Error ? e.message : "Could not load booking.";
-                    Alert.alert("Edit booking", msg);
+                    Alert.alert("Continue booking", e instanceof Error ? e.message : "Could not load booking.");
                   }
                 }}
                 disabled={busy}
               />
             ) : null}
 
-            {(isDraft || isCancelled) ? (
+            {isDraft || isCancelled ? (
               <Button
                 label={isDraft ? "Delete draft" : "Delete request"}
                 variant="danger"
@@ -889,181 +783,139 @@ export default function BookingDetailScreen() {
   );
 }
 
+function DetailHeader({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <View style={styles.header}>
+      <Pressable onPress={onBack} style={styles.headerBack} accessibilityRole="button" accessibilityLabel="Go back" hitSlop={8}>
+        <ChevronLeft size={22} color={colors.ink} />
+      </Pressable>
+      <Text style={styles.headerTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      <View style={styles.headerBack} />
+    </View>
+  );
+}
+
+function Fact({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <View style={styles.fact}>
+      <View style={styles.factLabelRow}>
+        {icon}
+        <Text style={styles.factLabel}>{label}</Text>
+      </View>
+      <Text style={styles.factValue} numberOfLines={2}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function InfoRow({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string; sub?: string }) {
+  return (
+    <View style={styles.infoRow}>
+      <View style={styles.infoIcon}>{icon}</View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue}>{value}</Text>
+        {sub ? <Text style={styles.infoSub}>{sub}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+const BANNER_TONES = {
+  info: { bg: "#FFF7ED", border: "#FED7AA" },
+  success: { bg: colors.successBg, border: "#A7F3D0" },
+  danger: { bg: colors.dangerBg, border: "#FECACA" },
+} as const;
+
+function StatusBanner({
+  tone,
+  icon,
+  title,
+  body,
+}: {
+  tone: keyof typeof BANNER_TONES;
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+}) {
+  const t = BANNER_TONES[tone];
+  return (
+    <View style={[styles.banner, { backgroundColor: t.bg, borderColor: t.border }]} accessibilityRole="summary">
+      <View style={styles.bannerIcon}>{icon}</View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text style={styles.bannerTitle}>{title}</Text>
+        <Text style={styles.bannerBody}>{body}</Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  topCard: {
-    gap: 8,
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.bg,
   },
-  firmsStatusPill: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
+  headerBack: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  headerTitle: { flex: 1, textAlign: "center", fontSize: 17, fontWeight: "800", color: colors.ink },
+  scroll: { padding: spacing.lg, gap: spacing.lg, paddingBottom: spacing.xxl },
+  summaryCard: { gap: 14 },
+  summaryTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  summaryTitle: { flex: 1, fontSize: 20, fontWeight: "800", color: colors.ink, lineHeight: 26 },
+  factsGrid: { flexDirection: "row", flexWrap: "wrap", rowGap: 12 },
+  fact: { width: "50%", paddingRight: 8, gap: 3 },
+  factLabelRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  factLabel: { fontSize: 11.5, fontWeight: "700", color: colors.muted, textTransform: "uppercase", letterSpacing: 0.4 },
+  factValue: { fontSize: 14, fontWeight: "700", color: colors.ink, lineHeight: 19 },
+  bookingId: { fontSize: 11.5, color: colors.muted },
+  errorBox: { padding: spacing.md, borderRadius: radius, borderWidth: 1, borderColor: "#FECACA", backgroundColor: colors.dangerBg },
+  errorText: { fontSize: 13, color: colors.danger, fontWeight: "600", lineHeight: 18 },
+  banner: { flexDirection: "row", alignItems: "flex-start", gap: 12, padding: spacing.md, borderRadius: radius, borderWidth: 1 },
+  bannerIcon: { width: 24, alignItems: "center", paddingTop: 1 },
+  bannerTitle: { fontSize: 14.5, fontWeight: "800", color: colors.ink, lineHeight: 20 },
+  bannerBody: { fontSize: 13, color: "#4B5563", lineHeight: 18 },
+  section: { gap: 10 },
+  sectionHeaderRow: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: 8 },
+  sectionHeading: { fontSize: 16, fontWeight: "800", color: colors.ink },
+  sectionMeta: { fontSize: 12, color: colors.muted },
+  bodyText: { fontSize: 13.5, color: "#4B5563", lineHeight: 19 },
+  valueStrong: { fontSize: 15, fontWeight: "800", color: colors.ink },
+  dayCard: { gap: 12 },
+  dayHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  dayTitle: { flex: 1, fontSize: 15.5, fontWeight: "800", color: colors.ink },
+  dayBadge: { backgroundColor: colors.peach, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 99 },
+  dayBadgeText: { fontSize: 11.5, fontWeight: "800", color: colors.primaryDark },
+  infoRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  infoIcon: { width: 20, alignItems: "center", paddingTop: 2 },
+  infoLabel: { fontSize: 11.5, fontWeight: "700", color: colors.muted, textTransform: "uppercase", letterSpacing: 0.4 },
+  infoValue: { fontSize: 14, fontWeight: "600", color: colors.ink, lineHeight: 20, marginTop: 1 },
+  infoSub: { fontSize: 12.5, color: colors.muted, lineHeight: 17, marginTop: 1 },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: {
+    paddingHorizontal: 10,
     paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.cream,
     borderWidth: 1,
-    alignSelf: "flex-start",
-    backgroundColor: "#FFF7ED",
-    borderColor: "#FED7AA",
+    borderColor: colors.peachBorder,
   },
-  firmsStatusIndigo: {
-    backgroundColor: "#FFF7ED",
-    borderColor: "#FED7AA",
-  },
-  firmsStatusPurple: {
-    backgroundColor: "#FFF7ED",
-    borderColor: "#FED7AA",
-  },
-  firmsStatusText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: colors.primaryDark,
-  },
-  firmsStatusTextIndigo: {
-    color: colors.primaryDark,
-  },
-  firmsStatusTextPurple: {
-    color: colors.primaryDark,
-  },
-  eventDayCard: {
-    gap: 10,
-    backgroundColor: colors.white,
-  },
-  eventCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  eventCardTitleGroup: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    flex: 1,
-  },
-  eventCardTitle: {
-    fontSize: 15.5,
-    fontWeight: "800",
-    color: "#0F172A",
-    flex: 1,
-  },
-  dayBadge: {
-    backgroundColor: "#FFEDD5",
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    borderRadius: 99,
-  },
-  dayBadgeText: {
-    fontSize: 11.5,
-    fontWeight: "800",
-    color: "#EA580C",
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: 4,
-  },
-  detailRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  detailIcon: {
-    marginTop: 3,
-  },
-  detailLabel: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: colors.muted,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  detailValueText: {
-    fontSize: 13.5,
-    fontWeight: "700",
-    color: colors.ink,
-    marginTop: 1,
-  },
-  detailSubValueText: {
-    fontSize: 12,
-    color: colors.muted,
-    marginTop: 1,
-  },
-  waitingBannerCard: {
-    backgroundColor: "#FFF7ED",
-    borderColor: "#FED7AA",
-    borderWidth: 1.5,
-    borderRadius: 14,
-    padding: spacing.md,
-    gap: 10,
-  },
-  waitingBannerHeader: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  radarPingWrap: {
-    width: 24,
-    height: 24,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 2,
-  },
+  chipText: { fontSize: 12.5, fontWeight: "700", color: colors.ink },
+  radarPingWrap: { width: 22, height: 22, justifyContent: "center", alignItems: "center" },
   radarPingRing: {
     position: "absolute",
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: "rgba(234, 88, 12, 0.15)",
     borderWidth: 1.5,
-    borderColor: "#EA580C",
+    borderColor: colors.primaryDark,
   },
-  radarPingDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#EA580C",
-  },
-  waitingBannerTitle: {
-    fontSize: 14.5,
-    fontWeight: "800",
-    color: "#0F172A",
-    letterSpacing: -0.2,
-  },
-  waitingBannerSubtitle: {
-    fontSize: 13,
-    color: "#334155",
-    lineHeight: 18.5,
-    fontWeight: "500",
-  },
-  waitingBannerFooter: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#FED7AA",
-  },
-  waitingBannerFooterText: {
-    fontSize: 11.5,
-    fontWeight: "700",
-    color: "#C2410C",
-    flex: 1,
-  },
-  acceptedBannerCard: {
-    backgroundColor: "#FFF7ED",
-    borderColor: "#EA580C",
-    borderWidth: 1.5,
-    borderRadius: 14,
-    padding: spacing.md,
-    gap: 6,
-  },
-  acceptedBannerTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#0F172A",
-  },
-  acceptedBannerSubtitle: {
-    fontSize: 13,
-    color: "#334155",
-    lineHeight: 18,
-    fontWeight: "500",
-  },
+  radarPingDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primaryDark },
 });
-

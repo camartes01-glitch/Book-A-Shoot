@@ -6,7 +6,7 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "9.1.0",
-    "@supabase/supabase-js": "^2.116.0",
+    "@react-native-google-signin/google-signin": "^16.2.0",
     "date-fns": "^4.4.0",
     "expo": "~57.0.18",
     "expo-auth-session": "~57.0.11",
@@ -47,7 +47,7 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "build": "node --max-old-space-size=4096 ./node_modules/expo/bin/cli export",
+    "build": "node --max-old-space-size=4096 ./node_modules/expo/bin/cli export && node scripts/postbuild-seo.js",
     "start": "expo start",
     "dev": "node scripts/start-web.js",
     "android": "expo run:android",

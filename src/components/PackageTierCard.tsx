@@ -1,14 +1,51 @@
-import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import { CheckCircle2, ChevronDown, ChevronUp } from "lucide-react-native";
-import { Badge, Card, Muted } from "@/src/components/ui";
+import React, { memo, useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Check, ChevronDown, ChevronUp } from "lucide-react-native";
+import { Badge } from "@/src/components/ui";
 import type { Deliverables, EventDay, PackageOption, PackageTierId } from "@/src/types/booking";
 import { getDetailedPackageBreakdown } from "@/src/config/approvedBudget";
 import { formatInrRange } from "@/src/utils/format";
-import { colors, fontWeights, radius, spacing } from "@/src/constants/theme";
+import { colors, radius, spacing } from "@/src/constants/theme";
 import { selectionFeedback } from "@/src/utils/haptics";
 
-export function PackageTierCard({
+type Line = { key: string; label: string; note?: string | null; price: string };
+
+/** One label/price row. The price sits right of the label when there is room
+ * and wraps underneath (right-aligned) on narrow phones — it can never be
+ * pushed outside the card. */
+function PriceRow({ line, muted }: { line: Line; muted?: boolean }) {
+  return (
+    <View style={styles.row}>
+      <View style={styles.rowLabelCol}>
+        <Text style={[styles.rowLabel, muted && styles.rowLabelMuted]}>{line.label}</Text>
+        {line.note ? <Text style={styles.rowNote}>{line.note}</Text> : null}
+      </View>
+      <Text style={styles.rowPrice}>{line.price}</Text>
+    </View>
+  );
+}
+
+function Section({ title, subtotal, lines }: { title: string; subtotal?: string; lines: Line[] }) {
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {subtotal ? <Text style={styles.sectionSubtotal}>{subtotal}</Text> : null}
+      </View>
+      {lines.length ? (
+        <View style={styles.lines}>
+          {lines.map((l) => (
+            <PriceRow key={l.key} line={l} />
+          ))}
+        </View>
+      ) : (
+        <Text style={styles.emptyText}>No coverage selected for this day.</Text>
+      )}
+    </View>
+  );
+}
+
+function PackageTierCardImpl({
   pkg,
   selected,
   onSelect,
@@ -24,11 +61,13 @@ export function PackageTierCard({
   deliverables?: Deliverables;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const { width } = useWindowDimensions();
-  const isDesktop = width >= 640;
   const prominent = pkg.id === "signature";
 
-  const breakdown = getDetailedPackageBreakdown(days, pkg.id as PackageTierId, deliverables);
+  // Breakdown only needs computing when it is visible.
+  const breakdown = useMemo(
+    () => (expanded ? getDetailedPackageBreakdown(days, pkg.id as PackageTierId, deliverables) : null),
+    [expanded, days, pkg.id, deliverables],
+  );
 
   const toggleExpand = () => {
     void selectionFeedback();
@@ -36,403 +75,232 @@ export function PackageTierCard({
   };
 
   const handleSelect = () => {
+    if (!selectable) {
+      toggleExpand();
+      return;
+    }
     void selectionFeedback();
     onSelect?.();
   };
 
+  const priceText = pkg.maxPrice > 0 ? formatInrRange(pkg.minPrice, pkg.maxPrice) : "Select coverage to see rates";
+
   return (
-    <Card
-      accent={!!selected}
+    <View
       style={[
-        styles.cardContainer,
-        prominent && !selected
-          ? { borderColor: colors.primary, backgroundColor: colors.peach, borderWidth: 1.5 }
-          : prominent
-            ? { backgroundColor: colors.peach }
-            : undefined,
+        styles.card,
+        prominent && styles.cardProminent,
+        selected && styles.cardSelected,
       ]}
     >
-      {/* Header Bar - Tap header or arrow to toggle expand */}
       <Pressable
-        onPress={toggleExpand}
-        accessibilityRole="button"
-        accessibilityLabel={`${pkg.label} package. ${expanded ? "Collapse details" : "Expand breakdown details"}`}
-        style={({ pressed }) => [styles.headerPressable, pressed && styles.cardPressed]}
+        onPress={handleSelect}
+        accessibilityRole={selectable ? "radio" : "button"}
+        accessibilityState={selectable ? { selected: !!selected } : undefined}
+        accessibilityLabel={`${pkg.label} package, ${priceText}`}
+        style={({ pressed }) => [styles.header, pressed && styles.pressed]}
       >
-        <View style={styles.headerMainRow}>
-          <View style={styles.headerTitleCol}>
-            <View style={styles.titleRow}>
-              <Text style={styles.packageName}>{pkg.label}</Text>
-              <Text style={styles.priceSeparator}>—</Text>
-              <Text style={styles.price}>
-                {pkg.maxPrice > 0 ? formatInrRange(pkg.minPrice, pkg.maxPrice) : "Select coverage to see rates"}
-              </Text>
+        <View style={styles.headerTop}>
+          <View style={styles.nameCol}>
+            <Text style={styles.name}>{pkg.label}</Text>
+            <View style={styles.badges}>
               {prominent ? <Badge label="Most chosen" /> : null}
-              {pkg.recommended ? <Badge label="Closest to your budget" tone="green" /> : null}
-              {selected ? <Badge label="Selected" tone="green" /> : null}
+              {pkg.recommended ? <Badge label="Closest to budget" tone="green" /> : null}
             </View>
-            <Muted style={styles.headlineText}>{pkg.headline}</Muted>
           </View>
-
-          <View
-            style={styles.arrowButton}
-            accessibilityElementsHidden={true}
-            importantForAccessibility="no-hide-descendants"
-          >
-            {expanded ? (
-              <ChevronUp size={20} color={colors.primaryDark} />
-            ) : (
-              <ChevronDown size={20} color={colors.primaryDark} />
-            )}
-          </View>
+          {selectable ? (
+            <View style={[styles.radio, selected && styles.radioOn]}>
+              {selected ? <Check size={14} color={colors.white} strokeWidth={3} /> : null}
+            </View>
+          ) : null}
         </View>
-
-        {!expanded ? (
-          <View style={styles.expandHintRow}>
-            <Text style={styles.expandHintText}>Tap card or arrow for event-by-event breakdown</Text>
-            <ChevronDown size={13} color={colors.primary} />
-          </View>
-        ) : null}
+        <Text style={styles.price} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+          {priceText}
+        </Text>
+        {pkg.headline ? <Text style={styles.headline}>{pkg.headline}</Text> : null}
       </Pressable>
 
-      {/* Expanded Cost Breakdown Section */}
-      {expanded ? (
-        <View style={styles.expandedContent}>
-          <View style={styles.divider} />
+      <Pressable
+        onPress={toggleExpand}
+        style={({ pressed }) => [styles.toggle, pressed && styles.pressed]}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        hitSlop={6}
+      >
+        <Text style={styles.toggleText}>{expanded ? "Hide cost breakdown" : "See cost breakdown"}</Text>
+        {expanded ? <ChevronUp size={16} color={colors.primaryDark} /> : <ChevronDown size={16} color={colors.primaryDark} />}
+      </Pressable>
 
-          {/* Per-Event Breakdown */}
+      {expanded && breakdown ? (
+        <View style={styles.body}>
           {breakdown.events.length > 0 ? (
-            <View style={styles.sectionContainer}>
-              <Text style={styles.sectionHeading}>
-                Event Breakdown ({breakdown.events.length} event{breakdown.events.length > 1 ? "s" : ""})
-              </Text>
-
-              <View style={[styles.eventsGrid, isDesktop && breakdown.events.length > 1 && styles.eventsGridDesktop]}>
-                {breakdown.events.map((evt) => (
-                  <View
-                    key={evt.dayId}
-                    style={[styles.eventBox, isDesktop && breakdown.events.length > 1 && styles.eventBoxDesktop]}
-                  >
-                    <View style={styles.eventHeaderRow}>
-                      <Text style={styles.eventTitle}>{evt.eventTitle}</Text>
-                      <Text style={styles.eventSubtotal}>
-                        {formatInrRange(evt.subtotal.min, evt.subtotal.max)}
-                      </Text>
-                    </View>
-
-                    <View style={styles.linesList}>
-                      {evt.lines.map((line) => (
-                        <View key={line.serviceId} style={styles.lineItem}>
-                          <CheckCircle2 size={13} color={colors.success} style={{ marginTop: 2 }} />
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.lineLabel}>
-                              {line.label}
-                              {line.quantity > 1 ? ` × ${line.quantity}` : ""}
-                            </Text>
-                            {line.note ? <Text style={styles.lineNote}>{line.note}</Text> : null}
-                          </View>
-                          <Text style={styles.linePrice}>{formatInrRange(line.minPrice, line.maxPrice)}</Text>
-                        </View>
-                      ))}
-                      {!evt.lines.length ? (
-                        <Muted style={{ fontStyle: "italic", fontSize: 12 }}>No coverage requirements for this day.</Muted>
-                      ) : null}
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </View>
+            breakdown.events.map((evt) => (
+              <Section
+                key={evt.dayId}
+                title={evt.eventTitle}
+                subtotal={formatInrRange(evt.subtotal.min, evt.subtotal.max)}
+                lines={evt.lines.map((line) => ({
+                  key: line.serviceId,
+                  label: `${line.label}${line.quantity > 1 ? ` × ${line.quantity}` : ""}`,
+                  note: line.note,
+                  price: formatInrRange(line.minPrice, line.maxPrice),
+                }))}
+              />
+            ))
           ) : (
-            /* Fallback if days array is not available */
-            <View style={styles.sectionContainer}>
-              <Text style={styles.sectionHeading}>Included Requirements</Text>
-              <View style={styles.linesList}>
-                {pkg.serviceLines.map((line) => (
-                  <View key={line.serviceId} style={styles.lineItem}>
-                    <CheckCircle2 size={13} color={colors.success} style={{ marginTop: 2 }} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.lineLabel}>
-                        {line.label}
-                        {line.quantity > 1 ? ` × ${line.quantity}` : ""}
-                      </Text>
-                      {line.note ? <Text style={styles.lineNote}>{line.note}</Text> : null}
-                    </View>
-                    <Text style={styles.linePrice}>{formatInrRange(line.minPrice, line.maxPrice)}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
+            <Section
+              title="Included coverage"
+              lines={pkg.serviceLines.map((line) => ({
+                key: line.serviceId,
+                label: `${line.label}${line.quantity > 1 ? ` × ${line.quantity}` : ""}`,
+                note: line.note,
+                price: formatInrRange(line.minPrice, line.maxPrice),
+              }))}
+            />
           )}
 
-          {/* Common Selections (Albums, Teasers, etc.) */}
           {breakdown.deliverablesLines.length > 0 ? (
-            <View style={styles.sectionContainer}>
-              <View style={styles.eventHeaderRow}>
-                <Text style={styles.sectionHeading}>Common Deliverables & Add-ons</Text>
-                <Text style={styles.eventSubtotal}>
-                  {formatInrRange(breakdown.deliverablesSubtotal.min, breakdown.deliverablesSubtotal.max)}
-                </Text>
-              </View>
-
-              <View style={styles.eventBox}>
-                <View style={styles.linesList}>
-                  {breakdown.deliverablesLines.map((line, idx) => (
-                    <View key={`${line.serviceId}-${idx}`} style={styles.lineItem}>
-                      <CheckCircle2 size={13} color={colors.primary} style={{ marginTop: 2 }} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.lineLabel}>{line.label}</Text>
-                        {line.note ? <Text style={styles.lineNote}>{line.note}</Text> : null}
-                      </View>
-                      <Text style={styles.linePrice}>{formatInrRange(line.minPrice, line.maxPrice)}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            </View>
+            <Section
+              title="Deliverables & add-ons"
+              subtotal={formatInrRange(breakdown.deliverablesSubtotal.min, breakdown.deliverablesSubtotal.max)}
+              lines={breakdown.deliverablesLines.map((line, idx) => ({
+                key: `${line.serviceId}-${idx}`,
+                label: line.label,
+                note: line.note,
+                price: formatInrRange(line.minPrice, line.maxPrice),
+              }))}
+            />
           ) : null}
 
-          {/* Total Added Cost Summary Banner */}
-          <View style={styles.totalBox}>
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Total Added Cost</Text>
-              <Text style={styles.totalValue}>
-                {formatInrRange(breakdown.grandTotal.min, breakdown.grandTotal.max)}
-              </Text>
-            </View>
+          <View style={styles.total}>
+            <Text style={styles.totalLabel}>Estimated total</Text>
+            <Text style={styles.totalValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+              {formatInrRange(breakdown.grandTotal.min, breakdown.grandTotal.max)}
+            </Text>
+            <Text style={styles.totalNote}>Approved range across all selected days. Final price is confirmed by the photographer.</Text>
           </View>
-
-          {/* Close Card Button */}
-          <Pressable onPress={toggleExpand} style={styles.closeCardButton}>
-            <Text style={styles.closeCardText}>Close breakdown details</Text>
-            <ChevronUp size={15} color={colors.primaryDark} />
-          </Pressable>
-
-          {/* Select Package Action Button */}
-          {selectable ? (
-            <Pressable
-              onPress={handleSelect}
-              accessibilityRole="button"
-              accessibilityLabel={`Select ${pkg.label} package`}
-              style={[
-                styles.actionButtonVisual,
-                selected ? styles.actionButtonSelected : styles.actionButtonOutline,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.actionButtonText,
-                  selected ? styles.actionButtonTextSelected : styles.actionButtonTextOutline,
-                ]}
-              >
-                {selected ? "Selected" : "Select package"}
-              </Text>
-            </Pressable>
-          ) : null}
         </View>
       ) : null}
-    </Card>
+    </View>
   );
 }
 
+export const PackageTierCard = memo(PackageTierCardImpl);
+
 const styles = StyleSheet.create({
-  cardContainer: {
-    padding: spacing.md,
+  card: {
+    backgroundColor: colors.card,
+    borderRadius: radius,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    overflow: "hidden",
   },
-  headerPressable: {
+  cardProminent: {
+    borderColor: colors.peachBorder,
+    backgroundColor: colors.cream,
+  },
+  cardSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.peach,
+  },
+  pressed: { opacity: 0.85 },
+  header: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
     gap: 4,
   },
-  cardPressed: {
-    opacity: 0.92,
-  },
-  headerMainRow: {
+  headerTop: {
     flexDirection: "row",
     alignItems: "flex-start",
-    justifyContent: "space-between",
-    gap: 8,
+    gap: spacing.sm,
   },
-  headerTitleCol: {
+  nameCol: {
     flex: 1,
-    gap: 2,
-  },
-  titleRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: 6,
-    flexWrap: "wrap",
   },
-  packageName: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: colors.ink,
-  },
-  priceSeparator: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.muted,
-  },
-  price: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: colors.primaryDark,
-  },
-  headlineText: {
-    fontSize: 13.5,
-    fontWeight: "500",
-    color: colors.muted,
-  },
-  arrowButton: {
-    padding: 6,
-    borderRadius: radius,
-    backgroundColor: colors.bgWarm,
+  name: { fontSize: 17, fontWeight: "800", color: colors.ink },
+  badges: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  radio: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.disabled,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: colors.white,
   },
-  expandHintRow: {
+  radioOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  price: { fontSize: 20, fontWeight: "800", color: colors.primaryDark, marginTop: 2 },
+  headline: { fontSize: 13, lineHeight: 18, color: colors.muted },
+  toggle: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    marginTop: 2,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
   },
-  expandHintText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.primary,
+  toggleText: { fontSize: 13, fontWeight: "700", color: colors.primaryDark },
+  body: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+    gap: spacing.md,
   },
-  expandedContent: {
-    marginTop: spacing.sm,
-    gap: spacing.sm,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginBottom: 2,
-  },
-  sectionContainer: {
-    gap: spacing.xs,
-  },
-  sectionHeading: {
-    fontSize: 14.5,
-    fontWeight: "700",
-    color: colors.ink,
-    letterSpacing: 0.1,
-  },
-  eventsGrid: {
-    gap: spacing.sm,
-  },
-  eventsGridDesktop: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  eventBox: {
+  section: {
     backgroundColor: colors.white,
-    borderRadius: radius,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: spacing.sm,
-    gap: spacing.xs,
+    padding: spacing.md,
+    gap: 10,
   },
-  eventBoxDesktop: {
-    flex: 1,
-    minWidth: 280,
-  },
-  eventHeaderRow: {
+  sectionHeader: {
     flexDirection: "row",
-    alignItems: "center",
+    flexWrap: "wrap",
+    alignItems: "baseline",
     justifyContent: "space-between",
+    columnGap: 8,
+    rowGap: 2,
+    paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: colors.bgWarm,
-    paddingBottom: 4,
-    marginBottom: 2,
   },
-  eventTitle: {
-    fontSize: 14.5,
-    fontWeight: "700",
-    color: colors.ink,
-  },
-  eventSubtotal: {
-    fontSize: 14.5,
-    fontWeight: "700",
-    color: colors.primaryDark,
-  },
-  linesList: {
-    gap: 6,
-  },
-  lineItem: {
+  sectionTitle: { flexShrink: 1, fontSize: 14, fontWeight: "800", color: colors.ink },
+  sectionSubtotal: { marginLeft: "auto", fontSize: 13.5, fontWeight: "800", color: colors.primaryDark },
+  lines: { gap: 10 },
+  row: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "flex-start",
-    gap: 6,
+    columnGap: 12,
+    rowGap: 2,
   },
-  lineLabel: {
+  rowLabelCol: { flexGrow: 1, flexShrink: 1, flexBasis: "55%" },
+  rowLabel: { fontSize: 13.5, fontWeight: "600", color: colors.ink, lineHeight: 19 },
+  rowLabelMuted: { color: colors.muted },
+  rowNote: { fontSize: 12, color: colors.muted, lineHeight: 16, marginTop: 1 },
+  rowPrice: {
+    marginLeft: "auto",
     fontSize: 13.5,
-    fontWeight: "600",
+    fontWeight: "700",
     color: colors.ink,
+    textAlign: "right",
+    fontVariant: ["tabular-nums"],
   },
-  lineNote: {
-    fontSize: 12,
-    color: colors.muted,
+  emptyText: { fontSize: 12.5, fontStyle: "italic", color: colors.muted },
+  total: {
+    backgroundColor: colors.ink,
+    borderRadius: 12,
+    padding: spacing.md,
+    gap: 2,
   },
-  linePrice: {
-    fontSize: 13.5,
-    fontWeight: "700",
-    color: colors.primaryDark,
-  },
-  totalBox: {
-    backgroundColor: colors.primaryDark,
-    borderRadius: radius,
-    padding: spacing.sm,
-  },
-  totalRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  totalLabel: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: colors.white,
-  },
-  totalValue: {
-    fontSize: 17,
-    fontWeight: fontWeights.heading,
-    color: colors.peach,
-  },
-  closeCardButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    paddingVertical: 6,
-  },
-  closeCardText: {
-    fontSize: 12.5,
-    fontWeight: "600",
-    color: colors.primaryDark,
-  },
-  actionButtonVisual: {
-    minHeight: 44,
-    borderRadius: radius,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing.md,
-  },
-  actionButtonSelected: {
-    backgroundColor: colors.primary,
-  },
-  actionButtonOutline: {
-    backgroundColor: "transparent",
-    borderWidth: 1.5,
-    borderColor: colors.primaryDark,
-  },
-  actionButtonText: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  actionButtonTextSelected: {
-    color: colors.white,
-  },
-  actionButtonTextOutline: {
-    color: colors.primaryDark,
-  },
+  totalLabel: { fontSize: 12.5, fontWeight: "700", color: "#D1D5DB", textTransform: "uppercase", letterSpacing: 0.6 },
+  totalValue: { fontSize: 22, fontWeight: "800", color: colors.white, fontVariant: ["tabular-nums"] },
+  totalNote: { fontSize: 11.5, color: "#9CA3AF", lineHeight: 16, marginTop: 2 },
 });
-
-

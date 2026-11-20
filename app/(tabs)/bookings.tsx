@@ -1,5 +1,6 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { Alert, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import * as bookingApi from "@/src/services/bookingApi";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { CalendarX2, CheckCircle2, Clock3, MapPin, Pencil, RotateCcw, Search, Trash2 } from "lucide-react-native";
 import { ScreenContainer } from "@/src/components/ScreenContainer";
@@ -32,7 +33,24 @@ interface TargetAction {
 }
 
 export default function BookingsScreen() {
-  const { bookings, refreshBookings, loadDraft, deleteBooking, searchAgainBooking } = useAppStore();
+  const { bookings, refreshBookings, loadDraft, deleteBooking, searchAgainBooking, startNewBooking } = useAppStore();
+  const startingRef = useRef(false);
+
+  /** Empty-state CTA: create a fresh draft and open its event editor
+   * ("What are you planning?") directly. */
+  const onStartBooking = useCallback(async () => {
+    if (startingRef.current) return;
+    startingRef.current = true;
+    try {
+      const booking = await startNewBooking();
+      const firstDayId = booking.days[0]?.dayId;
+      router.push(firstDayId ? `/booking/day/${firstDayId}` : "/booking/new");
+    } catch (e) {
+      Alert.alert("Couldn't start a booking", e instanceof Error ? e.message : "Please try again.");
+    } finally {
+      startingRef.current = false;
+    }
+  }, [startNewBooking]);
   const params = useLocalSearchParams<{ filter?: string | string[] }>();
   const normalizedFilter = normalizeRouteParam(params.filter).toLowerCase();
   const initialFilter: BookingFilterTab =
@@ -103,6 +121,13 @@ export default function BookingsScreen() {
       Alert.alert("Completed booking", "Completed bookings cannot be edited.");
       return;
     }
+    if (booking.reels) {
+      Alert.alert(
+        "Reels request",
+        "Reels requests can't be edited after sending. Cancel this one and book a new reel with the changes.",
+      );
+      return;
+    }
     try {
       const loaded = await loadDraft(booking.bookingId);
       const active = loaded ?? booking;
@@ -116,8 +141,17 @@ export default function BookingsScreen() {
 
   const handleSearchAgain = async (booking: Booking) => {
     try {
-      await searchAgainBooking(booking);
-      router.push("/booking/confirm");
+      const next = await searchAgainBooking(booking);
+      if (isLocalWizardBooking(next) && next.reels) {
+        // Reels have no event wizard: resend straight to fresh videographers.
+        await bookingApi.getVendorMatches(next.bookingId);
+        const sent = await bookingApi.submitVendorRequest(next.bookingId);
+        router.push(`/bookings/${sent.bookingId}`);
+      } else if (isLocalWizardBooking(next)) {
+        router.push("/booking/confirm");
+      } else {
+        router.push(`/bookings/${next.bookingId}`);
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Could not prepare booking for retry.";
       Alert.alert("Search again", msg);
@@ -222,7 +256,7 @@ export default function BookingsScreen() {
             title="No draft bookings"
             body="You don't have any in-progress or unsaved draft bookings. Pick up right where you left off whenever you start a booking."
             actionLabel="Start a new booking"
-            onAction={() => router.push("/(tabs)")}
+            onAction={() => void onStartBooking()}
           />
         ) : activeFilter === "enquiries" ? (
           <EmptyState
@@ -230,7 +264,7 @@ export default function BookingsScreen() {
             title="No active enquiries"
             body="You don't have any pending shoot enquiries at the moment. Tell us your event details to receive matched quotes from verified photographers."
             actionLabel="Plan a new shoot"
-            onAction={() => router.push("/(tabs)")}
+            onAction={() => void onStartBooking()}
           />
         ) : activeFilter === "upcoming" ? (
           <EmptyState
@@ -238,7 +272,7 @@ export default function BookingsScreen() {
             title="No upcoming shoots scheduled"
             body="You have no confirmed shoots on your calendar. Book top-rated photographers and videographers for your upcoming celebrations."
             actionLabel="Book a shoot"
-            onAction={() => router.push("/(tabs)")}
+            onAction={() => void onStartBooking()}
           />
         ) : activeFilter === "completed" ? (
           <EmptyState
@@ -254,7 +288,7 @@ export default function BookingsScreen() {
             title="No bookings yet"
             body="Create your first booking to get matched with photographers and videographers."
             actionLabel="Create a booking"
-            onAction={() => router.push("/(tabs)")}
+            onAction={() => void onStartBooking()}
           />
         )
       ) : (

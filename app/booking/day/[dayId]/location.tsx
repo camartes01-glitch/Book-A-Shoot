@@ -15,6 +15,7 @@ import { PlaceAutocompleteField } from "@/src/components/PlaceAutocompleteField"
 import { useAppStore } from "@/src/state/AppProvider";
 import { normalizeRouteParam, safeBack } from "@/src/utils/routeParam";
 import { getCurrentLocationDetails } from "@/src/services/placesApi";
+import { canonicalCityName, normalizeEventLocationCity } from "@/src/domain/cityResolution";
 import type { EventLocation } from "@/src/types/booking";
 import { colors, radius, spacing } from "@/src/constants/theme";
 
@@ -28,8 +29,9 @@ export default function LocationPickerScreen() {
     (activeDraft?.days.length === 1 ? activeDraft.days[0] : undefined);
 
   const [locating, setLocating] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [selected, setSelected] = useState<EventLocation | null>(
-    day?.location.formattedAddress || day?.location.city ? day.location : null,
+    day?.location.formattedAddress || day?.location.city ? normalizeEventLocationCity(day.location) : null,
   );
   const [locationError, setLocationError] = useState<string | null>(null);
 
@@ -58,9 +60,11 @@ export default function LocationPickerScreen() {
   useEffect(() => {
     if (day?.location && !selected) {
       if (day.location.formattedAddress || day.location.city) {
-        setSelected(day.location);
+        setSelected(normalizeEventLocationCity(day.location));
       }
     }
+    // Only hydrate when the stored location itself changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [day?.location]);
 
   const onUseCurrentLocation = async () => {
@@ -86,31 +90,40 @@ export default function LocationPickerScreen() {
     setLocationError(message);
   };
 
+  const leaveScreen = (persistId: string) => {
+    if (isEditMode) {
+      router.replace(`/booking/day/${persistId}?step=event&mode=edit`);
+    } else {
+      safeBack(`/booking/day/${persistId}`);
+    }
+  };
+
   const onConfirm = async () => {
     Keyboard.dismiss();
+    if (saving) return;
     const persistId = day?.dayId || dayId;
-    if (!selected?.formattedAddress || !persistId) return;
+    if (!selected?.formattedAddress?.trim() || !persistId) return;
+    const city = canonicalCityName(selected.city);
+    if (!city) {
+      setLocationError("Please enter the city for this event — we use it to find photographers near you.");
+      return;
+    }
 
     setLocationError(null);
+    setSaving(true);
     try {
-      await updateDay(persistId, { location: selected });
-      if (isEditMode) {
-        router.replace(`/booking/day/${persistId}?step=event&mode=edit`);
-      } else {
-        safeBack(persistId ? `/booking/day/${persistId}` : "/(tabs)");
-      }
+      // Single atomic, serialized save (see bookingStore). If the stored copy
+      // is missing it self-heals from the in-memory draft, so a valid address
+      // can no longer be rejected.
+      await updateDay(persistId, {
+        location: { ...selected, formattedAddress: selected.formattedAddress.trim(), city },
+      });
+      leaveScreen(persistId);
     } catch (err) {
       console.error("[LocationPicker] save error:", err);
-      // Fallback: If active draft has the address recorded in memory/storage, continue smoothly
-      if (activeDraft?.days?.some((d) => d.location?.formattedAddress)) {
-        if (isEditMode) {
-          router.replace(`/booking/day/${persistId}?step=event&mode=edit`);
-        } else {
-          safeBack(persistId ? `/booking/day/${persistId}` : "/(tabs)");
-        }
-        return;
-      }
-      setLocationError("Could not save the event location. Return to the event day and try again.");
+      setLocationError("We couldn't save this location. Please tap Confirm location again.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -133,7 +146,15 @@ export default function LocationPickerScreen() {
       title="Event location"
       step="event"
       onBack={onBack}
-      footer={<Button label="Confirm location" onPress={onConfirm} disabled={!selected?.formattedAddress} flex={1} />}
+      footer={
+        <Button
+          label="Confirm location"
+          onPress={onConfirm}
+          loading={saving}
+          disabled={!selected?.formattedAddress?.trim() || saving}
+          flex={1}
+        />
+      }
     >
       {/* Top Search & Current Location Section */}
       {!hideTopSearch ? (
@@ -221,7 +242,7 @@ export default function LocationPickerScreen() {
               label="City"
               value={selected.city}
               onFocus={() => setIsEditingAddress(true)}
-              onChangeText={(v) => setSelected((prev) => (prev ? { ...prev, city: v } : prev))}
+              onChangeText={(v) => setSelected((prev) => (prev ? { ...prev, city: v, manuallyEdited: true } : prev))}
             />
             <Field
               label="Pincode"
@@ -237,7 +258,7 @@ export default function LocationPickerScreen() {
               label="District"
               value={selected.district}
               onFocus={() => setIsEditingAddress(true)}
-              onChangeText={(v) => setSelected((prev) => (prev ? { ...prev, district: v } : prev))}
+              onChangeText={(v) => setSelected((prev) => (prev ? { ...prev, district: v, manuallyEdited: true } : prev))}
             />
             <Field
               label="State"

@@ -80,6 +80,12 @@
       "@react-native-community/datetimepicker",
       "expo-web-browser",
       [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.631527312553-s1mpbe350ke8118is5leg4n1n3aka2u2"
+        }
+      ],
+      [
         "expo-notifications",
         {
           "icon": "./assets/images/icon.png",

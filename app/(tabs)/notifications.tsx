@@ -38,6 +38,7 @@ import {
 import { selectionFeedback } from "@/src/utils/haptics";
 import type { AppNotification, AppNotificationCategory } from "@/src/types/booking";
 import { resolveNotificationRoute } from "@/src/domain/notificationRouting";
+import { getDraftResumeRoute, isLocalWizardBooking } from "@/src/domain/bookingRequest";
 
 function timeAgo(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();
@@ -60,6 +61,7 @@ export default function NotificationsScreen() {
     deleteNotification,
     deleteNotifications,
     clearAllNotifications,
+    loadDraft,
   } = useAppStore();
   const [selectedTab, setSelectedTab] = useState<TabType>("all");
   const [settingsVisible, setSettingsVisible] = useState(false);
@@ -127,6 +129,15 @@ export default function NotificationsScreen() {
         await refreshNotifications();
       } catch {
         // non-blocking
+      }
+    }
+
+    // Draft reminders resume THAT draft (make it the active draft first).
+    if ((n.type === "draft_resume_nudge" || n.type === "draft_followup_nudge") && n.bookingId) {
+      const draft = await loadDraft(n.bookingId).catch(() => null);
+      if (draft && isLocalWizardBooking(draft)) {
+        router.push(getDraftResumeRoute(draft) as any);
+        return;
       }
     }
 

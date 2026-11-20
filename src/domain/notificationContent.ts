@@ -24,6 +24,8 @@ export type NotificationParams = {
   /** vendor_rejected only: why the slot went dead — an explicit decline vs. the
    * 1-hour accept window lapsing without a response. Defaults to "rejected". */
   reason?: "rejected" | "timed_out";
+  /** Which 24-hour photographer search this is (1 = first). */
+  searchCycle?: number;
 };
 
 export type NotificationCopy = { title: string; body: string };
@@ -133,6 +135,51 @@ function buildVendorRejected(params: NotificationParams): NotificationCopy {
   };
 }
 
+function buildRequestUpdated(params: NotificationParams): NotificationCopy {
+  const count = params.firmCount ?? 0;
+  const event = params.eventName || "your event";
+  return {
+    title: "Your request has been updated",
+    body:
+      count > 0
+        ? `We've shared your updated requirements for ${event} with ${count} photographer${count === 1 ? "" : "s"}. They'll see the latest details right away.`
+        : `Your updated requirements for ${event} are saved.`,
+  };
+}
+
+/** 24-hour search ended with no photographer accepting. */
+function buildSearchExpired(params: NotificationParams): NotificationCopy {
+  const event = params.eventName || "event";
+  const when = withPlace(params.eventDate, params.eventPlace);
+  const again = (params.searchCycle ?? 1) > 1;
+  return {
+    title: "It's not you, it's us",
+    body: again
+      ? `We searched again but still couldn't find the right photographer for your ${event}${when ? ` ${when}` : ""}. We're truly sorry. Don't worry: tap Search again and we'll keep looking for you today.`
+      : `We're truly sorry we couldn't find the right photographer for your ${event}${when ? ` ${when}` : ""} this time. Don't worry: tap Search again and we'll find you the best photographer today.`,
+  };
+}
+
+/** 24-hour search ended and some photographers accepted. */
+function buildSearchWindowClosed(params: NotificationParams): NotificationCopy {
+  const count = params.firmCount ?? 1;
+  const event = params.eventName || "event";
+  const more = count < 6 ? " Want more options? Tap Search again." : "";
+  return {
+    title: `Your photographers are ready for ${event}`,
+    body: `${count} photographer${count === 1 ? "" : "s"} accepted your request. Compare their profiles and confirm the one you love.${more}`,
+  };
+}
+
+function buildSearchRestarted(params: NotificationParams): NotificationCopy {
+  const count = params.firmCount ?? 0;
+  const event = params.eventName || "your event";
+  return {
+    title: "We're searching again for you",
+    body: `We've sent your request for ${event} to ${count} more photographer${count === 1 ? "" : "s"}. We'll keep looking for the next 24 hours and let you know as they accept.`,
+  };
+}
+
 function buildNewSearchDispatched(params: NotificationParams): NotificationCopy {
   const name = firstName(params.customerName);
 
@@ -182,6 +229,17 @@ function buildDraftResumeNudge(params: NotificationParams): NotificationCopy {
   };
 }
 
+/** Second (and final) draft reminder, a few days after the first — deliberately
+ * different copy so it never reads as a repeat. */
+function buildDraftFollowupNudge(params: NotificationParams): NotificationCopy {
+  const name = firstName(params.customerName);
+  const event = params.eventName || "event";
+  return {
+    title: `Your ${event} booking is saved, ${name} 📸`,
+    body: "Everything you entered is still here. It takes about a minute to finish and get matched with verified photography firms.",
+  };
+}
+
 function buildMarketingNudge(params: NotificationParams, seed?: string): NotificationCopy {
   const name = firstName(params.customerName);
   const variants: NotificationCopy[] = [
@@ -217,6 +275,14 @@ export function buildNotificationContent(
       return buildVendorRejected(params);
     case "new_search_dispatched":
       return buildNewSearchDispatched(params);
+    case "request_updated":
+      return buildRequestUpdated(params);
+    case "search_expired":
+      return buildSearchExpired(params);
+    case "search_window_closed":
+      return buildSearchWindowClosed(params);
+    case "search_restarted":
+      return buildSearchRestarted(params);
     case "chat_message":
     case "message":
       return buildChatMessage(params);
@@ -225,6 +291,8 @@ export function buildNotificationContent(
       return buildEventReminder(params);
     case "draft_resume_nudge":
       return buildDraftResumeNudge(params);
+    case "draft_followup_nudge":
+      return buildDraftFollowupNudge(params);
     case "marketing_nudge":
       return buildMarketingNudge(params, seed);
     default:

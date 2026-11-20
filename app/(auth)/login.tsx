@@ -9,26 +9,23 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import { ArrowLeft } from "lucide-react-native";
 import { ScreenContainer } from "@/src/components/ScreenContainer";
 import { BookAShootLogo } from "@/src/components/BookAShootLogo";
 import { Button, Divider, Field, Muted } from "@/src/components/ui";
 import { GoogleSignInButton } from "@/src/components/GoogleSignInButton";
-import { GoogleSetupModal } from "@/src/components/GoogleSetupModal";
 import { useAppStore } from "@/src/state/AppProvider";
 import { isDemoAuthMode } from "@/src/config/authMode";
 import { getDraftResumeRoute } from "@/src/domain/bookingRequest";
 import { CamartesApiError } from "@/src/services/camartesClient";
-import { GoogleSignInCancelledError } from "@/src/services/googleSignIn";
+import { GoogleSignInCancelledError, isGoogleSignInConfigured } from "@/src/services/googleSignIn";
+import { signInWithGoogleNative } from "@/src/services/googleNativeSignIn";
+import { startWebGoogleSignIn } from "@/src/services/googleWebSignIn";
 import { colors, spacing, touchTarget } from "@/src/constants/theme";
-import { isSupabaseConfigured, supabase } from "@/src/services/supabaseClient";
-import { checkWebSupabaseSession, extractUserInfoFromSupabaseUser, signInWithGoogleViaSupabase } from "@/src/services/supabaseAuth";
 import { trackCompleteRegistration } from "@/src/utils/metaPixel";
-
-WebBrowser.maybeCompleteAuthSession();
 
 function resolveAppRoute(target?: string | null): string {
   if (
@@ -141,11 +138,11 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [error, setError] = useState("");
-  const [setupModalVisible, setSetupModalVisible] = useState(false);
+  const { width: screenWidth } = useWindowDimensions();
+  const isWide = screenWidth >= 720;
   const signInInFlight = useRef(false);
   const signupInFlight = useRef(false);
   const googleInFlight = useRef(false);
-  const oauthCompleted = useRef(false);
 
   useEffect(() => {
     if (ready && profile && !isReauth) {
@@ -161,121 +158,34 @@ export default function LoginScreen() {
     }
   }, [ready, profile, returnTarget, isReauth]);
 
-  // Check for Web Supabase OAuth callback when returning from Google OAuth redirect
-  useEffect(() => {
-    if (Platform.OS !== "web") return;
-    let active = true;
-
-    // Check immediately if we have OAuth return params in URL to show busy state
-    const hasOAuthParams =
-      typeof window !== "undefined" &&
-      (window.location.search.includes("code=") ||
-        window.location.hash.includes("access_token=") ||
-        window.sessionStorage?.getItem("camartes:oauth_in_progress") === "true");
-
-    if (hasOAuthParams) {
-      setGoogleBusy(true);
-    }
-
-    const completeOAuthLogin = async (userInfo: ReturnType<typeof extractUserInfoFromSupabaseUser>) => {
-      if (!active || oauthCompleted.current) return;
-      oauthCompleted.current = true;
-      setGoogleBusy(true);
-      setError("");
-
-      try {
-        const authedProfile = await loginWithGoogle(userInfo);
-        if (active) {
-          const hasMobile = Boolean(authedProfile?.mobile && authedProfile.mobile.length >= 10);
-          if (!hasMobile) {
-            router.replace({
-              pathname: "/(auth)/complete-profile",
-              params: { returnTo: returnTarget },
-            });
-          } else {
-            router.replace(resolveAppRoute(returnTarget) as any);
-          }
-        }
-      } catch (e) {
-        if (active) {
-          setError(
-            e instanceof CamartesApiError || e instanceof Error
-              ? e.message
-              : "Could not complete Google sign-in.",
-          );
-        }
-      } finally {
-        if (active) setGoogleBusy(false);
-      }
-    };
-
-    // Track 1: Supabase onAuthStateChange listener (reacts instantly when SDK completes exchange)
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!active || oauthCompleted.current) return;
-      if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session?.user) {
-        const info = extractUserInfoFromSupabaseUser(session.user);
-        await completeOAuthLogin(info);
-      }
-    });
-
-    // Track 2: Explicit checkWebSupabaseSession() polling / manual exchange fallback
-    const checkWebOAuth = async () => {
-      try {
-        const userInfo = await checkWebSupabaseSession();
-        if (userInfo && active && !oauthCompleted.current) {
-          await completeOAuthLogin(userInfo);
-        }
-      } catch (e) {
-        if (active && !oauthCompleted.current) {
-          setError(
-            e instanceof CamartesApiError || e instanceof Error
-              ? e.message
-              : "Could not complete Google sign-in.",
-          );
-        }
-      } finally {
-        if (active && !hasOAuthParams) {
-          setGoogleBusy(false);
-        }
-      }
-    };
-
-    void checkWebOAuth();
-
-    return () => {
-      active = false;
-      authListener?.subscription?.unsubscribe();
-    };
-  }, [returnTarget, loginWithGoogle]);
-
   const onGoogleSignIn = async () => {
     if (googleInFlight.current || googleBusy || loading) return;
     googleInFlight.current = true;
     setGoogleBusy(true);
     setError("");
+    let redirecting = false;
 
     try {
-      if (isSupabaseConfigured()) {
-        let userInfo = await signInWithGoogleViaSupabase();
-        if (userInfo) {
-          // Native deep link sign-in succeeded on first attempt
-          const authedProfile = await loginWithGoogle(userInfo);
-          const hasMobile = Boolean(authedProfile?.mobile && authedProfile.mobile.length >= 10);
-          if (!hasMobile) {
-            router.replace({
-              pathname: "/(auth)/complete-profile",
-              params: { returnTo: returnTarget },
-            });
-          } else {
-            router.replace(resolveAppRoute(returnTarget) as any);
-          }
-        }
-        // If web, the browser has redirected to Google OAuth
+      if (!isGoogleSignInConfigured(Platform.OS)) {
+        throw new CamartesApiError("Google sign-in is not available right now. Please sign in with email.", 503);
+      }
+      if (Platform.OS === "web") {
+        // Leaves the page; Google sends the user back to /auth/callback, which finishes sign-in
+        startWebGoogleSignIn(returnTarget);
+        redirecting = true;
         return;
       }
-
-      // If Supabase is not configured, show guidance modal
-      setSetupModalVisible(true);
+      const idToken = await signInWithGoogleNative();
+      const authedProfile = await loginWithGoogle(idToken);
+      const hasMobile = Boolean(authedProfile?.mobile && authedProfile.mobile.length >= 10);
+      if (!hasMobile) {
+        router.replace({
+          pathname: "/(auth)/complete-profile",
+          params: { returnTo: returnTarget },
+        });
+      } else {
+        router.replace(resolveAppRoute(returnTarget) as any);
+      }
     } catch (e) {
       if (e instanceof GoogleSignInCancelledError) return;
       setError(
@@ -285,7 +195,7 @@ export default function LoginScreen() {
       );
     } finally {
       googleInFlight.current = false;
-      setGoogleBusy(false);
+      if (!redirecting) setGoogleBusy(false);
     }
   };
 
@@ -330,37 +240,6 @@ export default function LoginScreen() {
     Alert.alert(title, message);
   };
 
-  const onSandboxGoogle = async () => {
-    setError("");
-    setLoading(true);
-    try {
-      const authedProfile = await loginWithGoogle({
-        google_id: "google_sandbox_user_01",
-        email: "google.user@example.com",
-        name: "Google Customer",
-        picture: null,
-      });
-      const hasMobile = Boolean(authedProfile?.mobile && authedProfile.mobile.length >= 10);
-      if (!hasMobile) {
-        router.replace({
-          pathname: "/(auth)/complete-profile",
-          params: { returnTo: returnTarget },
-        });
-      } else {
-        router.replace(resolveAppRoute(returnTarget) as any);
-      }
-    } catch (e) {
-      setError(
-        e instanceof CamartesApiError || e instanceof Error
-          ? e.message
-          : "Could not sign in with Google sandbox account.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
   if (!ready || profile) {
     return (
       <ScreenContainer>
@@ -374,6 +253,7 @@ export default function LoginScreen() {
 
   return (
     <ScreenContainer keyboardAvoiding includeBottomSafeArea>
+      <View style={[styles.shell, isWide && styles.shellWide]}>
       {params.returnTo ? (
         <Pressable
           onPress={() => router.push(returnTarget as any)}
@@ -387,7 +267,8 @@ export default function LoginScreen() {
         </Pressable>
       ) : null}
       <View style={styles.brandRow}>
-        <BookAShootLogo maxWidth={320} widthFraction={0.84} />
+        <BookAShootLogo maxWidth={isWide ? 220 : 320} widthFraction={0.84} />
+        <Text style={styles.formTitle}>{mode === "signin" ? "Welcome back" : "Create your account"}</Text>
         <Muted style={styles.tagline}>Find photographers and videographers for your event.</Muted>
         {isDemoAuthMode() ? <Muted style={styles.demoBadge}>Demo mode</Muted> : null}
       </View>
@@ -493,15 +374,10 @@ export default function LoginScreen() {
         onPress={onGoogleSignIn}
       />
 
-      <GoogleSetupModal
-        visible={setupModalVisible}
-        onClose={() => setSetupModalVisible(false)}
-        onTestSandboxAccount={onSandboxGoogle}
-      />
-
       <Muted style={{ textAlign: "center", marginTop: spacing.md }}>
         By continuing you agree to the Terms of Service and Privacy Policy.
       </Muted>
+      </View>
 
       {/* Orange loading animation overlay shown ONLY when login or Google sign-in is loading */}
       {loading || googleBusy ? (
@@ -533,6 +409,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
   },
+  shell: { width: "100%", maxWidth: 420, alignSelf: "center", gap: spacing.md },
+  shellWide: {
+    marginTop: 48,
+    marginBottom: 48,
+    padding: 32,
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: "#111827",
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  formTitle: { fontSize: 22, fontWeight: "700", color: colors.text, textAlign: "center", marginTop: spacing.xs },
   brandRow: { alignItems: "center", gap: spacing.sm, marginBottom: spacing.md, marginTop: spacing.sm },
   tagline: { textAlign: "center", paddingHorizontal: spacing.md },
   demoBadge: { textAlign: "center", fontSize: 12, fontWeight: "700", color: colors.muted },

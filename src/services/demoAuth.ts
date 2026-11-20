@@ -211,14 +211,10 @@ export async function restoreDemoSession(): Promise<CustomerProfile | null> {
   return persistDemoSession(account);
 }
 
-import { signOutSupabase } from "@/src/services/supabaseAuth";
+import { signOutGoogle } from "@/src/services/googleNativeSignIn";
 
 export async function logoutDemo(): Promise<void> {
-  try {
-    await signOutSupabase();
-  } catch {
-    /* ignore */
-  }
+  await signOutGoogle();
   await setAuthToken(null);
   await AsyncStorage.removeItem(DEMO_SESSION_KEY);
   await AsyncStorage.removeItem(DEMO_PROFILE_KEY);

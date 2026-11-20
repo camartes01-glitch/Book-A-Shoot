@@ -1,89 +1,79 @@
-import { useEffect, useRef } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
-import { supabase } from "@/src/services/supabaseClient";
-import { extractUserInfoFromSupabaseUser } from "@/src/services/supabaseAuth";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
+import { consumeWebGoogleRedirect } from "@/src/services/googleWebSignIn";
 import { useAppStore } from "@/src/state/AppProvider";
 import { colors, fontWeights, spacing } from "@/src/constants/theme";
 import { BookAShootLogo } from "@/src/components/BookAShootLogo";
 
+function appRoute(target?: string | null): string {
+  if (!target || target === "/" || target === "/landing" || target === "(tabs)" || target === "/(tabs)/index") return "/(tabs)";
+  return target;
+}
+
+/**
+ * Website return page for "Continue with Google": Google sends the user here with an ID token in the URL
+ * fragment; the backend verifies it and returns a Camartes session (see googleWebSignIn.ts).
+ * The apps sign in natively and never land here.
+ */
 export default function AuthCallbackScreen() {
-  const params = useLocalSearchParams<{ code?: string; error?: string }>();
   const { loginWithGoogle } = useAppStore();
   const processedRef = useRef(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (processedRef.current) return;
     processedRef.current = true;
-
-    // Immediately dismiss any open in-app auth browser
-    try {
-      void WebBrowser.dismissAuthSession();
-    } catch {
-      // Ignore
-    }
-
     let isMounted = true;
 
-    async function handleAuthCallback() {
+    async function finishSignIn() {
+      if (Platform.OS !== "web") {
+        router.replace("/(tabs)");
+        return;
+      }
       try {
-        const code = Array.isArray(params.code) ? params.code[0] : params.code;
-
-        // 1. If an authorization code is present in query parameters, exchange it
-        if (code) {
-          try {
-            await supabase.auth.exchangeCodeForSession(code);
-          } catch {
-            // Might have already been exchanged by openAuthSessionAsync
-          }
-        }
-
-        // 2. Fetch the active Supabase session
-        const { data: sessionData } = await supabase.auth.getSession();
-        const user = sessionData?.session?.user;
-
-        if (user) {
-          const userInfo = extractUserInfoFromSupabaseUser(user);
-          const authedProfile = await loginWithGoogle(userInfo);
-
-          if (!isMounted) return;
-
-          const hasMobile = Boolean(authedProfile?.mobile && authedProfile.mobile.length >= 10);
-          if (!hasMobile) {
-            router.replace("/(auth)/complete-profile");
-          } else {
-            router.replace("/(tabs)");
-          }
+        const result = consumeWebGoogleRedirect();
+        if (!result) {
+          router.replace("/(auth)/login");
           return;
         }
-
-        // Fallback: Check if already signed in or return to login
-        if (isMounted) {
-          router.replace("/(tabs)");
+        const authedProfile = await loginWithGoogle(result.idToken, result.nonce);
+        if (!isMounted) return;
+        const hasMobile = Boolean(authedProfile?.mobile && authedProfile.mobile.length >= 10);
+        if (!hasMobile) {
+          router.replace({ pathname: "/(auth)/complete-profile", params: { returnTo: appRoute(result.returnTo) } });
+        } else {
+          router.replace(appRoute(result.returnTo) as any);
         }
       } catch (err) {
-        console.warn("[AuthCallback] Error completing session:", err);
-        if (isMounted) {
-          router.replace("/(tabs)");
-        }
+        if (!isMounted) return;
+        setError(err instanceof Error ? err.message : "Could not complete Google sign-in.");
+        setTimeout(() => router.replace("/(auth)/login"), 3500);
       }
     }
 
-    void handleAuthCallback();
-
+    void finishSignIn();
     return () => {
       isMounted = false;
     };
-  }, [params.code, loginWithGoogle]);
+  }, [loginWithGoogle]);
 
   return (
     <View style={styles.container}>
       <BookAShootLogo maxWidth={180} />
       <View style={styles.loadingBox}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.title}>Signing you in…</Text>
-        <Text style={styles.subtitle}>Setting up your Book A Shoot account</Text>
+        {error ? (
+          <>
+            <Text style={styles.title}>Google sign-in didn't complete</Text>
+            <Text style={styles.subtitle}>{error}</Text>
+          </>
+        ) : (
+          <>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={styles.title}>Signing you in…</Text>
+            <Text style={styles.subtitle}>Setting up your Book A Shoot account</Text>
+          </>
+        )}
       </View>
     </View>
   );
@@ -111,5 +101,6 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     color: colors.muted,
+    textAlign: "center",
   },
 });

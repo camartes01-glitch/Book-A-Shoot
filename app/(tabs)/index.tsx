@@ -40,6 +40,7 @@ import { useAppStore } from "@/src/state/AppProvider";
 import * as bookingApi from "@/src/services/bookingApi";
 import { setPhotographySelected, setVideographySelected } from "@/src/domain/dayServices";
 import { colors, radius, spacing } from "@/src/constants/theme";
+import { REELS_BOOKING_PATH, REELS_COPY } from "@/src/constants/reels";
 import { formatDateLong } from "@/src/utils/format";
 import { isLocalWizardBooking, getDraftResumeRoute } from "@/src/domain/bookingRequest";
 import {
@@ -454,6 +455,43 @@ export default function HomeScreen() {
               <Text style={styles.categoryLabel}>More</Text>
             </Pressable>
           </View>
+        </View>
+
+        {/* ── CamReels ─────────────────────────────────────────────────── */}
+        <View style={styles.sectionContainer}>
+          <Pressable
+            style={({ pressed }) => [styles.reelsCard, pressed && styles.pressed]}
+            onPress={() => router.push(REELS_BOOKING_PATH)}
+            accessibilityRole="button"
+            accessibilityLabel="Book CamReels"
+          >
+            {/* Banner pinned to the right so the camera stays in view; text sits on the soft left side. */}
+            <Image
+              source={Platform.OS === "web" ? { uri: "/reels-videographer-app.webp" } : require("@/assets/images/reels-videographer-app.webp")}
+              style={styles.reelsBanner}
+              resizeMode="cover"
+              accessibilityIgnoresInvertColors
+            />
+            {/* Cream fade behind the copy so it stays readable over the photo on narrow phones. */}
+            <LinearGradient
+              colors={["rgba(253,240,228,0.97)", "rgba(253,240,228,0.85)", "rgba(253,240,228,0)"]}
+              locations={[0, 0.45, 0.72]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={styles.reelsScrim}
+              pointerEvents="none"
+            />
+            <View style={styles.reelsContent}>
+              <View style={styles.reelsBadge}>
+                <Text style={styles.reelsBadgeText}>NEW</Text>
+              </View>
+              <Text style={styles.reelsTitle}>CamReels</Text>
+              <Text style={styles.reelsSubtitle}>Reels shot on a real camera, not a phone.</Text>
+              <View style={[styles.startBookingBtn, styles.reelsBtn]}>
+                <Text style={styles.startBookingBtnText}>{REELS_COPY.cta} →</Text>
+              </View>
+            </View>
+          </Pressable>
         </View>
 
         {/* ── 4. Marketing Carousel (3 Slides) ────────────────────────── */}
@@ -1350,6 +1388,50 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: "700",
   },
+
+  reelsCard: {
+    width: "100%",
+    height: 180,
+    borderRadius: 20,
+    overflow: "hidden",
+    position: "relative",
+    backgroundColor: "#FCE7D6",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  reelsBanner: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    right: 0,
+    height: "100%",
+    aspectRatio: 2172 / 724,
+  },
+  reelsScrim: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, zIndex: 1 },
+  reelsBtn: { alignSelf: "flex-start", marginTop: 4 },
+  reelsContent: {
+    position: "relative",
+    zIndex: 2,
+    paddingHorizontal: 18,
+    maxWidth: "62%",
+    height: "100%",
+    justifyContent: "center",
+    gap: 8,
+  },
+  reelsBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.primary,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  reelsBadgeText: { color: "#FFFFFF", fontSize: 10, fontWeight: "600", letterSpacing: 0.6 },
+  reelsTitle: { fontSize: 22, lineHeight: 28, fontWeight: "600", color: "#0F172A" },
+  reelsTitleAccent: { color: colors.primaryDark },
+  reelsSubtitle: { fontSize: 13, lineHeight: 18, color: "#334155" },
 
   // ── 7. Popular Services ────────────────────────────────────────────────────
   servicesGridRow: {

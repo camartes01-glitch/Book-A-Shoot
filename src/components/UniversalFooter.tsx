@@ -8,6 +8,7 @@
  */
 
 import React from "react";
+import { LANDING_ROUTE } from "@/src/utils/landingRoute";
 import {
   Image,
   Linking,
@@ -18,7 +19,8 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { Link, router } from "expo-router";
+import { Link, router, type Href } from "expo-router";
+import { SEO_CITIES, cityPath } from "@/src/seo/seoContent";
 import { Mail, MapPin, Phone } from "lucide-react-native";
 import Svg, { Path } from "react-native-svg";
 import { colors, spacing } from "@/src/constants/theme";
@@ -76,7 +78,7 @@ export function UniversalFooter({ showHqLocation = true }: UniversalFooterProps 
     openUrl(`mailto:${EMAIL_ADDRESS}?subject=${encodeURIComponent("Customer Inquiry — Book A Shoot")}`);
   };
 
-  const goToHome = () => router.push("/");
+  const goToHome = () => router.push(LANDING_ROUTE as any);
   const goToServices = () => router.push("/services");
   const goToAbout = () => router.push("/about");
   const goToBlogs = () => router.push("/blogs");
@@ -86,7 +88,7 @@ export function UniversalFooter({ showHqLocation = true }: UniversalFooterProps 
     <View style={[styles.footer, isWide && styles.footerWide]}>
       {/* Brand & Tagline */}
       <View style={styles.footerBrand}>
-        <Link href="/" asChild>
+        <Link href={LANDING_ROUTE as any} asChild>
           <Pressable accessibilityRole="link" accessibilityLabel="Book A Shoot Home">
             <Image
               source={require("@/assets/images/book-a-shoot-wordmark.png")}
@@ -183,7 +185,7 @@ export function UniversalFooter({ showHqLocation = true }: UniversalFooterProps 
 
       {/* Navigation Links */}
       <View style={styles.footerLinksRow}>
-        <Link href="/" asChild>
+        <Link href={LANDING_ROUTE as any} asChild>
           <Pressable accessibilityRole="link"><Text style={styles.footerLinkText}>Home</Text></Pressable>
         </Link>
         <Text style={styles.footerDot}>•</Text>
@@ -213,6 +215,21 @@ export function UniversalFooter({ showHqLocation = true }: UniversalFooterProps 
         <Text style={styles.footerDot}>•</Text>
         <Link href="/terms" asChild>
           <Pressable accessibilityRole="link"><Text style={styles.footerLinkText}>Terms</Text></Pressable>
+        </Link>
+      </View>
+
+      {/* Crawlable links to every city page */}
+      <View style={styles.footerLinksRow}>
+        <Link href={"/photographers" as Href} asChild>
+          <Pressable accessibilityRole="link"><Text style={styles.footerCityTitle}>Photographers in:</Text></Pressable>
+        </Link>
+        {SEO_CITIES.map((city) => (
+          <Link key={city.slug} href={cityPath(city.slug) as Href} asChild>
+            <Pressable accessibilityRole="link"><Text style={styles.footerLinkText}>{city.name}</Text></Pressable>
+          </Link>
+        ))}
+        <Link href={"/camreels" as Href} asChild>
+          <Pressable accessibilityRole="link"><Text style={styles.footerCityTitle}>CamReels</Text></Pressable>
         </Link>
       </View>
 
@@ -295,6 +312,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     marginBottom: 18,
+  },
+  footerCityTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.text,
   },
   footerLinkText: {
     fontSize: 13,

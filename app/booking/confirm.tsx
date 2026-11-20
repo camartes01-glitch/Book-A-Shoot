@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { router } from "expo-router";
 import { Calendar, Camera, ChevronRight, Clapperboard, Clock, Image as ImageLucide, Lock, MapPin, Pencil, ShieldCheck, Sparkles, Star, Video } from "lucide-react-native";
@@ -14,6 +14,9 @@ import { DEFAULT_EVENT_CATEGORIES } from "@/src/constants/eventCategories";
 import { CamartesApiError } from "@/src/services/camartesClient";
 import { detectDayOvertime, getBookingPricingModel } from "@/src/config/approvedBudget";
 import type { EventDay } from "@/src/types/booking";
+import { goBackTo } from "@/src/utils/wizardNav";
+import { resolveProviderSearchTarget } from "@/src/domain/cityResolution";
+import { isSentRequest } from "@/src/domain/bookingRequest";
 
 function initials(name: string) {
   return (
@@ -66,11 +69,16 @@ export default function ConfirmBookingScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 640;
 
-  const { activeDraft, loadVendorMatches, submitVendorRequest, clearActiveDraft, profile } = useAppStore();
+  const { activeDraft, loadVendorMatches, submitVendorRequest, updateSentRequest, clearActiveDraft, profile } = useAppStore();
+  // Editing a request that photographers already have: save changes to that
+  // same request instead of sending a new one.
+  const editingSentRequest = isSentRequest(activeDraft);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [fetchingMatches, setFetchingMatches] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
   const [successData, setSuccessData] = useState<{
     bookingId: string;
     city?: string;
@@ -80,9 +88,11 @@ export default function ConfirmBookingScreen() {
   } | null>(null);
 
   useEffect(() => {
-    if (activeDraft && (!activeDraft.matches || activeDraft.matches.length === 0)) {
+    if (activeDraft && !isSentRequest(activeDraft) && (!activeDraft.matches || activeDraft.matches.length === 0)) {
       setFetchingMatches(true);
-      void loadVendorMatches().finally(() => setFetchingMatches(false));
+      void loadVendorMatches()
+        .catch(() => undefined) // submit re-matches and surfaces any real error
+        .finally(() => setFetchingMatches(false));
     }
   }, [activeDraft?.bookingId, activeDraft?.matches?.length]);
 
@@ -108,17 +118,50 @@ export default function ConfirmBookingScreen() {
   const teaserEnabled = activeDraft.deliverables.video?.teaserCinematicEnabled;
   const teaserMins = activeDraft.deliverables.video?.teaserDurationMinutes ?? 1;
 
+  const onUpdateRequest = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setIsUpdating(true);
+    setError(null);
+    try {
+      const { booking: saved, updated, notifiedCount } = await updateSentRequest();
+      clearActiveDraft();
+      router.replace(`/bookings/${saved.bookingId}`);
+      Alert.alert(
+        updated ? "Request updated" : "No changes to update",
+        updated
+          ? notifiedCount > 0
+            ? `Your changes were shared with ${notifiedCount} photographer${notifiedCount === 1 ? "" : "s"} working on your request.`
+            : "Your changes have been saved."
+          : "Your request already has these details.",
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't update your request. Please try again.");
+    } finally {
+      submittingRef.current = false;
+      setIsUpdating(false);
+    }
+  };
+
   const onSubmit = () => {
     if (!profile) {
       router.push({ pathname: "/(auth)/login", params: { returnTo: "/booking/confirm" } });
       return;
     }
+    if (editingSentRequest) {
+      void onUpdateRequest();
+      return;
+    }
+    // One dispatch at a time: a double tap must never send the request twice
+    // (duplicate bookings ring every photographer twice).
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     // 1. Immediately launch rotating sentences modal with 0ms delay — no button spinner!
     setIsSearching(true);
     setSubmissionError(null);
     setError(null);
 
-    const queryCity = activeDraft.providerLocationPreference?.city || firstDay?.location?.city || "Hyderabad";
+    const queryCity = resolveProviderSearchTarget(activeDraft).city || firstDay?.location?.city || "";
 
     // 2. Run background search & dispatch concurrently
     (async () => {
@@ -153,18 +196,28 @@ export default function ConfirmBookingScreen() {
         } else {
           setSubmissionError(message);
         }
+      } finally {
+        submittingRef.current = false;
       }
     })();
   };
 
   return (
     <WizardScreen
-      title="Review your booking"
+      title={editingSentRequest ? "Review your changes" : "Review your booking"}
       step="review"
-      onBack={() => router.push("/booking/location-preference")}
-      footer={<Button label="Send booking request" onPress={onSubmit} flex={1} />}
+      onBack={() => goBackTo("/booking/location-preference")}
+      footer={
+        <Button
+          label={editingSentRequest ? "Update request" : "Send booking request"}
+          onPress={onSubmit}
+          loading={isUpdating}
+          disabled={isUpdating}
+          flex={1}
+        />
+      }
     >
-      <SectionTitle>You're almost booked</SectionTitle>
+      <SectionTitle>{editingSentRequest ? "Update your request" : "You're almost booked"}</SectionTitle>
       {profile ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginVertical: 4 }}>
           <ShieldCheck size={16} color={colors.primary} />
@@ -185,7 +238,11 @@ export default function ConfirmBookingScreen() {
           ) : null}
         </View>
       ) : null}
-      <Muted>Sending this request dispatches your shoot to verified photography partners. It is not confirmed until a partner accepts and confirms.</Muted>
+      <Muted>
+        {editingSentRequest
+          ? "Your request keeps its photographers. When you update it, everyone working on it is notified of your new requirements right away."
+          : "Sending this request dispatches your shoot to verified photography partners. It is not confirmed until a partner accepts and confirms."}
+      </Muted>
 
       {/* Individual Per-Event Cards Container (Left/Right on Desktop, Stacked on Mobile) */}
       <View style={isDesktop ? styles.desktopGrid : styles.mobileGrid}>

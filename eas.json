@@ -14,14 +14,14 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://vyjwezlkozajarwexirg.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_g6oALf4pkcwK82IRndmzkQ_4-9WbeAj",
         "EXPO_PUBLIC_CAMARTES_API_URL": "https://api.camartes.com",
         "EXPO_PUBLIC_CAMARTES_API": "https://api.camartes.com",
         "EXPO_PUBLIC_API_URL": "https://api.camartes.com/api",
         "EXPO_PUBLIC_AUTH_MODE": "REAL",
         "EXPO_PUBLIC_CONTACT_RECEIVER_EMAIL": "info@bookashoot.online",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "631527312553-942aq7c10t0jtr5kedieo3jrbiruagnu.apps.googleusercontent.com"
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "631527312553-942aq7c10t0jtr5kedieo3jrbiruagnu.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "631527312553-s1mpbe350ke8118is5leg4n1n3aka2u2.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyAxefgQGJ--znmy0ekUjlczLDgOyWNKWa4"
       }
     },
     "production": {
@@ -30,14 +30,14 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_SUPABASE_URL": "https://vyjwezlkozajarwexirg.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_g6oALf4pkcwK82IRndmzkQ_4-9WbeAj",
         "EXPO_PUBLIC_CAMARTES_API_URL": "https://api.camartes.com",
         "EXPO_PUBLIC_CAMARTES_API": "https://api.camartes.com",
         "EXPO_PUBLIC_API_URL": "https://api.camartes.com/api",
         "EXPO_PUBLIC_AUTH_MODE": "REAL",
         "EXPO_PUBLIC_CONTACT_RECEIVER_EMAIL": "info@bookashoot.online",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "631527312553-942aq7c10t0jtr5kedieo3jrbiruagnu.apps.googleusercontent.com"
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "631527312553-942aq7c10t0jtr5kedieo3jrbiruagnu.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "631527312553-s1mpbe350ke8118is5leg4n1n3aka2u2.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_PLACES_API_KEY": "AIzaSyAxefgQGJ--znmy0ekUjlczLDgOyWNKWa4"
       }
     }
   },
@@ -48,4 +48,4 @@
       }
     }
   }
-}
+}

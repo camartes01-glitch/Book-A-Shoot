@@ -3,6 +3,7 @@
  */
 
 import React from "react";
+import { LANDING_ROUTE } from "@/src/utils/landingRoute";
 import {
   Image,
   Platform,
@@ -20,10 +21,9 @@ import { UniversalNavbar } from "@/src/components/UniversalNavbar";
 import { SEOHead } from "@/src/components/SEOHead";
 import { SEOImage } from "@/src/components/SEOImage";
 import { PSEO_HUBS, type PSeoHubConfig } from "@/src/constants/pSeoData";
-import {
-  createBreadcrumbSchema,
-  createLocalBusinessSchema,
-} from "@/src/constants/seoSchemas";
+import { createBreadcrumbSchema } from "@/src/constants/seoSchemas";
+import { serviceSchema } from "@/src/seo/structuredData";
+import { headingProps } from "@/src/components/seo/SeoBlocks";
 import {
   ArrowRight,
   CheckCircle2,
@@ -52,7 +52,7 @@ export default function CinematographyCityHubPage() {
   const data: PSeoHubConfig = PSEO_HUBS[key] || PSEO_HUBS["drone-hyderabad"];
 
   const goToLogin = () => router.push("/(auth)/login");
-  const goToHome = () => router.push("/");
+  const goToHome = () => router.push(LANDING_ROUTE as any);
   const goToServices = () => router.push("/services");
 
   const breadcrumbData = createBreadcrumbSchema([
@@ -61,13 +61,15 @@ export default function CinematographyCityHubPage() {
     { name: `${data.serviceName} in ${data.cityName}`, path: `/cinematography/${data.serviceKey}/${data.cityKey}` },
   ]);
 
-  const localBusinessData = createLocalBusinessSchema({
-    city: data.cityName,
-    serviceName: data.serviceName,
+  // Book A Shoot is a marketplace, so this is a Service offered in the city,
+  // not a local business, and it carries no ratings.
+  const localBusinessData = serviceSchema({
+    name: `${data.serviceName} in ${data.cityName}`,
+    serviceType: "Drone cinematography",
+    description: data.metaDescription,
     path: `/cinematography/${data.serviceKey}/${data.cityKey}`,
-    minPrice: data.priceRange.min,
-    maxPrice: data.priceRange.max,
-    neighborhoods: data.neighborhoods,
+    city: data.cityName,
+    state: "Telangana",
   });
 
   return (
@@ -112,13 +114,9 @@ export default function CinematographyCityHubPage() {
                   <MapPin size={13} color={colors.primaryDark} />
                   <Text style={styles.cityBadgeText}>{data.cityName} Commercial Aerial Crew</Text>
                 </View>
-                <View style={styles.ratingBadge}>
-                  <Star size={13} color="#F59E0B" fill="#F59E0B" />
-                  <Text style={styles.ratingText}>4.9/5 Certified Safe Flights</Text>
-                </View>
               </View>
 
-              <Text style={[styles.h1, isWide && styles.h1Wide]}>{data.h1Title}</Text>
+              <Text {...headingProps(1)} style={[styles.h1, isWide && styles.h1Wide]}>{data.h1Title}</Text>
               <Text style={styles.subtitle}>{data.subtitle}</Text>
 
               <View style={styles.priceEstimateBox}>

@@ -435,63 +435,45 @@ describe("Camartes Google authentication contract", () => {
     expect(await getAuthToken()).toBe("google-session-token");
   });
 
-  test("loginWithGoogle with GoogleUserInfo posts to /api/auth/google-userinfo and persists session", async () => {
-    globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
-      if (String(input).includes("/api/auth/google-userinfo")) {
-        return jsonResponse(200, {
-          user_id: "google-user-2",
-          session_token: "google-session-token-2",
-          email: "sandbox@example.com",
-          name: "Sandbox User",
-        });
+  test("loginWithGoogle sends the ID token, nonce and Book A Shoot source to /api/auth/google only", async () => {
+    const calls: Array<{ url: string; body: any }> = [];
+    globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : null });
+      if (url.endsWith("/api/auth/google")) {
+        return jsonResponse(200, { user_id: "google-user-2", session_token: "google-session-token-2" });
       }
-      if (String(input).includes("/api/auth/me")) {
-        return jsonResponse(200, {
-          user_id: "google-user-2",
-          name: "Sandbox User",
-          email: "sandbox@example.com",
-        });
+      if (url.includes("/api/auth/me")) {
+        return jsonResponse(200, { user_id: "google-user-2", name: "Web User", email: "web@example.com" });
       }
       return jsonResponse(404, {});
     }) as typeof fetch;
 
-    const profile = await authApi.loginWithGoogle({
-      google_id: "google_123",
-      email: "sandbox@example.com",
-      name: "Sandbox User",
-    });
+    const profile = await authApi.loginWithGoogle("web-id-token", "nonce-123");
     expect(profile.customerId).toBe("google-user-2");
-    expect(profile.name).toBe("Sandbox User");
     expect(await getAuthToken()).toBe("google-session-token-2");
+    const googleCall = calls.find((c) => c.url.endsWith("/api/auth/google"));
+    expect(googleCall?.body).toEqual({ id_token: "web-id-token", nonce: "nonce-123", source: "book_a_shoot", client_app: "bookashoot" });
+    expect(calls.some((c) => c.url.includes("google-userinfo"))).toBe(false);
   });
 
-  test("loginWithGoogle with GoogleUserInfo falls back gracefully when backend returns 404", async () => {
-    globalThis.fetch = jest.fn(async () => {
-      return jsonResponse(404, { detail: "Not found" });
-    }) as typeof fetch;
+  test("loginWithGoogle signs nobody in when the backend rejects the Google token", async () => {
+    globalThis.fetch = jest.fn(async () => jsonResponse(401, { detail: "Invalid Google token: audience mismatch" })) as typeof fetch;
 
-    const profile = await authApi.loginWithGoogle({
-      google_id: "google_999",
-      email: "fallback@example.com",
-      name: "Fallback User",
-    });
-    expect(profile.customerId).toBe("google-google_999");
-    expect(profile.email).toBe("fallback@example.com");
-    expect(profile.name).toBe("Fallback User");
+    await expect(authApi.loginWithGoogle("forged-token")).rejects.toMatchObject({ status: 401 });
+    expect(await getAuthToken()).toBeNull();
+    expect(await authApi.getStoredProfile()).toBeNull();
   });
 
   test("loginWithGoogle populates linked account mobile phone number from backend", async () => {
     globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
-      if (String(input).includes("/api/auth/google-userinfo")) {
+      if (String(input).endsWith("/api/auth/google")) {
         return jsonResponse(200, {
           user_id: "linked-user-1",
           session_token: "linked-session-token",
           email: "linked@example.com",
           name: "Linked User",
           phone_number: "9876543210",
-          phone: "9876543210",
-          mobile: "9876543210",
-          is_new_user: false,
           has_completed_profile: true,
         });
       }
@@ -506,11 +488,7 @@ describe("Camartes Google authentication contract", () => {
       return jsonResponse(404, {});
     }) as typeof fetch;
 
-    const profile = await authApi.loginWithGoogle({
-      google_id: "google_linked_123",
-      email: "linked@example.com",
-      name: "Linked User",
-    });
+    const profile = await authApi.loginWithGoogle("linked-id-token");
     expect(profile.customerId).toBe("linked-user-1");
     expect(profile.mobile).toBe("9876543210");
   });
@@ -589,7 +567,7 @@ describe("Camartes Google authentication contract", () => {
 
       globalThis.fetch = jest.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url.includes("/api/auth/google-userinfo")) {
+        if (url.endsWith("/api/auth/google")) {
           return jsonResponse(200, {
             session_token: "mock-google-token",
             user: {
@@ -623,16 +601,22 @@ describe("Camartes Google authentication contract", () => {
     });
 
     test("new Google user first-time signin: profile persists, complete-profile succeeds, and restoreSession does not wipe", async () => {
-      globalThis.fetch = jest.fn(async () => {
+      globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/api/auth/google")) {
+          return jsonResponse(200, { user_id: "user_kitty", session_token: "kitty-session" });
+        }
+        if (url.includes("/api/auth/me")) {
+          return jsonResponse(200, { user_id: "user_kitty", name: "Keerthika Kitty", email: "kitty@example.com" });
+        }
+        if (url.includes("/api/profile") && init?.method === "PUT") {
+          return jsonResponse(200, { message: "Profile updated successfully" });
+        }
         return jsonResponse(404, { detail: "Not found" });
       }) as typeof fetch;
 
-      // 1. First-time Google login
-      const googleProfile = await authApi.loginWithGoogle({
-        google_id: "google_new_kitty",
-        email: "kitty@example.com",
-        name: "Keerthika Kitty",
-      });
+      // 1. First-time Google login (no phone yet)
+      const googleProfile = await authApi.loginWithGoogle("kitty-id-token");
 
       expect(googleProfile.name).toBe("Keerthika Kitty");
       expect(googleProfile.email).toBe("kitty@example.com");

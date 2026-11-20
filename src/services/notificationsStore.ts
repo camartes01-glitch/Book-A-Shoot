@@ -32,6 +32,7 @@ export const CATEGORY_MIN_SPACING_MS: Record<string, number> = {
   welcome: 7 * 24 * 60 * 60 * 1000, // 7 days long gap between welcome messages
   marketing_nudge: 3 * 24 * 60 * 60 * 1000, // 3 days long gap between marketing lines
   draft_resume_nudge: 24 * 60 * 60 * 1000, // 24 hours long gap between draft nudges
+  draft_followup_nudge: 24 * 60 * 60 * 1000,
 };
 
 type Listener = () => void;
@@ -126,8 +127,9 @@ export function getDeterministicNotificationKey(n: Partial<AppNotification>): st
     const custId = (n.data?.customerId as string) || n.userId || "customer";
     return `welcome:${custId}:${titleNorm}:${bodyNorm}`;
   }
-  if (type === "draft_resume_nudge") {
-    return `draft_resume:${bid || "draft"}:${titleNorm}:${bodyNorm}`;
+  if (type === "draft_resume_nudge" || type === "draft_followup_nudge") {
+    // One entry per draft per stage, regardless of copy changes.
+    return `${type}:${bid || "draft"}`;
   }
   if (type === "marketing_nudge") {
     return `marketing_nudge:${titleNorm}:${bodyNorm}`;
@@ -144,6 +146,14 @@ export function getDeterministicNotificationKey(n: Partial<AppNotification>): st
   if (type === "new_search_dispatched") {
     const count = (n.data?.firm_count as number) || (n.data?.firmCount as number) || (n.data?.firm_names as string[])?.length || 1;
     return `new_search_dispatched:${bid}:${count}`;
+  }
+  if (type === "search_expired" || type === "search_window_closed" || type === "search_restarted") {
+    // One per 24-hour search cycle (copy can repeat across cycles).
+    return `${type}:${bid}:${String(n.data?.search_cycle ?? "1")}`;
+  }
+  if (type === "request_updated") {
+    // One per edit, even when two edits produce the same wording.
+    return `request_updated:${bid}:${String(n.data?.edited_at ?? n.createdAt ?? "")}`;
   }
   if (type === "event_reminder" || type === "reminder") {
     const dayId = (n.data?.dayId as string) || (n.data?.eventDate as string) || "day";
@@ -249,6 +259,7 @@ function mapBackendNotification(n: BackendNotification): AppNotification {
     "chat_message",
     "event_reminder",
     "draft_resume_nudge",
+    "draft_followup_nudge",
     "marketing_nudge",
   ]);
   if (n.type && CANONICAL_TYPES.has(n.type)) {

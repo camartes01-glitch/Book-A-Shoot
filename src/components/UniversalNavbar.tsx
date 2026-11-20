@@ -12,6 +12,7 @@
  */
 
 import React, { useState, useRef, useEffect } from "react";
+import { LANDING_ROUTE } from "@/src/utils/landingRoute";
 import {
   Image,
   Linking,
@@ -81,7 +82,7 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
   const goToHome = () => {
     setIsMobileMenuOpen(false);
     setIsCompanyOpen(false);
-    router.push("/");
+    router.push(LANDING_ROUTE as any);
   };
 
   const goToServices = () => {
@@ -148,7 +149,7 @@ export function UniversalNavbar({ activeRoute }: UniversalNavbarProps) {
       <View style={[styles.navContainer, isWide && styles.navContainerWide]}>
         {/* Left: Brand Wordmark Logo */}
         <View style={styles.leftCol}>
-          <Link href="/" asChild>
+          <Link href={LANDING_ROUTE as any} asChild>
             <Pressable
               id="nav-logo"
               onPress={goToHome}
