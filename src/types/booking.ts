@@ -316,6 +316,8 @@ export type Booking = {
   searchWindowClosed?: boolean;
   /** Server says "Search again" can restart the search on this same request. */
   canSearchAgainRemote?: boolean;
+  /** The customer already rated this booking (server flag review_submitted / client_review_submitted). */
+  reviewSubmitted?: boolean;
   /** Last time the customer updated this request after sending it (ISO). */
   lastEditedAt?: string | null;
 };

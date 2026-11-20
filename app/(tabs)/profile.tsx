@@ -27,6 +27,7 @@ import {
   Plus,
   Send,
   ShieldCheck,
+  Star,
   Trash2,
   X,
 } from "lucide-react-native";
@@ -34,6 +35,7 @@ import { ScreenContainer } from "@/src/components/ScreenContainer";
 import { useAppStore } from "@/src/state/AppProvider";
 import { colors, spacing } from "@/src/constants/theme";
 import { submitUserFeedback } from "@/src/services/feedbackApi";
+import { openAppStoreReview } from "@/src/utils/storeReview";
 
 interface FAQItem {
   id: string;
@@ -505,6 +507,30 @@ export default function ProfileScreen() {
 
         {showFeedback ? (
           <View style={styles.feedbackFormContainer}>
+            <Pressable
+              onPress={() => void openAppStoreReview()}
+              accessibilityRole="link"
+              accessibilityLabel="Review Book A Shoot on the store"
+              style={({ pressed }) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                padding: 12,
+                marginBottom: 14,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: "#FDE68A",
+                backgroundColor: pressed ? "#FEF3C7" : "#FFFBEB",
+              })}
+            >
+              <Star size={18} color="#D97706" fill="#D97706" />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: "700", color: colors.text }}>Review our app</Text>
+                <Text style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>
+                  Enjoying Book A Shoot? Rate us on {Platform.OS === "ios" ? "the App Store" : "Google Play"}. It takes 10 seconds.
+                </Text>
+              </View>
+            </Pressable>
             {feedbackSent ? (
               <View style={styles.feedbackSuccessBox}>
                 <View style={styles.feedbackSuccessBadge}>

@@ -110,7 +110,7 @@ export async function getPendingReviewBooking(bookings: Booking[]): Promise<Book
     if (!confirmedVendor) continue;
 
     // Check if already reviewed on server or locally
-    if ((b as any).review_submitted || (b as any).client_review_submitted) {
+    if (b.reviewSubmitted || (b as any).review_submitted || (b as any).client_review_submitted) {
       void markBookingReviewed(bId);
       continue;
     }
@@ -162,7 +162,8 @@ export async function submitBookingReview(
       backendSuccess = true;
     }
   } catch (err) {
-    // If network fails, proceed to persist locally
+    // Saved locally either way so the customer is not asked again on this device; the server also refuses
+    // a second review of the same booking, so a retry from another device is harmless.
   }
 
   // Always mark as reviewed locally so customer is never double-prompted

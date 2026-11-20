@@ -383,6 +383,7 @@ export type RemoteBookingSnapshot = {
   searchWindowClosed?: boolean;
   canSearchAgain?: boolean;
   lastEditedAt?: string | null;
+  reviewSubmitted?: boolean;
 };
 
 function stringField(row: Record<string, unknown>, keys: string[]): string | null {
@@ -580,6 +581,7 @@ export function parseRemoteBookingRow(payload: unknown): RemoteBookingSnapshot |
     searchWindowClosed: typeof row.search_window_closed === "boolean" ? row.search_window_closed : undefined,
     canSearchAgain: typeof row.can_search_again === "boolean" ? row.can_search_again : undefined,
     lastEditedAt: stringField(row, ["last_edited_at"]),
+    reviewSubmitted: row.review_submitted === true || row.client_review_submitted === true || undefined,
   };
 }
 
@@ -695,6 +697,7 @@ export function applyRemoteSnapshot(local: Booking, remote: RemoteBookingSnapsho
     searchWindowClosed: remote.searchWindowClosed ?? local.searchWindowClosed,
     canSearchAgainRemote: remote.canSearchAgain ?? local.canSearchAgainRemote,
     lastEditedAt: remote.lastEditedAt ?? local.lastEditedAt,
+    reviewSubmitted: Boolean(remote.reviewSubmitted || local.reviewSubmitted) || undefined,
     selectedPackage,
     expectedDeliveryDate,
     budget: local.budget ?? (remote.budget ? Number(remote.budget) : null),

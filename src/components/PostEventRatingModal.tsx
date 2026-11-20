@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -28,6 +27,7 @@ import type { Booking, AssignedPhotographer } from "@/src/types/booking";
 import { formatDateLong } from "@/src/utils/format";
 import { colors, radius, spacing } from "@/src/constants/theme";
 import { submitBookingReview, dismissReviewPrompt } from "@/src/services/reviewApi";
+import { openAppStoreReview } from "@/src/utils/storeReview";
 
 const COMPLIMENT_TAGS = [
   "Punctual ⏱️",
@@ -156,28 +156,7 @@ export function PostEventRatingModal({
   };
 
   const handleOpenAppStoreReview = () => {
-    if (Platform.OS === "android") {
-      const playStoreMarketUrl = "market://details?id=online.bookashoot.customer";
-      const playStoreWebUrl = "https://play.google.com/store/apps/details?id=online.bookashoot.customer";
-      Linking.canOpenURL(playStoreMarketUrl)
-        .then((supported) => {
-          if (supported) return Linking.openURL(playStoreMarketUrl);
-          return Linking.openURL(playStoreWebUrl);
-        })
-        .catch(() => Linking.openURL(playStoreWebUrl));
-    } else if (Platform.OS === "ios") {
-      const appStoreUrl = "itms-apps://itunes.apple.com/app/id6470000000?action=write-review";
-      const appStoreWebUrl = "https://apps.apple.com/app/book-a-shoot/id6470000000";
-      Linking.canOpenURL(appStoreUrl)
-        .then((supported) => {
-          if (supported) return Linking.openURL(appStoreUrl);
-          return Linking.openURL(appStoreWebUrl);
-        })
-        .catch(() => Linking.openURL(appStoreWebUrl));
-    } else {
-      // Web fallback
-      Linking.openURL("https://play.google.com/store/apps/details?id=online.bookashoot.customer");
-    }
+    void openAppStoreReview();
   };
 
   return (

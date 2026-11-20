@@ -119,6 +119,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [activeToastNotification, setActiveToastNotification] = useState<AppNotification | null>(null);
   const [pendingReviewBooking, setPendingReviewBooking] = useState<Booking | null>(null);
+  /** Bookings whose rating prompt was already shown in this app session: never shown twice per session. */
+  const promptedReviewIdsRef = useRef<Set<string>>(new Set());
   const seenNotifIdsRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
   const activeDraftRef = useRef<Booking | null>(null);
@@ -359,7 +361,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const checkReviews = async () => {
       try {
         const candidate = await getPendingReviewBooking(bookings);
-        if (!cancelled && candidate) {
+        const candidateId = candidate ? candidate.remoteBookingId || candidate.bookingId : "";
+        if (!cancelled && candidate && candidateId && !promptedReviewIdsRef.current.has(candidateId)) {
+          promptedReviewIdsRef.current.add(candidateId);
           // Subtle delay so screen transition finishes before slider appears
           setTimeout(() => {
             if (!cancelled) setPendingReviewBooking(candidate);
