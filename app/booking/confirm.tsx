@@ -293,7 +293,7 @@ export default function ConfirmBookingScreen() {
                     {minutes != null ? ` · ${formatDuration(minutes)}` : ""}
                   </Text>
                   {overtime?.isExtended && overtime?.note ? (
-                    <Text style={styles.overtimeText}>{overtime.note} (standard schedule is 8 hrs)</Text>
+                    <Text style={styles.overtimeText}>Over 8 hrs, so this day is priced at 2× in every package.</Text>
                   ) : null}
                 </View>
               </View>

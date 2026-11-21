@@ -439,9 +439,27 @@ export function approvedServiceLinesFromQty(
   });
 }
 
+/** Every tier's rate covers up to 8 hours of shooting a day. */
+export const INCLUDED_HOURS_PER_DAY = 8;
+/** A day longer than the included hours is charged at this multiple of its rate, in every tier. */
+export const EXTENDED_DAY_MULTIPLIER = 2;
+export const EXTENDED_DAY_NOTE = `Over ${INCLUDED_HOURS_PER_DAY} hrs · ${EXTENDED_DAY_MULTIPLIER}× rate`;
+
+/** True when this day's coverage runs longer than the included 8 hours. */
+export function isExtendedDay(day: Pick<EventDay, "startTime" | "endTime" | "overnight" | "eventTypeIds">): boolean {
+  return detectDayOvertime(day).isExtended;
+}
+
 export function approvedServiceLinesForDay(day: EventDay, tier: PackageTierId): ApprovedServiceLine[] {
   const model = getApplicablePricingModel(day);
-  return approvedServiceLinesFromQty(selectedServiceQuantitiesForDay(day), tier, model);
+  const lines = approvedServiceLinesFromQty(selectedServiceQuantitiesForDay(day), tier, model);
+  if (!isExtendedDay(day)) return lines;
+  return lines.map((line) => ({
+    ...line,
+    minPrice: line.minPrice * EXTENDED_DAY_MULTIPLIER,
+    maxPrice: line.maxPrice * EXTENDED_DAY_MULTIPLIER,
+    note: EXTENDED_DAY_NOTE,
+  }));
 }
 
 export function getBookingPricingModel(days: EventDay[]): PricingModel {
@@ -628,7 +646,7 @@ export function getDetailedPackageBreakdown(
           return match;
         }).join(" + ")
       : "Event";
-    const eventTitle = `Day ${day.order}: ${typeLabel}`;
+    const eventTitle = `Day ${day.order}: ${typeLabel}${isExtendedDay(day) ? ` (over ${INCLUDED_HOURS_PER_DAY} hrs)` : ""}`;
     return {
       dayId: day.dayId,
       order: day.order,

@@ -395,3 +395,32 @@ describe("8. Photo Album & Deliverables Pricing Integration", () => {
     expect(elitePkg.bullets.some((b) => b.includes("Printed Photo Album (25 pages)"))).toBe(true);
   });
 });
+
+describe("6. Days over 8 hours are priced at 2x in every tier", () => {
+  const services = {
+    photography: { traditional: false, traditionalCount: 0, candid: true, candidCount: 1 },
+    videography: { traditional: false, traditionalCount: 0, candid: true, candidCount: 1 },
+    aerial: { drones: 1 },
+  };
+
+  test.each(["essential", "signature", "elite"] as const)("%s: 9-hour day costs exactly double an 8-hour day", (tier) => {
+    const eight = overallApprovedRange([makeOutdoorDay("pre_wedding", { ...services, startTime: "09:00", endTime: "17:00" })], tier);
+    const nine = overallApprovedRange([makeOutdoorDay("pre_wedding", { ...services, startTime: "09:00", endTime: "18:00" })], tier);
+    expect(nine).toEqual({ min: eight.min * 2, max: eight.max * 2 });
+  });
+
+  test("exactly 8 hours is not doubled; overnight over 8 hours is", () => {
+    const base = overallApprovedRange([makeWeddingDay({ startTime: "10:00", endTime: "18:00" })], "signature");
+    const overnight = overallApprovedRange([makeWeddingDay({ startTime: "20:00", endTime: "05:00", overnight: true })], "signature");
+    expect(overnight).toEqual({ min: base.min * 2, max: base.max * 2 });
+  });
+
+  test("only the long day doubles in a multi-day booking; deliverables never double", () => {
+    const short = makeWeddingDay({ startTime: "10:00", endTime: "14:00" }, 1);
+    const long = makeWeddingDay({ startTime: "08:00", endTime: "20:00" }, 2);
+    const one = overallApprovedRange([short], "essential");
+    expect(overallApprovedRange([short, long], "essential")).toEqual({ min: one.min * 3, max: one.max * 3 });
+    const lines = approvedServiceLines([long], "essential");
+    expect(lines.every((l) => l.note === "Over 8 hrs · 2× rate")).toBe(true);
+  });
+});

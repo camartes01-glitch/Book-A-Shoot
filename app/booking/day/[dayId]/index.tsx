@@ -4,6 +4,7 @@ import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Briefcase, CalendarPlus, Camera, Check, ChevronDown, ChevronUp, Film, Flame, Lock, MapPin, Plane, Radio, Sparkles, Tv, Video, X } from "lucide-react-native";
 import { WizardScreen } from "@/src/components/WizardScreen";
 import { Badge, Button, Card, Muted, SectionTitle } from "@/src/components/ui";
+import { EXTENDED_DAY_MULTIPLIER, INCLUDED_HOURS_PER_DAY } from "@/src/config/approvedBudget";
 import { Chip, ChipGroup } from "@/src/components/Chip";
 import { StyleRow } from "@/src/components/StyleRow";
 import { Stepper } from "@/src/components/Stepper";
@@ -876,6 +877,11 @@ export default function DayEditorScreen() {
             ) : null}
             {duration != null && (day.overnight || isEndAfterStart(day.startTime!, day.endTime!, false)) ? (
               <Muted>Duration: {formatDuration(duration)}</Muted>
+            ) : null}
+            {duration != null && duration > INCLUDED_HOURS_PER_DAY * 60 ? (
+              <Muted style={{ color: colors.primaryDark, fontWeight: "600" }}>
+                Packages cover up to {INCLUDED_HOURS_PER_DAY} hrs. Longer days are priced at {EXTENDED_DAY_MULTIPLIER}× in every package.
+              </Muted>
             ) : null}
 
             <Pressable

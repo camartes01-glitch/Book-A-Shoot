@@ -30,22 +30,21 @@ function DoodleCircle() {
   );
 }
 
-export function ReelsTeaser({ width = 0, isWide }: { width?: number; isWide: boolean }) {
-  const phone = !isWide && width > 0 && width < 600;
+export function ReelsTeaser({ isWide }: { width?: number; isWide: boolean }) {
   return (
-    <View style={[styles.band, isWide && styles.bandWide, phone && styles.bandPhone]}>
+    <View style={[styles.band, isWide && styles.bandWide, !isWide && styles.bandPhone]}>
       <View style={[styles.inner, isWide && styles.innerWide]}>
         <View style={[styles.copy, isWide && styles.copyWide]}>
           <Text style={styles.eyebrow}>Introducing CamReels</Text>
-          <Text {...headingProps(2)} style={[styles.headline, isWide && styles.headlineWide, phone && styles.headlinePhone]}>
+          <Text {...headingProps(2)} style={[styles.headline, isWide && styles.headlineWide, !isWide && styles.headlinePhone]}>
             Your content is already good.{"\n"}Now make it unforgettable.
           </Text>
-          <Text style={[styles.sub, phone && styles.subPhone]}>
+          <Text style={[styles.sub, !isWide && styles.subPhone]}>
             CamReels puts a verified videographer with a DSLR and gimbal behind your next reel. Sharper, smoother, scroll-stopping. The kind of reel brands notice.
           </Text>
         </View>
 
-        <View style={[styles.side, isWide && styles.sideWide, phone && styles.sidePhone]}>
+        <View style={[styles.side, isWide ? styles.sideWide : styles.sideCenter]}>
           <View style={styles.priceWrap}>
             <DoodleCircle />
             <Text style={styles.priceFrom}>starting from</Text>
@@ -54,7 +53,7 @@ export function ReelsTeaser({ width = 0, isWide }: { width?: number; isWide: boo
           </View>
           <Link href={REELS_PATH} asChild>
             <Pressable
-              style={({ pressed }) => [styles.btn, phone && styles.btnFull, pressed && { opacity: 0.85 }]}
+              style={({ pressed }) => [styles.btn, pressed && { opacity: 0.85 }]}
               accessibilityRole="link"
               accessibilityLabel="Learn more about CamReels"
             >
@@ -73,11 +72,11 @@ const styles = StyleSheet.create({
   bandPhone: { paddingVertical: 44 },
   headlinePhone: { fontSize: 26, lineHeight: 34 },
   subPhone: { fontSize: 15, lineHeight: 23 },
-  sidePhone: { alignItems: "stretch" },
-  btnFull: { justifyContent: "center", alignSelf: "stretch" },
+  /** Phones and tablets: price doodle and button centred under the copy. */
+  sideCenter: { alignItems: "center", alignSelf: "stretch", paddingTop: spacing.sm },
   bandWide: { paddingVertical: 72, paddingHorizontal: 56 },
   inner: { width: "100%", maxWidth: 1120, alignSelf: "center", gap: spacing.xl },
-  innerWide: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 48 },
+  innerWide: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 72 },
   copy: { gap: spacing.md },
   copyWide: { flex: 1, maxWidth: 680 },
   eyebrow: { fontSize: 13, lineHeight: 18, fontWeight: "600", color: "#FFE4D2", letterSpacing: 0.8, textTransform: "uppercase" },
@@ -85,7 +84,7 @@ const styles = StyleSheet.create({
   headlineWide: { fontSize: 40, lineHeight: 50 },
   sub: { fontSize: 16, lineHeight: 24, color: "rgba(255,255,255,0.92)", maxWidth: 600 },
   side: { alignItems: "flex-start", gap: spacing.lg },
-  sideWide: { alignItems: "center" },
+  sideWide: { alignItems: "center", marginRight: 48 },
   priceWrap: { width: 220, height: 112, alignItems: "center", justifyContent: "center" },
   priceFrom: { fontSize: 12, color: "rgba(255,255,255,0.9)", fontStyle: "italic" },
   price: { fontSize: 36, lineHeight: 42, fontWeight: "600", color: colors.white, letterSpacing: -0.5 },

@@ -895,7 +895,7 @@ export default function LandingPage() {
         <View style={styles.citiesSectionDistinct}>
           <View style={[styles.citiesInner, isWide && styles.sectionWide]}>
             <View style={styles.sectionHead}>
-              <Text style={styles.citiesTitleOnOrange}>
+              <Text {...headingProps(2)} style={[styles.citiesTitleOnOrange, !isWide && styles.citiesTitlePhone]}>
                 Available in Top Destinations
               </Text>
               <Text style={styles.citiesSubOnOrange}>
@@ -903,28 +903,24 @@ export default function LandingPage() {
               </Text>
             </View>
 
-            <View style={styles.citiesTriangleLayout}>
-              {/* Each city is a crawlable link to its own landing page. */}
-              {[SEO_CITIES.slice(0, 2), SEO_CITIES.slice(2)].map((row, r) => (
-                <View key={r} style={styles.citiesTopRow}>
-                  {row.map((city) => (
-                    <Link key={city.slug} href={cityPath(city.slug) as Href} asChild>
-                      <Pressable
-                        id={`city-chip-${city.slug}`}
-                        style={({ pressed }) => [styles.cityChipOnOrange, styles.cityChipRow, pressed && styles.pressed]}
-                        accessibilityLabel={`Photographers in ${city.name}`}
-                      >
-                        <MapPin size={18} color={colors.primaryDark} />
-                        <Text style={styles.cityNameOnOrange}>{city.name}</Text>
-                      </Pressable>
-                    </Link>
-                  ))}
-                </View>
+            {/* Each city is a crawlable link to its own landing page. */}
+            <View style={styles.cityPills}>
+              {SEO_CITIES.map((city) => (
+                <Link key={city.slug} href={cityPath(city.slug) as Href} asChild>
+                  <Pressable
+                    id={`city-chip-${city.slug}`}
+                    style={({ pressed }) => [styles.cityPill, pressed && styles.pressed]}
+                    accessibilityLabel={`Photographers in ${city.name}`}
+                  >
+                    <MapPin size={16} color={colors.primaryDark} />
+                    <Text style={styles.cityPillText}>{city.name}</Text>
+                  </Pressable>
+                </Link>
               ))}
-              <Link href={"/photographers" as Href} style={styles.citiesAllLink}>
-                See all cities and services
-              </Link>
             </View>
+            <Link href={"/photographers" as Href} style={styles.citiesAllLink}>
+              See all cities and services →
+            </Link>
           </View>
         </View>
 
@@ -2044,6 +2040,28 @@ const styles = StyleSheet.create({
     maxWidth: 640,
     alignSelf: "center",
   },
+  citiesTitlePhone: { fontSize: 24, lineHeight: 32 },
+  cityPills: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 12,
+    marginTop: 32,
+    maxWidth: 760,
+    alignSelf: "center",
+  },
+  cityPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 150,
+    justifyContent: "center",
+    backgroundColor: colors.white,
+    borderRadius: 999,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  cityPillText: { fontSize: 15, lineHeight: 20, fontWeight: "500", color: "#111827" },
   citiesTriangleLayout: {
     alignItems: "center",
     marginTop: 32,
@@ -2084,11 +2102,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   citiesAllLink: {
-    marginTop: 8,
+    marginTop: 24,
+    alignSelf: "center",
     fontSize: 15,
-    fontWeight: "700",
-    color: colors.white,
-    textDecorationLine: "underline",
+    fontWeight: "600",
+    color: "#FFE4D2",
   },
   cityNameOnOrange: {
     fontSize: 16,
