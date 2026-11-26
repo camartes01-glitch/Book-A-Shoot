@@ -63,7 +63,7 @@ n.queue=[];t=b.createElement(e);t.async=!0;
 t.src=v;s=b.getElementsByTagName(e)[0];
 s.parentNode.insertBefore(t,s)}(window, document,'script',
 'https://connect.facebook.net/en_US/fbevents.js');
-fbq('init', '1613139693933401');
+fbq('init', '2290402488406854');
 fbq('track', 'PageView');`,
           }}
         />
@@ -80,7 +80,7 @@ fbq('track', 'PageView');`,
         {/* Meta Pixel (noscript) */}
         <noscript
           dangerouslySetInnerHTML={{
-            __html: `<img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=1613139693933401&ev=PageView&noscript=1" />`,
+            __html: `<img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=2290402488406854&ev=PageView&noscript=1" />`,
           }}
         />
         {/* End Meta Pixel (noscript) */}
